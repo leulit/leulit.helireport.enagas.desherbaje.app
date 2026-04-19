@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../domain/entities/actividad_entity.dart';
+import '../domain/entities/segmento_entity.dart';
 
 class AppColors {
   static const moduleGreen      = Color(0xFF388E3C);

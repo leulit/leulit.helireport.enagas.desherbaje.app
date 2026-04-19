@@ -1,9 +1,13 @@
 import '../../core/result/data_result.dart';
-import '../../domain/entities/segmento_entity.dart';
+import '../entities/segmento_entity.dart';
 
-abstract class SegmentoDataProvider {
+abstract class SegmentoRepository {
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
-      int operadorId, List<String> cts);
+    int operadorId,
+    List<String> cts,
+  );
+
   Future<DataResult<SegmentoEntity?>> getById(int id);
+
   Future<DataResult<bool>> updateEstado(int id, EstadoActividad estado);
 }

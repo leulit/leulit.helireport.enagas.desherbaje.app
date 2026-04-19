@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../widgets/actividad_card_widget.dart';
+import '../../core/app_router.dart';
+import '../widgets/segmento_list_card_widget.dart';
 import 'segmentos_list_controller.dart';
 
 // ─── Colores de tema ────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Actividades',
+                  'Segmentos',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -40,7 +41,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
                   ),
                 ),
                 Text(
-                  '${controller.filtradas.length} actividades',
+                  '${controller.filtradas.length} segmentos',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -49,11 +50,11 @@ class SegmentosListPage extends GetView<SegmentosListController> {
           IconButton(
             icon: const Icon(Icons.map_outlined, color: Color(0xFF388E3C)),
             tooltip: 'Ver mapa',
-            onPressed: () => Get.toNamed('/mapa'),
+            onPressed: () => Get.toNamed(AppRoutes.mapa),
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFF388E3C)),
-            onPressed: controller.loadActividades,
+            onPressed: controller.loadSegmentos,
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Color(0xFF388E3C)),
@@ -85,7 +86,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
                       Text(controller.error.value!),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: controller.loadActividades,
+                        onPressed: controller.loadSegmentos,
                         child: const Text('Reintentar'),
                       ),
                     ],
@@ -99,19 +100,19 @@ class SegmentosListPage extends GetView<SegmentosListController> {
                     children: [
                       Icon(Icons.work_off, size: 48, color: Colors.grey),
                       SizedBox(height: 8),
-                      Text('Sin actividades',
+                      Text('Sin segmentos',
                           style: TextStyle(color: Colors.grey)),
                     ],
                   ),
                 );
               }
               return RefreshIndicator(
-                onRefresh: controller.loadActividades,
+                onRefresh: controller.loadSegmentos,
                 color: const Color(0xFF388E3C),
                 child: ListView.builder(
                   itemCount: controller.filtradas.length,
-                  itemBuilder: (_, i) => ActividadCard(
-                    actividad: controller.filtradas[i],
+                  itemBuilder: (_, i) => SegmentoListCard(
+                    segmento: controller.filtradas[i],
                     onTap: () =>
                         controller.goToDetalle(controller.filtradas[i]),
                   ),
@@ -134,7 +135,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
           TextButton(
             onPressed: () async {
               Get.back();
-              Get.offAllNamed('/login');
+              Get.offAllNamed(AppRoutes.login);
             },
             child: const Text('Salir', style: TextStyle(color: Colors.red)),
           ),

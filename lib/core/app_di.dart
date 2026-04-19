@@ -1,17 +1,18 @@
 import 'package:get/get.dart';
+import 'package:sqflite/sqflite.dart';
+
+import '../data/local/local_database.dart';
+import '../data/network/network_service.dart';
+import '../data/sync/imagen_local_store.dart';
+import '../data/sync/imagen_remote_adapter.dart';
+import '../data/sync/segmento_local_store.dart';
+import '../data/sync/segmento_remote_adapter.dart';
+import '../domain/entities/imagen_segmento_entity.dart';
+import '../domain/entities/segmento_entity.dart';
 import 'services/connectivity_service.dart';
 import 'services/gasoductos_service.dart';
 import 'services/gps_service.dart';
 import 'sync/sync.dart';
-import '../data/local/local_database.dart';
-import '../data/network/network_service.dart';
-import '../data/sync/actividad_local_store.dart';
-import '../data/sync/actividad_remote_adapter.dart';
-import '../data/sync/imagen_local_store.dart';
-import '../data/sync/imagen_remote_adapter.dart';
-import '../domain/entities/actividad_entity.dart';
-import '../domain/entities/imagen_segmento_entity.dart';
-import 'package:sqflite/sqflite.dart';
 
 class AppDI {
   static Future<void> init() async {
@@ -46,7 +47,7 @@ class AppDI {
     Get.put<SyncEngine>(engine, permanent: true);
     engine.start();
 
-    _registerActividad(
+    _registerSegmento(
       db: db,
       network: network,
       registry: registry,
@@ -71,7 +72,7 @@ class AppDI {
     await coordinator.start();
   }
 
-  static void _registerActividad({
+  static void _registerSegmento({
     required Database db,
     required NetworkService network,
     required TypeRegistry registry,
@@ -79,20 +80,20 @@ class AppDI {
     required SyncEngine engine,
     required ConnectivityService connectivity,
   }) {
-    final store = ActividadLocalStore(db);
-    final adapter = ActividadRemoteAdapter(network);
-    registry.register<ActividadEntity>(
-      TypeRegistration<ActividadEntity>(
-        entityType: 'actividad',
+    final store = SegmentoLocalStore(db);
+    final adapter = SegmentoRemoteAdapter(network);
+    registry.register<SegmentoEntity>(
+      TypeRegistration<SegmentoEntity>(
+        entityType: 'segmento',
         adapter: adapter,
-        conflictResolver: const ServerWinsResolver<ActividadEntity>(),
-        fromJson: ActividadEntity.fromJson,
+        conflictResolver: const ServerWinsResolver<SegmentoEntity>(),
+        fromJson: SegmentoEntity.fromJson,
         localStore: store,
       ),
     );
-    Get.put<OfflineRepository<ActividadEntity>>(
-      OfflineRepository<ActividadEntity>(
-        entityType: 'actividad',
+    Get.put<OfflineRepository<SegmentoEntity>>(
+      OfflineRepository<SegmentoEntity>(
+        entityType: 'segmento',
         db: db,
         store: store,
         outbox: outbox,

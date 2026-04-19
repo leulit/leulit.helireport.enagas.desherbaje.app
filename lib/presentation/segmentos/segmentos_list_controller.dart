@@ -1,14 +1,16 @@
 import 'package:get/get.dart';
+import '../../core/app_router.dart';
 import '../../core/result/data_result.dart';
-import '../../data/repository/actividad_repository_impl.dart';
-import '../../domain/entities/actividad_entity.dart';
+import '../../domain/entities/segmento_entity.dart';
 import '../../domain/usecases/get_actividades_usecase.dart';
 
 class SegmentosListController extends GetxController {
-  late final GetSegmentosUseCase _useCase;
+  SegmentosListController(this._useCase);
 
-  final actividades = <ActividadEntity>[].obs;
-  final filtradas = <ActividadEntity>[].obs;
+  final GetSegmentosUseCase _useCase;
+
+  final segmentos = <SegmentoEntity>[].obs;
+  final filtradas = <SegmentoEntity>[].obs;
   final isLoading = false.obs;
   final error = Rx<String?>(null);
   final selectedEstado = Rx<EstadoActividad?>(null);
@@ -18,22 +20,21 @@ class SegmentosListController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _useCase = GetSegmentosUseCase(ActividadRepositoryImpl());
     debounce(
       filterDescripcion,
       (_) => _applyFilter(),
       time: const Duration(milliseconds: 300),
     );
-    loadActividades();
+    loadSegmentos();
   }
 
-  Future<void> loadActividades() async {
+  Future<void> loadSegmentos() async {
     isLoading.value = true;
     error.value = null;
     final result = await _useCase.execute();
     switch (result) {
       case DataSuccess(:final data):
-        actividades.assignAll(data);
+        segmentos.assignAll(data);
         _applyFilter();
       case DataFailure(:final message):
         error.value = message;
@@ -56,21 +57,17 @@ class SegmentosListController extends GetxController {
     final estado = selectedEstado.value;
     final tipo = selectedTipo.value;
 
-    filtradas.assignAll(actividades.where((a) {
-      if (estado != null && a.estado != estado) {
-        return false;
-      }
-      if (tipo != null && !a.segmentos.any((s) => s.tipoActividad == tipo)) {
-        return false;
-      }
-      if (query.isNotEmpty && !a.descripcion.toLowerCase().contains(query)) {
+    filtradas.assignAll(segmentos.where((s) {
+      if (estado != null && s.estado != estado) return false;
+      if (tipo != null && s.tipoActividad != tipo) return false;
+      if (query.isNotEmpty && !s.descripcion.toLowerCase().contains(query)) {
         return false;
       }
       return true;
     }));
   }
 
-  void goToDetalle(ActividadEntity actividad) {
-    Get.toNamed('/actividades/detalle', arguments: actividad);
+  void goToDetalle(SegmentoEntity segmento) {
+    Get.toNamed(AppRoutes.detalle, arguments: segmento);
   }
 }

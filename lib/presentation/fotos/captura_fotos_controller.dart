@@ -8,7 +8,6 @@ import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
 import '../../data/repository/imagen_repository_impl.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
-import '../../domain/entities/actividad_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 
 class CapturaFotosController extends GetxController {
@@ -143,7 +142,6 @@ class CapturaFotosController extends GetxController {
   Future<void> _addImagen(String localPath, TipoFoto tipo) async {
     final imagen = ImagenSegmentoEntity(
       localId: const Uuid().v4(),
-      actividadId: segmento.actividadId,
       segmentoId: segmento.id,
       localPath: localPath,
       tipoFoto: tipo,

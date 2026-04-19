@@ -23,7 +23,8 @@
       "mcp__dart__run_tests",
       "Bash(flutter test *)",
       "WebFetch(domain:docs.powersync.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git mv *)"
     ]
   }
 }

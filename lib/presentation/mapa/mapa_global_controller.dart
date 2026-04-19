@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:helireport_desherbaje/domain/usecases/get_Segmentos_usecase.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
-import '../../data/repository/actividad_repository_impl.dart';
-import '../../domain/entities/actividad_entity.dart';
+import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
-import '../../domain/usecases/get_actividades_usecase.dart';
+import '../../domain/usecases/get_segmentos_usecase.dart';
+import '../../domain/usecases/get_segmentos_usecase.dart';
 
 class SegmentoMapInfo {
   final SegmentoEntity segmento;
-  final ActividadEntity actividad;
   final List<LatLng> points;
   final Color color;
   final LatLng centroid;
 
   const SegmentoMapInfo({
     required this.segmento,
-    required this.actividad,
     required this.points,
     required this.color,
     required this.centroid,
@@ -30,11 +29,11 @@ class MapaGlobalController extends GetxController {
   final mapController = MapController();
 
   final gasoductosPolylines = <Polyline>[].obs;
-  final actividadesSegmentos = <SegmentoMapInfo>[].obs;
+  final SegmentosSegmentos = <SegmentoMapInfo>[].obs;
   final isLoadingGasoductos = false.obs;
-  final isLoadingActividades = false.obs;
+  final isLoadingSegmentos = false.obs;
   final errorGasoductos = Rx<String?>(null);
-  final errorActividades = Rx<String?>(null);
+  final errorSegmentos = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
   void onMapEvent(MapEvent event) {
@@ -43,36 +42,36 @@ class MapaGlobalController extends GetxController {
     }
   }
 
-  late final GetSegmentosUseCase _actividadesUseCase;
+  late final GetSegmentosUseCase _segmentosUseCase;
   GasoductosService get _gasoductosService => Get.find<GasoductosService>();
 
   bool get isLoading =>
-      isLoadingGasoductos.value || isLoadingActividades.value;
+      isLoadingGasoductos.value || isLoadingSegmentos.value;
 
   @override
   void onInit() {
     super.onInit();
-    _actividadesUseCase = GetSegmentosUseCase(ActividadRepositoryImpl());
+    _segmentosUseCase = GetSegmentosUseCase(SegmentoRepositoryImpl());
     // Sincronizar polylines del servicio con el observable local
     ever(_gasoductosService.polylines, (lines) => gasoductosPolylines.assignAll(lines));
     loadAll();
   }
 
   Future<void> loadAll() async {
-    await Future.wait([loadGasoductos(), loadActividades()]);
+    await Future.wait([loadGasoductos(), loadSegmentos()]);
     _fitAllBounds();
   }
 
   Future<void> reloadAll() async {
     await Future.wait([
       loadGasoductos(forceRefresh: true),
-      loadActividades(),
+      loadSegmentos(),
     ]);
     _fitAllBounds();
   }
 
-  Future<void> reloadActividades() async {
-    await loadActividades();
+  Future<void> reloadSegmentos() async {
+    await loadSegmentos();
     _fitAllBounds();
   }
 
@@ -94,36 +93,34 @@ class MapaGlobalController extends GetxController {
     }
   }
 
-  Future<void> loadActividades() async {
-    isLoadingActividades.value = true;
-    errorActividades.value = null;
+  Future<void> loadSegmentos() async {
+    isLoadingSegmentos.value = true;
+    errorSegmentos.value = null;
     try {
-      final result = await _actividadesUseCase.execute();
+      final result = await _segmentosUseCase.execute();
       if (result.isFailure) {
-        errorActividades.value = 'Error cargando actividades';
+        errorSegmentos.value = 'Error cargando Segmentos';
         return;
       }
-      final actividades = result.dataOrNull ?? [];
-      final segmentos = <SegmentoMapInfo>[];
-      for (final actividad in actividades) {
+      final segmentos = result.dataOrNull ?? [];
+      for (final actividad in segmentos) {
         for (final segmento in actividad.segmentos) {
           if (segmento.ubicacionGis.isEmpty) continue;
           final color = AppColors.accentForEstado(actividad.estado);
           segmentos.add(SegmentoMapInfo(
             segmento: segmento,
-            actividad: actividad,
             points: segmento.ubicacionGis,
             color: color,
             centroid: _computeCentroid(segmento.ubicacionGis),
           ));
         }
       }
-      actividadesSegmentos.assignAll(segmentos);
+      SegmentosSegmentos.assignAll(segmentos);
     } catch (e) {
-      errorActividades.value = 'Error cargando actividades';
-      debugPrint('MapaGlobal actividades: $e');
+      errorSegmentos.value = 'Error cargando Segmentos';
+      debugPrint('MapaGlobal Segmentos: $e');
     } finally {
-      isLoadingActividades.value = false;
+      isLoadingSegmentos.value = false;
     }
   }
 
@@ -144,7 +141,7 @@ class MapaGlobalController extends GetxController {
   void _fitAllBounds() {
     final allPoints = <LatLng>[
       ...gasoductosPolylines.expand((p) => p.points),
-      ...actividadesSegmentos.expand((s) => s.points),
+      ...SegmentosSegmentos.expand((s) => s.points),
     ];
     if (allPoints.isEmpty) return;
 

@@ -1,3 +1,4 @@
+import '../../core/sync/contracts/sync_job.dart';
 import '../../data/local/local_database.dart';
 import '../../data/providers/image_upload_provider.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
