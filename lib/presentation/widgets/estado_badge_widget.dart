@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
-import '../../domain/entities/actividad_entity.dart';
+import '../../domain/entities/segmento_entity.dart';
 
 class EstadoBadge extends StatelessWidget {
   final EstadoActividad estado;

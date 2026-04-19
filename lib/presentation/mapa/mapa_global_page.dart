@@ -5,6 +5,7 @@ import 'package:flutter_map_compass/flutter_map_compass.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_fullresponsive/leulit_flutter_fullreponsive.dart';
+import '../../core/api_endpoints.dart';
 import '../../core/app_theme.dart';
 import 'mapa_global_controller.dart';
 
@@ -55,7 +56,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             }
             return IconButton(
               icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
-              onPressed: controller.reloadActividades,
+              onPressed: controller.reloadSegmentos,
             );
           }),
           _LeyendaButton(),
@@ -78,11 +79,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             children: [
               // Capa base PNOA IGN
               TileLayer(
-                urlTemplate:
-                    'https://www.ign.es/wmts/pnoa-ma?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
-                    '&LAYER=OI.OrthoimageCoverage&STYLE=default'
-                    '&TILEMATRIXSET=GoogleMapsCompatible'
-                    '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png',
+                urlTemplate: ApiEndpoints.pnoaWmts,
                 tileProvider: CancellableNetworkTileProvider(),
                 userAgentPackageName:
                     'com.leulit.enagas.helireport_desherbaje',
@@ -96,7 +93,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   )),
               // Actividades layer — polylines coloreadas por estado
               Obx(() => PolylineLayer(
-                    polylines: controller.actividadesSegmentos
+                    polylines: controller.segmentos
                         .map((s) => Polyline(
                               points: s.points,
                               color: s.color,
@@ -112,7 +109,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   return const SizedBox.shrink();
                 }
                 return MarkerLayer(
-                  markers: controller.actividadesSegmentos
+                  markers: controller.segmentos
                       .map((s) => Marker(
                             point: s.centroid,
                             width: 0.2.w,
@@ -145,7 +142,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
           // Banner de error no-bloqueante
           Obx(() {
             final errG = controller.errorGasoductos.value;
-            final errA = controller.errorActividades.value;
+            final errA = controller.errorSegmentos.value;
             if (errG == null && errA == null) return const SizedBox.shrink();
             return Positioned(
               top: 12,

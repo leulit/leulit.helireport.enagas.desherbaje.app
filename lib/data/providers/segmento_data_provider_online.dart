@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../core/result/data_result.dart';
 import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
@@ -19,13 +20,18 @@ class SegmentoDataProviderOnline implements SegmentoDataProvider {
 
   @override
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
-      int operadorId, List<String> cts) async {
+      int operadorId, List<int> cts) async {
     try {
       final ctsCsv = cts.join(',');
-      final path = '/actividades/operador/$ctsCsv';
-      final response = await _network.get(path, headers: await _authHeader());
+      final response = await _network.get(
+        ApiEndpoints.segmentosByCt(ctsCsv),
+        headers: await _authHeader(),
+      );
       final raw = response.data as List? ?? const [];
-      final entities = _flattenToSegmentos(raw);
+      final entities = raw
+          .whereType<Map>()
+          .map((m) => SegmentoEntity.fromJson(m.cast<String, dynamic>()))
+          .toList();
       return DataResult.success(entities);
     } on NetworkError catch (e) {
       return DataResult.failure(
@@ -45,23 +51,30 @@ class SegmentoDataProviderOnline implements SegmentoDataProvider {
   @override
   Future<DataResult<SegmentoEntity?>> getById(int id) async {
     try {
-      final path = '/actividades/byid/$id';
-      final response = await _network.get(path, headers: await _authHeader());
-      final data = response.data as Map<String, dynamic>;
-      final item = data['data'];
-      if (item == null) return DataResult.success(null);
+      final response = await _network.get(
+        ApiEndpoints.segmentoById(id),
+        headers: await _authHeader(),
+      );
+      final body = response.data;
+      if (body == null) return DataResult.success(null);
 
-      final map = (item as Map).cast<String, dynamic>();
-
-      // The backend may still return a nested activity containing a list of
-      // segments. If so, flatten and return the first segment (this endpoint
-      // is called with a segment id, so the server response is expected to
-      // contain that single segment).
-      if (_isNestedActividad(map)) {
-        final flat = _flattenToSegmentos([map]);
-        return DataResult.success(flat.isEmpty ? null : flat.first);
+      // Soporta dos formas de respuesta: el segmento directo o envuelto en
+      // `{data: {...}}` (legacy). Si llega lista, toma el primer elemento.
+      Map<String, dynamic>? map;
+      if (body is Map) {
+        final inner = body['data'];
+        if (inner is Map) {
+          map = inner.cast<String, dynamic>();
+        } else if (inner is List && inner.isNotEmpty && inner.first is Map) {
+          map = (inner.first as Map).cast<String, dynamic>();
+        } else {
+          map = body.cast<String, dynamic>();
+        }
+      } else if (body is List && body.isNotEmpty && body.first is Map) {
+        map = (body.first as Map).cast<String, dynamic>();
       }
 
+      if (map == null) return DataResult.success(null);
       return DataResult.success(SegmentoEntity.fromJson(map));
     } on NetworkError catch (e) {
       return DataResult.failure(
@@ -81,9 +94,8 @@ class SegmentoDataProviderOnline implements SegmentoDataProvider {
   @override
   Future<DataResult<bool>> updateEstado(int id, EstadoActividad estado) async {
     try {
-      final path = '/actividades/update/$id';
       final response = await _network.post(
-        path,
+        ApiEndpoints.segmentoUpd(id),
         body: {'estado': estado.descripcion},
         headers: await _authHeader(),
       );
@@ -103,48 +115,4 @@ class SegmentoDataProviderOnline implements SegmentoDataProvider {
       );
     }
   }
-
-  /// Converts the backend list into a flat `List<SegmentoEntity>`.
-  ///
-  /// Supports two shapes for backend compatibility:
-  /// 1. **Flat**: each element is already a segment JSON object.
-  /// 2. **Nested** (legacy): each element is an actividad containing a
-  ///    `segmentos: [...]` list. Activity-level fields (`estado`,
-  ///    `tipo_actividad`, `fecha_inicio`, `fecha_fin`, `created_at`) are
-  ///    merged into every child segment before parsing.
-  List<SegmentoEntity> _flattenToSegmentos(List raw) {
-    final result = <SegmentoEntity>[];
-    for (final item in raw) {
-      if (item is! Map) continue;
-      final map = item.cast<String, dynamic>();
-
-      if (_isNestedActividad(map)) {
-        final actFields = <String, dynamic>{
-          'estado': map['estado'],
-          'tipo_actividad': map['tipo_actividad'],
-          'fecha_inicio': map['fecha_inicio'],
-          'fecha_fin': map['fecha_fin'],
-          'created_at': map['created_at'],
-        };
-        for (final seg in (map['segmentos'] as List)) {
-          if (seg is! Map) continue;
-          final merged = <String, dynamic>{
-            ...seg.cast<String, dynamic>(),
-            // Only merge activity-level fields when the segment payload does
-            // not already provide them — prefer segment-level data.
-            for (final entry in actFields.entries)
-              if (entry.value != null && !seg.containsKey(entry.key))
-                entry.key: entry.value,
-          };
-          result.add(SegmentoEntity.fromJson(merged));
-        }
-      } else {
-        result.add(SegmentoEntity.fromJson(map));
-      }
-    }
-    return result;
-  }
-
-  bool _isNestedActividad(Map<String, dynamic> map) =>
-      map['segmentos'] is List;
 }

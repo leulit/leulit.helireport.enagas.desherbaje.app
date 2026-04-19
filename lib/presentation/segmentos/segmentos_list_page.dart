@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../core/app_router.dart';
-import '../widgets/segmento_list_card_widget.dart';
-import 'segmentos_list_controller.dart';
 
-// ─── Colores de tema ────────────────────────────────────────────────────────
-const _kGreen = Color(0xFF388E3C);
-const _kGreenLight = Color(0xFFA5D6A7);
-const _kGreenBg = Color(0xFFF1F8E9);
+import '../../core/app_router.dart';
+import '../../core/app_theme.dart';
+import '../../core/extensions.dart';
+import '../../domain/entities/segmento_entity.dart';
+import 'segmentos_list_controller.dart';
 
 class SegmentosListPage extends GetView<SegmentosListController> {
   const SegmentosListPage({super.key});
@@ -16,18 +14,15 @@ class SegmentosListPage extends GetView<SegmentosListController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF1F8E9),
+        backgroundColor: AppColors.moduleGreenLight,
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 2,
-            color: const Color(0xFFA5D6A7),
-          ),
+          child: Container(height: 2, color: const Color(0xFFA5D6A7)),
         ),
         leading: const Padding(
           padding: EdgeInsets.all(8.0),
-          child: Icon(Icons.eco, color: Color(0xFF388E3C)),
+          child: Icon(Icons.eco, color: AppColors.moduleGreen),
         ),
         title: Obx(() => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -37,7 +32,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B5E20),
+                    color: AppColors.moduleGreenText,
                   ),
                 ),
                 Text(
@@ -48,16 +43,16 @@ class SegmentosListPage extends GetView<SegmentosListController> {
             )),
         actions: [
           IconButton(
-            icon: const Icon(Icons.map_outlined, color: Color(0xFF388E3C)),
+            icon: const Icon(Icons.map_outlined, color: AppColors.moduleGreen),
             tooltip: 'Ver mapa',
             onPressed: () => Get.toNamed(AppRoutes.mapa),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFF388E3C)),
+            icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
             onPressed: controller.loadSegmentos,
           ),
           IconButton(
-            icon: const Icon(Icons.logout, color: Color(0xFF388E3C)),
+            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
             onPressed: _logout,
           ),
         ],
@@ -65,58 +60,28 @@ class SegmentosListPage extends GetView<SegmentosListController> {
       body: Column(
         children: [
           _FiltrosBar(controller: controller),
-          // Lista
           Expanded(
             child: Obx(() {
               if (controller.isLoading.value) {
                 return const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF388E3C),
-                  ),
+                  child: CircularProgressIndicator(color: AppColors.moduleGreen),
                 );
               }
               if (controller.error.value != null) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline,
-                          size: 48, color: Colors.red),
-                      const SizedBox(height: 8),
-                      Text(controller.error.value!),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: controller.loadSegmentos,
-                        child: const Text('Reintentar'),
-                      ),
-                    ],
-                  ),
+                return _ErrorView(
+                  message: controller.error.value!,
+                  onRetry: controller.loadSegmentos,
                 );
               }
               if (controller.filtradas.isEmpty) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.work_off, size: 48, color: Colors.grey),
-                      SizedBox(height: 8),
-                      Text('Sin segmentos',
-                          style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
+                return _EmptyView(
+                  isFiltered: controller.segmentos.isNotEmpty,
                 );
               }
               return RefreshIndicator(
                 onRefresh: controller.loadSegmentos,
-                color: const Color(0xFF388E3C),
-                child: ListView.builder(
-                  itemCount: controller.filtradas.length,
-                  itemBuilder: (_, i) => SegmentoListCard(
-                    segmento: controller.filtradas[i],
-                    onTap: () =>
-                        controller.goToDetalle(controller.filtradas[i]),
-                  ),
-                ),
+                color: AppColors.moduleGreen,
+                child: _GroupedByCt(controller: controller),
               );
             }),
           ),
@@ -149,79 +114,562 @@ class SegmentosListPage extends GetView<SegmentosListController> {
 
 class _FiltrosBar extends StatelessWidget {
   final SegmentosListController controller;
-
   const _FiltrosBar({required this.controller});
 
-  static final _inputBorder = OutlineInputBorder(
+  static final _border = OutlineInputBorder(
     borderRadius: BorderRadius.circular(10),
-    borderSide: const BorderSide(color: _kGreenLight),
+    borderSide: const BorderSide(color: Color(0xFFA5D6A7)),
   );
-  static final _focusedBorder = OutlineInputBorder(
+  static final _borderFocused = OutlineInputBorder(
     borderRadius: BorderRadius.circular(10),
-    borderSide: const BorderSide(color: _kGreen, width: 1.5),
+    borderSide: const BorderSide(color: AppColors.moduleGreen, width: 1.5),
   );
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _kGreenBg,
+      color: AppColors.moduleGreenLight,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              onChanged: (v) => controller.filterDescripcion.value = v,
-              decoration: InputDecoration(
-                hintText: 'Buscar por descripción…',
-                hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-                prefixIcon: const Icon(Icons.search, color: _kGreen, size: 20),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: _inputBorder,
-                enabledBorder: _inputBorder,
-                focusedBorder: _focusedBorder,
-                filled: true,
-                fillColor: Colors.white,
+      child: TextField(
+        onChanged: (v) => controller.filterDescripcion.value = v,
+        decoration: InputDecoration(
+          hintText: 'Buscar por descripción…',
+          hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+          prefixIcon: const Icon(Icons.search,
+              color: AppColors.moduleGreen, size: 20),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: _border,
+          enabledBorder: _border,
+          focusedBorder: _borderFocused,
+          filled: true,
+          fillColor: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Listado agrupado por CT con acordeón ────────────────────────────────────
+
+class _GroupedByCt extends StatelessWidget {
+  final SegmentosListController controller;
+  const _GroupedByCt({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = controller.groupedByCt;
+    final ctIds = grouped.keys.toList()..sort();
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: ctIds.length,
+      itemBuilder: (_, i) {
+        final ctId = ctIds[i];
+        final list = grouped[ctId]!;
+        final totalLongitud = list.fold<double>(0, (s, e) => s + e.longitud);
+        final totalSuperficie = list.fold<double>(0, (s, e) => s + e.superficie);
+
+        return Obx(() {
+          final isExpanded = controller.expandedCtId.value == ctId;
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFA5D6A7), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                _CtHeader(
+                  ctName: controller.ctNameById(ctId),
+                  total: list.length,
+                  totalLongitud: totalLongitud,
+                  totalSuperficie: totalSuperficie,
+                  isExpanded: isExpanded,
+                  onTap: () => controller.toggleCtExpanded(ctId),
+                ),
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Column(
+                      children: [
+                        for (final s in list)
+                          _SegmentCard(
+                            segmento: s,
+                            onTap: () => controller.goToDetalle(s),
+                          ),
+                      ],
+                    ),
+                  ),
+                  crossFadeState: isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
+}
+
+class _CtHeader extends StatelessWidget {
+  final String ctName;
+  final int total;
+  final double totalLongitud;
+  final double totalSuperficie;
+  final bool isExpanded;
+  final VoidCallback onTap;
+
+  const _CtHeader({
+    required this.ctName,
+    required this.total,
+    required this.totalLongitud,
+    required this.totalSuperficie,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.moduleGreenLight,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Fila 1: icono + nombre CT + contador + chevron
+              Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: AppColors.moduleGreen,
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Icon(Icons.business,
+                        color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      ctName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.moduleGreenText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _HeaderBadge(value: '$total', strong: true),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more,
+                        color: AppColors.moduleGreenText),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+              // Fila 2: chips de longitud y superficie alineados con el nombre
+              Padding(
+                padding: const EdgeInsets.only(left: 40),
+                child: Row(
+                  children: [
+                    _HeaderBadge(
+                      icon: Icons.straighten,
+                      value:
+                          '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
+                    ),
+                    const SizedBox(width: 6),
+                    _HeaderBadge(
+                      icon: Icons.square_foot,
+                      value:
+                          '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderBadge extends StatelessWidget {
+  final IconData? icon;
+  final String value;
+  final bool strong;
+
+  const _HeaderBadge({
+    this.icon,
+    required this.value,
+    this.strong = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = strong ? AppColors.moduleGreen : Colors.white;
+    final fg = strong ? Colors.white : AppColors.moduleGreenText;
+    final border =
+        strong ? AppColors.moduleGreen : const Color(0xFFA5D6A7);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: fg),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: fg,
             ),
           ),
-          /*
-          const SizedBox(width: 8),
-          Obx(() => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Tarjeta de segmento ─────────────────────────────────────────────────────
+
+const Map<EstadoActividad, Color> _estadoColors = {
+  EstadoActividad.propuesta: Color(0xFF78909C),
+  EstadoActividad.validada: Color(0xFF1976D2),
+  EstadoActividad.contratista: Color.fromARGB(255, 244, 93, 234),
+  EstadoActividad.ejecucion: Color(0xFFF57C00),
+  EstadoActividad.finalizada: Color(0xFF388E3C),
+  EstadoActividad.cerrada: Color(0xFF546E7A),
+};
+
+const Map<EstadoActividad, Color> _estadoBgColors = {
+  EstadoActividad.propuesta: Color(0xFFECEFF1),
+  EstadoActividad.validada: Color(0xFFE3F2FD),
+  EstadoActividad.contratista: Color(0xFFE3F2FD),
+  EstadoActividad.ejecucion: Color(0xFFFFF3E0),
+  EstadoActividad.finalizada: Color(0xFFE8F5E9),
+  EstadoActividad.cerrada: Color(0xFFECEFF1),
+};
+
+const Map<TipoActividad, Color> _tipoColors = {
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
+  TipoActividad.desbroceManual: Color(0xFF6D4C41),
+  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.desratizacion: Color(0xFF6A1B9A),
+};
+
+class _SegmentCard extends StatelessWidget {
+  final SegmentoEntity segmento;
+  final VoidCallback onTap;
+
+  const _SegmentCard({required this.segmento, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final estadoColor =
+        _estadoColors[segmento.estado] ?? const Color(0xFF78909C);
+    final estadoBg =
+        _estadoBgColors[segmento.estado] ?? const Color(0xFFECEFF1);
+    final tipoColor =
+        _tipoColors[segmento.tipoActividad] ?? const Color(0xFF00796B);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: estadoColor.withValues(alpha: 0.25), width: 1),
+      ),
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _kGreenLight),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<TipoActividad?>(
-                    value: controller.selectedTipo.value,
-                    hint: const Text(
-                      'Tipo',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
-                    ),
-                    style: const TextStyle(
-                        fontSize: 13, color: Color(0xFF1B5E20)),
-                    borderRadius: BorderRadius.circular(10),
-                    isDense: true,
-                    items: [
-                      const DropdownMenuItem<TipoActividad?>(
-                        value: null,
-                        child: Text('Todos'),
-                      ),
-                      ...TipoActividad.values.map(
-                        (t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(t.etiqueta),
-                        ),
-                      ),
-                    ],
-                    onChanged: controller.filterByTipo,
+                  color: estadoColor.withValues(alpha: 0.7),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(10),
+                    bottomLeft: Radius.circular(10),
                   ),
                 ),
-              )),
-              */
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            segmento.id != null ? '#${segmento.id}' : 'Sin ID',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade400,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          _Metric(
+                            icon: Icons.straighten,
+                            label: 'Long.',
+                            value:
+                                '${(segmento.longitud / 1000).toStringWithComma(decimals: 2)} km',
+                          ),
+                          const SizedBox(width: 12),
+                          _Metric(
+                            icon: Icons.square_foot,
+                            label: 'Sup.',
+                            value:
+                                '${segmento.superficie.toStringWithComma(decimals: 0)} m²',
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right,
+                              size: 18, color: Colors.grey),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        segmento.descripcion.isEmpty
+                            ? '....'
+                            : segmento.descripcion,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade900,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.business,
+                              size: 14, color: Colors.blueGrey.shade600),
+                          const SizedBox(width: 4),
+                          Text(
+                            'CT ${segmento.ctId}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.blueGrey.shade800,
+                            ),
+                          ),
+                          if ((segmento.traza ?? '').isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Icon(Icons.timeline,
+                                size: 14, color: Colors.blueGrey.shade600),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                segmento.traza!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.blueGrey.shade800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Divider(height: 1, color: Colors.grey.shade200),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _Badge(
+                            prefix: 'Estado:',
+                            label: segmento.estado.etiqueta,
+                            color: estadoColor,
+                            bg: estadoBg,
+                          ),
+                          const SizedBox(width: 6),
+                          _Badge(
+                            prefix: 'Tipo:',
+                            label: segmento.tipoActividad.etiqueta,
+                            color: tipoColor,
+                            outlined: true,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Metric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _Metric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: Colors.blueGrey.shade400),
+        const SizedBox(width: 4),
+        Text('$label ',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey.shade800,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String prefix;
+  final String label;
+  final Color color;
+  final Color? bg;
+  final bool outlined;
+
+  const _Badge({
+    required this.prefix,
+    required this.label,
+    required this.color,
+    this.bg,
+    this.outlined = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: outlined
+            ? Colors.transparent
+            : (bg ?? color.withValues(alpha: 0.12)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: color.withValues(alpha: outlined ? 0.45 : 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(prefix,
+              style:
+                  TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Estados auxiliares ──────────────────────────────────────────────────────
+
+class _EmptyView extends StatelessWidget {
+  final bool isFiltered;
+  const _EmptyView({required this.isFiltered});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.straighten, size: 48, color: Colors.grey.shade300),
+          const SizedBox(height: 10),
+          Text(
+            isFiltered
+                ? 'Sin resultados para el filtro activo'
+                : 'Sin segmentos',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+          const SizedBox(height: 8),
+          Text(message),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: onRetry,
+            child: const Text('Reintentar'),
+          ),
         ],
       ),
     );

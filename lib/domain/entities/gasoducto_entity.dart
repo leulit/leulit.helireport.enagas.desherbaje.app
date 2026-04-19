@@ -3,7 +3,9 @@ import 'package:latlong2/latlong.dart';
 class GasoductoEntity {
   final String id;
   final String nombre;
-  final String ct;
+
+  /// CT al que pertenece este gasoducto.
+  final int ctId;
   final List<LatLng> points;
   final int colorValue;
   final double strokeWidth;
@@ -11,7 +13,7 @@ class GasoductoEntity {
   GasoductoEntity({
     required this.id,
     required this.nombre,
-    required this.ct,
+    required this.ctId,
     required this.points,
     this.colorValue = 0xFF1565C0,
     this.strokeWidth = 3.0,
@@ -19,7 +21,7 @@ class GasoductoEntity {
 
   static List<GasoductoEntity> fromGeoJson(
     Map<String, dynamic> json,
-    String ctCode,
+    int ctId,
   ) {
     final features = json['features'] as List? ?? [];
     final result = <GasoductoEntity>[];
@@ -34,10 +36,10 @@ class GasoductoEntity {
         final properties = f['properties'] as Map<String, dynamic>? ?? {};
 
         final String nombre =
-            (properties['name'] ?? properties['nombre'] ?? ctCode).toString();
+            (properties['name'] ?? properties['nombre'] ?? '$ctId').toString();
         final String id = (properties['id'] ??
                 properties['gasoducto_id'] ??
-                '${ctCode}_${result.length}')
+                '${ctId}_${result.length}')
             .toString();
         final int colorVal =
             (properties['color_value'] as num?)?.toInt() ?? 0xFF1565C0;
@@ -51,7 +53,7 @@ class GasoductoEntity {
             result.add(GasoductoEntity(
               id: id,
               nombre: nombre,
-              ct: ctCode,
+              ctId: ctId,
               points: points,
               colorValue: colorVal,
               strokeWidth: width,
@@ -65,7 +67,7 @@ class GasoductoEntity {
               result.add(GasoductoEntity(
                 id: '${id}_$i',
                 nombre: nombre,
-                ct: ctCode,
+                ctId: ctId,
                 points: points,
                 colorValue: colorVal,
                 strokeWidth: width,

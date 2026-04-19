@@ -4,6 +4,8 @@ import '../presentation/auth/login_page.dart';
 import '../presentation/auth/login_page_binding.dart';
 import '../presentation/segmentos/segmentos_list_page.dart';
 import '../presentation/segmentos/segmentos_list_binding.dart';
+import '../presentation/detalle/segmento_detalle_page.dart';
+import '../presentation/detalle/segmento_detalle_binding.dart';
 import '../presentation/fotos/captura_fotos_page.dart';
 import '../presentation/fotos/captura_fotos_binding.dart';
 import '../presentation/mapa/mapa_global_page.dart';
@@ -28,6 +30,12 @@ class AppPages {
       name: AppRoutes.segmentos,
       page: () => const SegmentosListPage(),
       binding: SegmentosListBinding(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage(
+      name: AppRoutes.detalle,
+      page: () => const SegmentoDetallePage(),
+      binding: SegmentoDetalleBinding(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage(

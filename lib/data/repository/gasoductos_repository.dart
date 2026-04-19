@@ -14,11 +14,13 @@ class GasoductosRepository {
   final _provider = GasoductosDataProvider();
   final _db = LocalDatabase.instance;
 
-  Future<List<Polyline>> getPolylinesForCts(List<CtInfo> ctInfos,
-      {bool forceRefresh = false}) async {
-    final ctCodes = ctInfos.map((c) => c.ct).toList();
-    if (!forceRefresh && await hasCachedData(ctCodes)) {
-      return _loadFromCache(ctCodes);
+  Future<List<Polyline>> getPolylinesForCts(
+    List<CtInfo> ctInfos, {
+    bool forceRefresh = false,
+  }) async {
+    final ctIds = ctInfos.map((c) => c.id).toList();
+    if (!forceRefresh && await hasCachedData(ctIds)) {
+      return _loadFromCache(ctIds);
     }
     final isOnline = Get.find<ConnectivityService>().isConnected;
     if (isOnline) {
@@ -28,7 +30,7 @@ class GasoductosRepository {
       }
       return _toPolylines(gasoductos);
     } else {
-      return _loadFromCache(ctCodes);
+      return _loadFromCache(ctIds);
     }
   }
 
@@ -54,7 +56,7 @@ class GasoductosRepository {
         {
           'id': g.id,
           'nombre': g.nombre,
-          'ct': g.ct,
+          'ct_id': g.ctId,
           'points_json': jsonEncode(
             g.points
                 .map((p) => {'lat': p.latitude, 'lng': p.longitude})
@@ -70,14 +72,14 @@ class GasoductosRepository {
     await batch.commit(noResult: true);
   }
 
-  Future<List<Polyline>> _loadFromCache(List<String> ctCodes) async {
-    if (ctCodes.isEmpty) return [];
+  Future<List<Polyline>> _loadFromCache(List<int> ctIds) async {
+    if (ctIds.isEmpty) return [];
     final db = await _db.database;
-    final placeholders = ctCodes.map((_) => '?').join(',');
+    final placeholders = ctIds.map((_) => '?').join(',');
     final rows = await db.query(
       'gasoductos',
-      where: 'ct IN ($placeholders)',
-      whereArgs: ctCodes,
+      where: 'ct_id IN ($placeholders)',
+      whereArgs: ctIds,
     );
     return rows.map((row) {
       final pointsRaw =
@@ -97,14 +99,14 @@ class GasoductosRepository {
     }).toList();
   }
 
-  Future<bool> hasCachedData(List<String> ctCodes) async {
-    if (ctCodes.isEmpty) return false;
+  Future<bool> hasCachedData(List<int> ctIds) async {
+    if (ctIds.isEmpty) return false;
     final db = await _db.database;
-    final placeholders = ctCodes.map((_) => '?').join(',');
+    final placeholders = ctIds.map((_) => '?').join(',');
     final count = Sqflite.firstIntValue(
       await db.rawQuery(
-        'SELECT COUNT(*) FROM gasoductos WHERE ct IN ($placeholders)',
-        ctCodes,
+        'SELECT COUNT(*) FROM gasoductos WHERE ct_id IN ($placeholders)',
+        ctIds,
       ),
     );
     return (count ?? 0) > 0;

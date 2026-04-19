@@ -193,7 +193,13 @@ class _HmacInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final method = options.method.toUpperCase();
-    final pathStr = options.path;
+    // Si el caller pasó URL absoluta (ApiEndpoints), eliminamos el baseUrl
+    // antes de firmar para que el backend reciba siempre HMAC sobre el path
+    // relativo.
+    final raw = options.path;
+    final base = AppConfig.baseUrl;
+    final pathStr =
+        raw.startsWith(base) ? raw.substring(base.length) : raw;
     final headers = ApiSecurityService.buildHeaders(
       method,
       pathStr,

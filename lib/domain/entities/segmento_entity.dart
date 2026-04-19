@@ -265,7 +265,7 @@ class SegmentoEntity extends AbsBaseModel
     if (imagenesRaw is List) {
       entity.imagenes = imagenesRaw
           .whereType<Map<String, dynamic>>()
-          .map(ImagenSegmentoEntity.fromMap)
+          .map(ImagenSegmentoEntity.fromJson)
           .toList();
     }
 
@@ -323,7 +323,7 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.tipoActividad.value: tipoActividad.descripcion,
       SegmentoEntityFieldNames.estado.value: estado.descripcion,
       SegmentoEntityFieldNames.imagenes.value:
-          imagenes.map((e) => e.toMap()).toList(),
+          imagenes.map((e) => e.toJson()).toList(),
       SegmentoEntityFieldNames.mensajes.value:
           mensajes.map((e) => e.toJson()).toList(),
       SegmentoEntityFieldNames.createdAt.value: createdAt?.toIso8601String(),

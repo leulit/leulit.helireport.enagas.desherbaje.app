@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../../domain/entities/segmento_entity.dart';
@@ -12,8 +13,7 @@ import '../network/sync_outcome_from_network_error.dart';
 /// The backend owns creation; the app only pushes `update` to change
 /// `estado`. `create`/`delete` are explicitly rejected as unrecoverable.
 ///
-/// The endpoint path `/actividades/update/{id}` is kept for backend
-/// compatibility — the `{id}` is now the segment id, not an activity id.
+/// El endpoint es `POST /segmentos/update/{id}` con body `{estado: ...}`.
 ///
 /// Conflicts (`NetworkErrorCategory.conflict`) are currently reported as
 /// [SyncUnrecoverable] because the backend response body for this endpoint
@@ -41,7 +41,7 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
 
     try {
       final response = await _network.post(
-        '/actividades/update/${entity.id}',
+        ApiEndpoints.segmentoUpd(entity.id!),
         body: {'estado': entity.estado.descripcion},
         headers: await _authHeader(),
       );

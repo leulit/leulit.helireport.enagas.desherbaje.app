@@ -13,7 +13,7 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
   @override
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
     int operadorId,
-    List<String> cts,
+    List<int> cts,
   ) async {
     final provider = SegmentoDataProviderFactory.create();
     final result = await provider.getByOperador(operadorId, cts);

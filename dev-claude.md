@@ -921,7 +921,7 @@ class SegmentosListController extends GetxController {
 ### Offline-First Factory
 ```dart
 abstract class SegmentoDataProvider {
-  Future<List<ActividadEntity>> getByOperador(int operadorId, List<String> cts);
+  Future<List<ActividadEntity>> getByOperador(int operadorId, List<int> cts);
   Future<ActividadEntity?> getById(int id);
   Future<bool> updateEstado(int id, EstadoActividad estado);
 }

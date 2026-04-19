@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/sync/contracts/local_store.dart';
@@ -6,11 +5,11 @@ import '../../domain/entities/imagen_segmento_entity.dart';
 
 /// SQLite-backed [LocalStore] for [ImagenSegmentoEntity].
 ///
-/// Writes against the pre-existing `imagenes_actividad` table defined in
-/// `LocalDatabase`. The entity's `clientId` equals `localId` (the table's
-/// primary key) per the `Syncable` mapping on [ImagenSegmentoEntity].
+/// Persists in `imagenes_segmento` (schema v6). The entity's `clientId` is a
+/// UUID generated at construction time and stored in the `client_id` column,
+/// so the outbox is idempotent before the backend assigns a remote `id`.
 class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
-  static const String _table = 'imagenes_actividad';
+  static const String _table = 'imagenes_segmento';
 
   final Database _db;
 
@@ -34,7 +33,7 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
     final executor = txn ?? _db;
     await executor.delete(
       _table,
-      where: 'local_id = ?',
+      where: 'client_id = ?',
       whereArgs: [clientId],
     );
   }
@@ -43,7 +42,7 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
   Future<ImagenSegmentoEntity?> findByClientId(String clientId) async {
     final rows = await _db.query(
       _table,
-      where: 'local_id = ?',
+      where: 'client_id = ?',
       whereArgs: [clientId],
       limit: 1,
     );
@@ -53,13 +52,8 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
 
   @override
   Future<List<ImagenSegmentoEntity>> findAll() async {
-    final rows = await _db.query(
-      _table,
-      orderBy: 'captured_at DESC',
-    );
-    return rows
-        .map(ImagenSegmentoEntity.fromMap)
-        .toList(growable: false);
+    final rows = await _db.query(_table, orderBy: 'capturada_at DESC');
+    return rows.map(ImagenSegmentoEntity.fromMap).toList(growable: false);
   }
 
   @override
@@ -70,23 +64,17 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
   }) async {
     final executor = txn ?? _db;
     final values = <String, Object?>{
-      'sync_status': SyncStatus.uploaded.name,
+      'synced_at': DateTime.now().toIso8601String(),
+      'needs_sync': 0,
     };
     if (remoteId != null) {
       final parsed = int.tryParse(remoteId);
-      if (parsed != null) {
-        values['remote_id'] = parsed;
-      } else {
-        debugPrint(
-          '[ImagenLocalStore] markSynced: remoteId "$remoteId" is not a '
-          'valid int; leaving remote_id column untouched for clientId=$clientId',
-        );
-      }
+      if (parsed != null) values['id'] = parsed;
     }
     await executor.update(
       _table,
       values,
-      where: 'local_id = ?',
+      where: 'client_id = ?',
       whereArgs: [clientId],
     );
   }

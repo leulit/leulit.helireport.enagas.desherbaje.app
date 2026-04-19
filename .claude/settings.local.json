@@ -24,7 +24,10 @@
       "Bash(flutter test *)",
       "WebFetch(domain:docs.powersync.com)",
       "WebFetch(domain:github.com)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(git rm *)",
+      "Bash(dart compile *)",
+      "Bash(flutter build *)"
     ]
   }
 }

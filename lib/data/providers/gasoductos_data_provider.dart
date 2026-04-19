@@ -26,13 +26,13 @@ class GasoductosDataProvider {
       }
       return compute(
         _parseGeoJson,
-        _GeoJsonParseArgs(geoJson: geoJson, ctCode: ctInfo.ct),
+        _GeoJsonParseArgs(geoJson: geoJson, ctId: ctInfo.id),
       );
     } on NetworkError catch (e) {
-      debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.ct}: $e');
+      debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.id}: $e');
       return [];
     } catch (e) {
-      debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.ct}: $e');
+      debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.id}: $e');
       return [];
     }
   }
@@ -49,11 +49,11 @@ class GasoductosDataProvider {
 
 class _GeoJsonParseArgs {
   final Map<String, dynamic> geoJson;
-  final String ctCode;
+  final int ctId;
 
-  _GeoJsonParseArgs({required this.geoJson, required this.ctCode});
+  _GeoJsonParseArgs({required this.geoJson, required this.ctId});
 }
 
 List<GasoductoEntity> _parseGeoJson(_GeoJsonParseArgs args) {
-  return GasoductoEntity.fromGeoJson(args.geoJson, args.ctCode);
+  return GasoductoEntity.fromGeoJson(args.geoJson, args.ctId);
 }

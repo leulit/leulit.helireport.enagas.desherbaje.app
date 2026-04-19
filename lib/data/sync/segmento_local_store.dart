@@ -137,7 +137,7 @@ class _SegmentoRowMapper {
         'tipo_actividad': e.tipoActividad.descripcion,
         'estado': e.estado.descripcion,
         'imagenes_json':
-            jsonEncode(e.imagenes.map((i) => i.toMap()).toList()),
+            jsonEncode(e.imagenes.map((i) => i.toJson()).toList()),
         'mensajes_json':
             jsonEncode(e.mensajes.map((m) => m.toJson()).toList()),
         'created_at': e.createdAt?.toIso8601String(),
@@ -212,7 +212,7 @@ class _SegmentoRowMapper {
       final decoded = jsonDecode(raw) as List;
       return decoded
           .whereType<Map>()
-          .map((m) => ImagenSegmentoEntity.fromMap(m.cast<String, dynamic>()))
+          .map((m) => ImagenSegmentoEntity.fromJson(m.cast<String, dynamic>()))
           .toList();
     } catch (_) {
       return const <ImagenSegmentoEntity>[];

@@ -1,15 +1,15 @@
 import 'package:get/get.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/user_entity.dart';
 
 class AuthDataProvider {
   final NetworkService _network = Get.find<NetworkService>();
 
-  Future<UserEntity> login(String usuario, String password) async {
-    const path = '/users/login';
+  Future<UserModel> login(String usuario, String password) async {
     final response = await _network.post(
-      path,
+      ApiEndpoints.userLogin,
       body: {'usuario': usuario, 'password': password},
     );
     final data = response.data as Map<String, dynamic>;
@@ -18,8 +18,24 @@ class AuthDataProvider {
       throw Exception('Invalid credentials');
     }
     final rowJson = rows[0] as Map<String, dynamic>;
-    final token = (rowJson['token'] as String?) ?? '';
-    final user = UserEntity.fromJson(rowJson, token);
+    final user = UserModel.fromJson(rowJson);
+    if (user.token.isEmpty) {
+      user.token = (rowJson['token'] as String?) ?? '';
+    }
     return user;
+  }
+
+  /// Carga la lista de CTs del usuario tras el login. El endpoint de login
+  /// no incluye `cts` — hay que pedirlos por separado.
+  Future<List<UserCt>> getCts(int iduser) async {
+    final response = await _network.get(ApiEndpoints.ctsByUser(iduser));
+    final data = response.data;
+    if (data is Map && data['rows'] is List) {
+      return (data['rows'] as List)
+          .whereType<Map>()
+          .map(UserCt.fromJson)
+          .toList();
+    }
+    return const <UserCt>[];
   }
 }

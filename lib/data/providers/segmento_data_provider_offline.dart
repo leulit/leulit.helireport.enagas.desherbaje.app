@@ -9,7 +9,7 @@ class SegmentoDataProviderOffline implements SegmentoDataProvider {
 
   @override
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
-      int operadorId, List<String> cts) async {
+      int operadorId, List<int> cts) async {
     try {
       final db = await _db.database;
       final rows = await db.query('segmentos', orderBy: 'fecha_fin DESC');

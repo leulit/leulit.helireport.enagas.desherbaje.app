@@ -9,7 +9,7 @@ class ConnectivityService extends GetxService {
   final _isConnected = true.obs;
   final List<VoidCallback> _syncListeners = [];
 
-  bool get isConnected => _isConnected.value;
+  bool get isConnected => true;//_isConnected.value;
   Stream<bool> get onConnectivityChanged => _isConnected.stream;
 
   @override

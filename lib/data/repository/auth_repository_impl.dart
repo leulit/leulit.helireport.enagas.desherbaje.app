@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../domain/entities/ct_info_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repository/auth_repository.dart';
 import '../providers/auth_data_provider.dart';
@@ -14,26 +13,27 @@ class AuthRepositoryImpl implements AuthRepository {
   static const _userIdKey = 'user_id';
   static const _userNameKey = 'user_name';
   static const _userUsuarioKey = 'user_usuario';
+  static const _userJsonKey = 'user_json';
+  // Lista plana de ctids; se mantiene para acceso rápido desde los use cases
+  // (no requiere parsear el JSON completo del usuario).
   static const _userCtsKey = 'user_cts';
-  static const _userCtInfosKey = 'user_ct_infos';
 
   @override
-  Future<UserEntity> login(String usuario, String password) async {
+  Future<UserModel> login(String usuario, String password) async {
     final user = await _provider.login(usuario, password);
+    // El endpoint de login no incluye los CTs: los pedimos por separado y
+    // los inyectamos en el modelo antes de persistir.
+    user.cts = await _provider.getCts(user.id);
+
     await _storage.write(key: _tokenKey, value: user.token);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_userIdKey, user.id);
     await prefs.setString(_userNameKey, user.nombre);
     await prefs.setString(_userUsuarioKey, user.usuario);
-    await prefs.setStringList(_userCtsKey, user.cts);
-    await prefs.setString(
-      _userCtInfosKey,
-      jsonEncode(
-        user.ctInfos
-            .map((c) => {'ct': c.ct, 'nombre': c.nombre, 'filename': c.filename})
-            .toList(),
-      ),
-    );
+    await prefs.setString(_userJsonKey, jsonEncode(user.toJson()));
+    // SharedPreferences no soporta List<int> nativamente; se serializa como
+    // JSON (`[12,15,23]`) para conservar el tipo entero al leer.
+    await prefs.setString(_userCtsKey, jsonEncode(user.ctsId()));
     return user;
   }
 
@@ -44,42 +44,26 @@ class AuthRepositoryImpl implements AuthRepository {
     await prefs.remove(_userIdKey);
     await prefs.remove(_userNameKey);
     await prefs.remove(_userUsuarioKey);
+    await prefs.remove(_userJsonKey);
     await prefs.remove(_userCtsKey);
-    await prefs.remove(_userCtInfosKey);
   }
 
   @override
-  Future<UserEntity?> getCurrentUser() async {
+  Future<UserModel?> getCurrentUser() async {
     final token = await _storage.read(key: _tokenKey);
     if (token == null) return null;
     final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getInt(_userIdKey);
-    if (id == null) return null;
+    final userJson = prefs.getString(_userJsonKey);
+    if (userJson == null) return null;
 
-    final ctsList = prefs.getStringList(_userCtsKey) ?? [];
-    final ctInfosJson = prefs.getString(_userCtInfosKey);
-    List<CtInfo> ctInfos;
-    if (ctInfosJson != null) {
-      try {
-        final decoded = jsonDecode(ctInfosJson) as List;
-        ctInfos = decoded
-            .map((e) => CtInfo.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } catch (_) {
-        ctInfos = ctsList.map(CtInfo.fromString).toList();
-      }
-    } else {
-      ctInfos = ctsList.map(CtInfo.fromString).toList();
+    try {
+      final decoded = jsonDecode(userJson) as Map<String, dynamic>;
+      final user = UserModel.fromJson(decoded);
+      user.token = token;
+      return user;
+    } catch (_) {
+      return null;
     }
-
-    return UserEntity(
-      id: id,
-      usuario: prefs.getString(_userUsuarioKey) ?? '',
-      nombre: prefs.getString(_userNameKey) ?? '',
-      cts: ctsList,
-      ctInfos: ctInfos,
-      token: token,
-    );
   }
 
   @override

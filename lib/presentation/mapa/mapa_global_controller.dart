@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
-import 'package:helireport_desherbaje/domain/usecases/get_Segmentos_usecase.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
-import '../../domain/usecases/get_segmentos_usecase.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
 
 class SegmentoMapInfo {
@@ -29,7 +27,7 @@ class MapaGlobalController extends GetxController {
   final mapController = MapController();
 
   final gasoductosPolylines = <Polyline>[].obs;
-  final SegmentosSegmentos = <SegmentoMapInfo>[].obs;
+  final segmentos = <SegmentoMapInfo>[].obs;
   final isLoadingGasoductos = false.obs;
   final isLoadingSegmentos = false.obs;
   final errorGasoductos = Rx<String?>(null);
@@ -102,20 +100,18 @@ class MapaGlobalController extends GetxController {
         errorSegmentos.value = 'Error cargando Segmentos';
         return;
       }
-      final segmentos = result.dataOrNull ?? [];
-      for (final actividad in segmentos) {
-        for (final segmento in actividad.segmentos) {
-          if (segmento.ubicacionGis.isEmpty) continue;
-          final color = AppColors.accentForEstado(actividad.estado);
-          segmentos.add(SegmentoMapInfo(
-            segmento: segmento,
-            points: segmento.ubicacionGis,
-            color: color,
-            centroid: _computeCentroid(segmento.ubicacionGis),
-          ));
-        }
+      final fetched = result.dataOrNull ?? <SegmentoEntity>[];
+      final mapped = <SegmentoMapInfo>[];
+      for (final segmento in fetched) {
+        if (segmento.ubicacionGis.isEmpty) continue;
+        mapped.add(SegmentoMapInfo(
+          segmento: segmento,
+          points: segmento.ubicacionGis,
+          color: AppColors.accentForEstado(segmento.estado),
+          centroid: _computeCentroid(segmento.ubicacionGis),
+        ));
       }
-      SegmentosSegmentos.assignAll(segmentos);
+      segmentos.assignAll(mapped);
     } catch (e) {
       errorSegmentos.value = 'Error cargando Segmentos';
       debugPrint('MapaGlobal Segmentos: $e');
@@ -141,7 +137,7 @@ class MapaGlobalController extends GetxController {
   void _fitAllBounds() {
     final allPoints = <LatLng>[
       ...gasoductosPolylines.expand((p) => p.points),
-      ...SegmentosSegmentos.expand((s) => s.points),
+      ...segmentos.expand((s) => s.points),
     ];
     if (allPoints.isEmpty) return;
 

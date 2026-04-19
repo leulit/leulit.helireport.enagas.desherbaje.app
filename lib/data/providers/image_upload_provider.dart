@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../data/network/network_file.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
@@ -13,13 +14,13 @@ class ImageUploadProvider {
   final _storage = const FlutterSecureStorage();
 
   Future<String?> uploadImage(ImagenSegmentoEntity imagen) async {
-    const path = '/operador/additem';
+    final path = ApiEndpoints.imagenAdd;
     final token = await _storage.read(key: 'auth_token');
     final prefs = await SharedPreferences.getInstance();
     final usuario = prefs.getString('user_usuario') ?? '';
     final userId = prefs.getInt('user_id')?.toString() ?? '0';
 
-    final file = File(imagen.localPath);
+    final file = File(imagen.ruta);
     final fileName = file.path.split('/').last;
 
     final bytes = await file.openRead().first;
@@ -34,16 +35,16 @@ class ImageUploadProvider {
       'tipovigilancia': 'VH',
       'usuariologged': usuario,
       'idusuariologged': userId,
+      'clientId': imagen.clientId,
       'actividadId': imagen.actividadId.toString(),
-      if (imagen.segmentoId != null)
-        'segmentoId': imagen.segmentoId.toString(),
+      'segmentoId': imagen.segmentoId.toString(),
       'tipoFoto': imagen.tipoFoto.name,
     };
 
     final files = <NetworkFile>[
       NetworkFile(
         fieldName: 'file',
-        filePath: imagen.localPath,
+        filePath: imagen.ruta,
         filename: fileName,
         contentType: mimeType,
       ),

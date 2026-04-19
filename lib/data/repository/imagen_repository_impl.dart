@@ -1,74 +1,75 @@
-import '../../core/sync/contracts/sync_job.dart';
 import '../../data/local/local_database.dart';
 import '../../data/providers/image_upload_provider.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 
+/// Repositorio "ad-hoc" para `ImagenSegmentoEntity`. Convive con la capa de
+/// sync genérica (`OfflineRepository<ImagenSegmentoEntity>` registrada en
+/// `AppDI`) para los flujos directos del controller de captura.
 class ImagenRepositoryImpl {
   final _db = LocalDatabase.instance;
   final _uploadProvider = ImageUploadProvider();
 
+  static const String _table = 'imagenes_segmento';
+
   Future<void> saveLocal(ImagenSegmentoEntity imagen) async {
     final db = await _db.database;
-    await db.insert('imagenes_actividad', imagen.toMap());
+    await db.insert(_table, imagen.toMap());
   }
 
-  Future<List<ImagenSegmentoEntity>> getPendingByActividad(
-      int actividadId) async {
+  Future<List<ImagenSegmentoEntity>> getPendingBySegmento(int segmentoId) async {
     final db = await _db.database;
     final rows = await db.query(
-      'imagenes_actividad',
-      where: 'actividad_id = ? AND sync_status != ?',
-      whereArgs: [actividadId, SyncStatus.uploaded.name],
+      _table,
+      where: 'segmento_id = ? AND needs_sync = 1',
+      whereArgs: [segmentoId],
     );
     return rows.map(ImagenSegmentoEntity.fromMap).toList();
   }
 
-  Future<List<ImagenSegmentoEntity>> getAllByActividad(
-      int actividadId) async {
+  Future<List<ImagenSegmentoEntity>> getAllBySegmento(int segmentoId) async {
     final db = await _db.database;
     final rows = await db.query(
-      'imagenes_actividad',
-      where: 'actividad_id = ?',
-      whereArgs: [actividadId],
-      orderBy: 'created_at DESC',
+      _table,
+      where: 'segmento_id = ?',
+      whereArgs: [segmentoId],
+      orderBy: 'capturada_at DESC',
     );
     return rows.map(ImagenSegmentoEntity.fromMap).toList();
   }
 
-  Future<void> updateStatus(String localId, SyncStatus status,
-      {String? remoteUrl}) async {
+  Future<void> markUploaded(
+    String clientId, {
+    int? remoteId,
+    String? url,
+  }) async {
     final db = await _db.database;
     await db.update(
-      'imagenes_actividad',
+      _table,
       {
-        'sync_status': status.name,
-        if (remoteUrl != null) 'remote_url': remoteUrl,
+        'subida_at': DateTime.now().toIso8601String(),
+        'synced_at': DateTime.now().toIso8601String(),
+        'needs_sync': 0,
+        if (remoteId != null) 'id': remoteId,
+        if (url != null) 'url': url,
       },
-      where: 'local_id = ?',
-      whereArgs: [localId],
+      where: 'client_id = ?',
+      whereArgs: [clientId],
     );
   }
 
-  Future<void> delete(String localId) async {
+  Future<void> delete(String clientId) async {
     final db = await _db.database;
-    await db.delete(
-      'imagenes_actividad',
-      where: 'local_id = ?',
-      whereArgs: [localId],
-    );
+    await db.delete(_table, where: 'client_id = ?', whereArgs: [clientId]);
   }
 
-  Future<void> uploadPending(int actividadId) async {
-    final pending = await getPendingByActividad(actividadId);
+  Future<void> uploadPending(int segmentoId) async {
+    final pending = await getPendingBySegmento(segmentoId);
     for (final imagen in pending) {
-      if (imagen.syncStatus == SyncStatus.uploaded) continue;
-      await updateStatus(imagen.localId, SyncStatus.uploading);
       try {
         final remoteUrl = await _uploadProvider.uploadImage(imagen);
-        await updateStatus(imagen.localId, SyncStatus.uploaded,
-            remoteUrl: remoteUrl);
+        await markUploaded(imagen.clientId, url: remoteUrl);
       } catch (_) {
-        await updateStatus(imagen.localId, SyncStatus.error);
+        // Permanece en estado pendiente; el SyncEngine reintentará.
       }
     }
   }

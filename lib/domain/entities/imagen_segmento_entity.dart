@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 import '../../core/sync/contracts/syncable.dart';
 import '../../data/model/json_parsing_utils.dart';
 
@@ -19,9 +21,10 @@ enum TipoFoto {
   }
 }
 
-/// Nombres de campos mapeados a la tabla `imagenes_segmento`
+/// Nombres de campos mapeados a la tabla `imagenes_segmento` (backend + cache).
 enum ImagenSegmentoFieldNames {
   id('id'),
+  clientId('client_id'),
   actividadId('actividad_id'),
   segmentoId('segmento_id'),
   tipoFoto('tipo_foto'),
@@ -38,13 +41,16 @@ enum ImagenSegmentoFieldNames {
   subidaAt('subida_at'),
   subidaPor('subida_por'),
   createdAt('created_at'),
-  updatedAt('updated_at');
+  updatedAt('updated_at'),
+  syncedAt('synced_at'),
+  needsSync('needs_sync');
 
   final String value;
   const ImagenSegmentoFieldNames(this.value);
 }
 
-/// Entidad que representa una imagen de la tabla `imagenes_segmento`
+/// Entidad que representa una imagen capturada en campo. Mapea 1:1 contra la
+/// tabla local `imagenes_segmento` y contra el endpoint del backend.
 class ImagenSegmentoEntity implements Syncable {
   ImagenSegmentoEntity({
     required this.actividadId,
@@ -53,13 +59,23 @@ class ImagenSegmentoEntity implements Syncable {
     required this.filename,
     required this.ruta,
     required this.capturadaAt,
-  });
+    String? clientId,
+  }) : _clientId = clientId ?? const Uuid().v4();
 
+  /// Identificador remoto asignado por el backend tras la subida.
   int? id;
+
+  /// Identificador estable generado en cliente. Persistido en `client_id`
+  /// para que el outbox sea idempotente cuando aún no existe `id` remoto.
+  final String _clientId;
+
   int actividadId;
   int segmentoId;
   TipoFoto tipoFoto;
   String filename;
+
+  /// Ruta del fichero. Local mientras `subidaAt == null`; ruta servidor tras
+  /// la subida.
   String ruta;
   String? url;
   String mimeType = 'image/jpeg';
@@ -72,19 +88,12 @@ class ImagenSegmentoEntity implements Syncable {
   DateTime? subidaAt;
   int? subidaPor;
   DateTime? createdAt;
-  @override
-  DateTime? updatedAt;
+  DateTime? updatedAtRemote;
 
-  /// Devuelve true si la imagen ya ha sido subida al servidor
   bool get isSubida => subidaAt != null;
-
-  /// Devuelve true si es una foto de tipo "antes"
   bool get isAntes => tipoFoto == TipoFoto.antes;
-
-  /// Devuelve true si es una foto de tipo "después"
   bool get isDespues => tipoFoto == TipoFoto.despues;
 
-  /// Tamaño legible (e.g. "1.2 MB")
   String get tamanyoLegible {
     final bytes = tamanyoBytes;
     if (bytes == null) return 'Desconocido';
@@ -92,6 +101,20 @@ class ImagenSegmentoEntity implements Syncable {
     if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / 1048576).toStringAsFixed(1)} MB';
   }
+
+  // ──────────────────────────── Syncable ────────────────────────────
+
+  @override
+  String get clientId => _clientId;
+
+  @override
+  String? get remoteId => id?.toString();
+
+  @override
+  DateTime get updatedAt =>
+      updatedAtRemote ?? subidaAt ?? capturadaAt;
+
+  // ──────────────────────────── JSON (backend) ────────────────────────────
 
   factory ImagenSegmentoEntity.fromJson(Map<String, dynamic> json) {
     DateTime parseDate(String field, DateTime fallback) {
@@ -111,6 +134,7 @@ class ImagenSegmentoEntity implements Syncable {
       filename:    readJsonDataUtil<String>(json, ImagenSegmentoFieldNames.filename.value, ''),
       ruta:        readJsonDataUtil<String>(json, ImagenSegmentoFieldNames.ruta.value, ''),
       capturadaAt: parseDate(ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId:    readJsonDataUtil<String?>(json, ImagenSegmentoFieldNames.clientId.value, null),
     );
 
     entity.id           = readJsonDataUtil<int?>(json, ImagenSegmentoFieldNames.id.value, null);
@@ -135,7 +159,7 @@ class ImagenSegmentoEntity implements Syncable {
 
     try {
       final updatedRaw = json[ImagenSegmentoFieldNames.updatedAt.value];
-      if (updatedRaw != null) entity.updatedAt = DateTime.parse(updatedRaw.toString());
+      if (updatedRaw != null) entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
     } catch (_) {}
 
     return entity;
@@ -143,23 +167,90 @@ class ImagenSegmentoEntity implements Syncable {
 
   @override
   Map<String, dynamic> toJson() => {
-    ImagenSegmentoFieldNames.id.value:           id,
-    ImagenSegmentoFieldNames.actividadId.value:  actividadId,
-    ImagenSegmentoFieldNames.segmentoId.value:   segmentoId,
-    ImagenSegmentoFieldNames.tipoFoto.value:     tipoFoto.valor,
-    ImagenSegmentoFieldNames.filename.value:     filename,
-    ImagenSegmentoFieldNames.ruta.value:         ruta,
-    ImagenSegmentoFieldNames.url.value:          url,
-    ImagenSegmentoFieldNames.mimeType.value:     mimeType,
-    ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
-    ImagenSegmentoFieldNames.latitud.value:       latitud,
-    ImagenSegmentoFieldNames.longitud.value:      longitud,
-    ImagenSegmentoFieldNames.fixedLatitud.value:  fixedLatitud,
-    ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
-    ImagenSegmentoFieldNames.capturadaAt.value:   capturadaAt.toIso8601String(),
-    ImagenSegmentoFieldNames.subidaAt.value:     subidaAt?.toIso8601String(),
-    ImagenSegmentoFieldNames.subidaPor.value:    subidaPor,
-  };
+        ImagenSegmentoFieldNames.id.value: id,
+        ImagenSegmentoFieldNames.clientId.value: clientId,
+        ImagenSegmentoFieldNames.actividadId.value: actividadId,
+        ImagenSegmentoFieldNames.segmentoId.value: segmentoId,
+        ImagenSegmentoFieldNames.tipoFoto.value: tipoFoto.valor,
+        ImagenSegmentoFieldNames.filename.value: filename,
+        ImagenSegmentoFieldNames.ruta.value: ruta,
+        ImagenSegmentoFieldNames.url.value: url,
+        ImagenSegmentoFieldNames.mimeType.value: mimeType,
+        ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
+        ImagenSegmentoFieldNames.latitud.value: latitud,
+        ImagenSegmentoFieldNames.longitud.value: longitud,
+        ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
+        ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        ImagenSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
+        ImagenSegmentoFieldNames.subidaPor.value: subidaPor,
+      };
+
+  // ──────────────────────────── SQLite map ────────────────────────────
+
+  /// Mapa para la tabla local `imagenes_segmento`. Coincide con `toJson` y
+  /// añade los campos de control de sincronía (`synced_at`, `needs_sync`).
+  Map<String, Object?> toMap({bool needsSync = true}) => {
+        ImagenSegmentoFieldNames.id.value: id,
+        ImagenSegmentoFieldNames.clientId.value: clientId,
+        ImagenSegmentoFieldNames.actividadId.value: actividadId,
+        ImagenSegmentoFieldNames.segmentoId.value: segmentoId,
+        ImagenSegmentoFieldNames.tipoFoto.value: tipoFoto.valor,
+        ImagenSegmentoFieldNames.filename.value: filename,
+        ImagenSegmentoFieldNames.ruta.value: ruta,
+        ImagenSegmentoFieldNames.url.value: url,
+        ImagenSegmentoFieldNames.mimeType.value: mimeType,
+        ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
+        ImagenSegmentoFieldNames.latitud.value: latitud,
+        ImagenSegmentoFieldNames.longitud.value: longitud,
+        ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
+        ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        ImagenSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
+        ImagenSegmentoFieldNames.subidaPor.value: subidaPor,
+        ImagenSegmentoFieldNames.createdAt.value: createdAt?.toIso8601String(),
+        ImagenSegmentoFieldNames.updatedAt.value: updatedAtRemote?.toIso8601String(),
+        ImagenSegmentoFieldNames.needsSync.value: needsSync ? 1 : 0,
+      };
+
+  factory ImagenSegmentoEntity.fromMap(Map<String, Object?> row) {
+    DateTime parseDateOr(String field, DateTime fallback) {
+      final raw = row[field];
+      if (raw == null) return fallback;
+      return DateTime.tryParse(raw.toString()) ?? fallback;
+    }
+
+    DateTime? parseDateNullable(String field) {
+      final raw = row[field];
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString());
+    }
+
+    final entity = ImagenSegmentoEntity(
+      actividadId: (row[ImagenSegmentoFieldNames.actividadId.value] as int?) ?? 0,
+      segmentoId:  (row[ImagenSegmentoFieldNames.segmentoId.value] as int?) ?? 0,
+      tipoFoto:    TipoFoto.fromString(row[ImagenSegmentoFieldNames.tipoFoto.value] as String?),
+      filename:    (row[ImagenSegmentoFieldNames.filename.value] as String?) ?? '',
+      ruta:        (row[ImagenSegmentoFieldNames.ruta.value] as String?) ?? '',
+      capturadaAt: parseDateOr(ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId:    row[ImagenSegmentoFieldNames.clientId.value] as String?,
+    );
+
+    entity.id            = row[ImagenSegmentoFieldNames.id.value] as int?;
+    entity.url           = row[ImagenSegmentoFieldNames.url.value] as String?;
+    entity.mimeType      = (row[ImagenSegmentoFieldNames.mimeType.value] as String?) ?? 'image/jpeg';
+    entity.tamanyoBytes  = row[ImagenSegmentoFieldNames.tamanyoBytes.value] as int?;
+    entity.latitud       = (row[ImagenSegmentoFieldNames.latitud.value] as num?)?.toDouble();
+    entity.longitud      = (row[ImagenSegmentoFieldNames.longitud.value] as num?)?.toDouble();
+    entity.fixedLatitud  = (row[ImagenSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
+    entity.fixedLongitud = (row[ImagenSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
+    entity.subidaPor     = row[ImagenSegmentoFieldNames.subidaPor.value] as int?;
+    entity.subidaAt        = parseDateNullable(ImagenSegmentoFieldNames.subidaAt.value);
+    entity.createdAt       = parseDateNullable(ImagenSegmentoFieldNames.createdAt.value);
+    entity.updatedAtRemote = parseDateNullable(ImagenSegmentoFieldNames.updatedAt.value);
+
+    return entity;
+  }
 
   ImagenSegmentoEntity copyWith({
     int? id,
@@ -186,6 +277,7 @@ class ImagenSegmentoEntity implements Syncable {
       filename:    filename    ?? this.filename,
       ruta:        ruta        ?? this.ruta,
       capturadaAt: capturadaAt ?? this.capturadaAt,
+      clientId:    clientId,
     );
     e.id           = id           ?? this.id;
     e.url          = url          ?? this.url;
@@ -196,28 +288,22 @@ class ImagenSegmentoEntity implements Syncable {
     e.fixedLatitud  = fixedLatitud  ?? this.fixedLatitud;
     e.fixedLongitud = fixedLongitud ?? this.fixedLongitud;
     e.subidaAt      = subidaAt      ?? this.subidaAt;
-    e.subidaPor    = subidaPor    ?? this.subidaPor;
+    e.subidaPor     = subidaPor     ?? this.subidaPor;
+    e.createdAt     = createdAt;
+    e.updatedAtRemote = updatedAtRemote;
     return e;
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ImagenSegmentoEntity && other.id == id && other.filename == filename;
+      other is ImagenSegmentoEntity && other.clientId == clientId;
 
   @override
-  int get hashCode => id.hashCode ^ filename.hashCode;
+  int get hashCode => clientId.hashCode;
 
   @override
   String toString() =>
-      'ImagenSegmentoEntity(id: $id, segmentoId: $segmentoId, tipo: ${tipoFoto.etiqueta}, filename: $filename)';
-      
-  @override
-  // TODO: implement clientId
-  String get clientId => throw UnimplementedError();
-
-  @override
-  // TODO: implement remoteId
-  String? get remoteId => throw UnimplementedError();
+      'ImagenSegmentoEntity(clientId: $clientId, id: $id, segmentoId: $segmentoId, '
+      'tipo: ${tipoFoto.etiqueta}, filename: $filename)';
 }
-

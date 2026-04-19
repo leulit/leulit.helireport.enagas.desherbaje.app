@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart' show SyncOperation;
 import '../../domain/entities/imagen_segmento_entity.dart';
@@ -24,7 +25,6 @@ import '../network/sync_outcome_from_network_error.dart';
 /// id on upload. Updates and deletes return [SyncUnrecoverable] so the outbox
 /// can mark the job dead and surface it to the user.
 class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
-  static const String _path = '/operador/additem';
   static const String _fileFieldName = 'file';
   static const String _tokenKey = 'auth_token';
   static const String _prefsUsuarioKey = 'user_usuario';
@@ -58,7 +58,7 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       final usuario = prefs.getString(_prefsUsuarioKey) ?? '';
       final userId = prefs.getInt(_prefsUserIdKey)?.toString() ?? '0';
 
-      final file = _fileFactory(entity.localPath);
+      final file = _fileFactory(entity.ruta);
       final fileName = file.path.split('/').last;
 
       final bytes = await file.openRead().first;
@@ -73,16 +73,16 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
         'tipovigilancia': 'VH',
         'usuariologged': usuario,
         'idusuariologged': userId,
+        'clientId': entity.clientId,
         'actividadId': entity.actividadId.toString(),
-        if (entity.segmentoId != null)
-          'segmentoId': entity.segmentoId.toString(),
+        'segmentoId': entity.segmentoId.toString(),
         'tipoFoto': entity.tipoFoto.name,
       };
 
       final files = <NetworkFile>[
         NetworkFile(
           fieldName: _fileFieldName,
-          filePath: entity.localPath,
+          filePath: entity.ruta,
           filename: fileName,
           contentType: mimeType,
         ),
@@ -93,7 +93,7 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       };
 
       final response = await _network.postMultipart(
-        _path,
+        ApiEndpoints.imagenAdd,
         fields: fields,
         files: files,
         headers: headers,
@@ -116,22 +116,14 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       final remoteIntId = _extractRemoteIntId(payload);
       final remoteUrl = _extractRemoteUrl(payload);
 
-      final updated = ImagenSegmentoEntity(
-        localId: entity.localId,
-        remoteIntId: remoteIntId ?? entity.remoteIntId,
-        actividadId: entity.actividadId,
-        segmentoId: entity.segmentoId,
-        localPath: entity.localPath,
-        remoteUrl: remoteUrl ?? entity.remoteUrl,
-        tipoFoto: entity.tipoFoto,
-        capturedAt: entity.capturedAt,
-        latitude: entity.latitude,
-        longitude: entity.longitude,
-        syncStatus: SyncStatus.uploaded,
+      final updated = entity.copyWith(
+        url: remoteUrl ?? entity.url,
+        subidaAt: DateTime.now(),
       );
+      if (remoteIntId != null) updated.id = remoteIntId;
 
       return SyncSuccess<ImagenSegmentoEntity>(
-        remoteId: remoteIntId?.toString(),
+        remoteId: remoteIntId?.toString() ?? entity.id?.toString(),
         serverVersion: updated,
       );
     } on NetworkError catch (e) {
