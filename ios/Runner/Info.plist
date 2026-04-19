@@ -72,5 +72,10 @@
 	<string>Necesario para seleccionar fotos de los trabajos</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Necesario para geolocalizar las fotos de los trabajos</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 </dict>
 </plist>

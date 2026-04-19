@@ -1,14 +1,15 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:get/get.dart' hide Response, FormData, MultipartFile;
+import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/services/api_security_service.dart';
+
+import '../../data/network/network_file.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 
 class ImageUploadProvider {
-  final Dio _dio = Get.find<NetworkService>().dio;
+  final NetworkService _network = Get.find<NetworkService>();
   final _storage = const FlutterSecureStorage();
 
   Future<String?> uploadImage(ImagenSegmentoEntity imagen) async {
@@ -24,12 +25,7 @@ class ImageUploadProvider {
     final bytes = await file.openRead().first;
     final mimeType = _detectMime(bytes);
 
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        imagen.localPath,
-        filename: fileName,
-        contentType: DioMediaType.parse(mimeType),
-      ),
+    final fields = <String, dynamic>{
       'fileNameOriginal': fileName,
       'description': imagen.tipoFoto == TipoFoto.antes
           ? 'Antes del trabajo'
@@ -42,19 +38,26 @@ class ImageUploadProvider {
       if (imagen.segmentoId != null)
         'segmentoId': imagen.segmentoId.toString(),
       'tipoFoto': imagen.tipoFoto.name,
-    });
+    };
 
-    final headers = ApiSecurityService.buildHeaders(
-      'POST',
-      path,
-      token: token,
-      isMultipart: true,
-    );
+    final files = <NetworkFile>[
+      NetworkFile(
+        fieldName: 'file',
+        filePath: imagen.localPath,
+        filename: fileName,
+        contentType: mimeType,
+      ),
+    ];
 
-    final response = await _dio.post(
+    final headers = <String, String>{
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    final response = await _network.postMultipart(
       path,
-      data: formData,
-      options: Options(headers: headers),
+      fields: fields,
+      files: files,
+      headers: headers,
     );
     final data = response.data as Map<String, dynamic>;
     return data['url'] as String? ?? data['remote_url'] as String?;

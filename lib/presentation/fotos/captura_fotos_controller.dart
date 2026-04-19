@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../data/model/mensaje_entity.dart';
+import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
 import '../../data/repository/imagen_repository_impl.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
@@ -60,17 +61,18 @@ class CapturaFotosController extends GetxController {
   Future<void> _loadMensajes() async {
     try {
       final url = "http://enagastool.helireport.com/actividades/mensajesbyidsedmento/${segmento.id}";
-      final response = await Get.find<NetworkService>().dio.get(url);
-      
+      final response = await Get.find<NetworkService>().get(url);
+
       if (response.data is List) {
         mensajes = (response.data as List)
             .map((item) => MensajeEntity.fromJson(item as Map<String, dynamic>))
             .toList();
       }
       updUI.value++;
-    } finally {
+    } on NetworkError catch (_) {
+      // Fallo silencioso — se reintentará la próxima vez
     }
-  }  
+  }
 
   void sendMensaje() {
     final text = textMensajeController.text.trim();
@@ -99,11 +101,11 @@ class CapturaFotosController extends GetxController {
     segmento.estado = nuevoEstado;
     estadoSegmento.value = nuevoEstado;
     try {
-      await Get.find<NetworkService>().dio.post(
+      await Get.find<NetworkService>().post(
         'http://enagastool.helireport.com/actividades/update_estado_segmento',
-        data: {'segmento_id': segmento.id, 'estado': nuevoEstado.descripcion},
+        body: {'segmento_id': segmento.id, 'estado': nuevoEstado.descripcion},
       );
-    } catch (_) {
+    } on NetworkError catch (_) {
       // Se reintentará cuando vuelva conectividad
     }
   }
@@ -208,11 +210,11 @@ class CapturaFotosController extends GetxController {
 
   Future<void> _syncSegmento() async {
     try {
-      await Get.find<NetworkService>().dio.post(
+      await Get.find<NetworkService>().post(
         'http://enagastool.helireport.com/actividades/update_segmento',
-        data: segmento.toJson(),
+        body: segmento.toJson(),
       );
-    } catch (_) {
+    } on NetworkError catch (_) {
       // Fallo silencioso — el estado local ya está actualizado
     }
   }

@@ -1,34 +1,36 @@
 import 'dart:convert';
-import 'package:dio/dio.dart';
+
 import 'package:flutter/foundation.dart';
-import 'package:get/get.dart' hide Response;
+import 'package:get/get.dart';
+
+import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/ct_info_entity.dart';
 import '../../domain/entities/gasoducto_entity.dart';
 
 class GasoductosDataProvider {
-  final Dio _dio = Get.find<NetworkService>().dio;
+  final NetworkService _network = Get.find<NetworkService>();
 
   Future<List<GasoductoEntity>> loadForCt(CtInfo ctInfo) async {
     try {
-      final response = await _dio.get(
+      final response = await _network.get(
         ctInfo.gasoductosUrl,
-        options: Options(
-          headers: {'User-Agent': 'helireport-desherbaje'},
-          responseType: ResponseType.json,
-          receiveTimeout: const Duration(seconds: 60),
-        ),
+        headers: const {'User-Agent': 'helireport-desherbaje'},
       );
+      final data = response.data;
       final Map<String, dynamic> geoJson;
-      if (response.data is String) {
-        geoJson = jsonDecode(response.data as String) as Map<String, dynamic>;
+      if (data is String) {
+        geoJson = jsonDecode(data) as Map<String, dynamic>;
       } else {
-        geoJson = response.data as Map<String, dynamic>;
+        geoJson = data as Map<String, dynamic>;
       }
       return compute(
         _parseGeoJson,
         _GeoJsonParseArgs(geoJson: geoJson, ctCode: ctInfo.ct),
       );
+    } on NetworkError catch (e) {
+      debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.ct}: $e');
+      return [];
     } catch (e) {
       debugPrint('GasoductosDataProvider - Error cargando CT ${ctInfo.ct}: $e');
       return [];

@@ -1,16 +1,16 @@
-import 'package:dio/dio.dart';
-import 'package:get/get.dart' hide Response;
+import 'package:get/get.dart';
+
 import '../../data/network/network_service.dart';
 import '../../domain/entities/user_entity.dart';
 
 class AuthDataProvider {
-  final Dio _dio = Get.find<NetworkService>().dio;
+  final NetworkService _network = Get.find<NetworkService>();
 
   Future<UserEntity> login(String usuario, String password) async {
     const path = '/users/login';
-    final response = await _dio.post(
+    final response = await _network.post(
       path,
-      data: {'usuario': usuario, 'password': password},
+      body: {'usuario': usuario, 'password': password},
     );
     final data = response.data as Map<String, dynamic>;
     final rows = data['rows'] as List?;

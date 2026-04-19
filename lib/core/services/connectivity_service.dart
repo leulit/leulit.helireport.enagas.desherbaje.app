@@ -3,6 +3,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
+import '../sync/sync_actions.dart';
+
 class ConnectivityService extends GetxService {
   final _isConnected = true.obs;
   final List<VoidCallback> _syncListeners = [];
@@ -44,9 +46,12 @@ class ConnectivityService extends GetxService {
     }
 
     if (wasOffline && _isConnected.value) {
+      SyncActions.connectionRestored.dispatch();
       for (final listener in _syncListeners) {
         listener();
       }
+    } else if (!wasOffline && !_isConnected.value) {
+      SyncActions.connectionLost.dispatch();
     }
   }
 

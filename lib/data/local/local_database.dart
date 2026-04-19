@@ -1,6 +1,8 @@
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/sync/sync.dart';
+
 class LocalDatabase {
   static LocalDatabase? _instance;
   static Database? _db;
@@ -18,7 +20,7 @@ class LocalDatabase {
     final fullPath = path.join(dbPath, 'helireport_desherbaje.db');
     return openDatabase(
       fullPath,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -82,6 +84,8 @@ class LocalDatabase {
     await db.execute(
       'CREATE INDEX idx_gasoductos_ct ON gasoductos(ct)',
     );
+
+    await OutboxSchema.ensure(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -110,6 +114,9 @@ class LocalDatabase {
       try {
         await db.execute('ALTER TABLE actividades DROP COLUMN tipo_actividad');
       } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      await OutboxSchema.ensure(db);
     }
   }
 }

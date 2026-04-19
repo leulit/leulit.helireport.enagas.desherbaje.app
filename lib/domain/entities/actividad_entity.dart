@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../core/sync/contracts/syncable.dart';
 import 'segmento_entity.dart';
 
 enum EstadoActividad {
@@ -74,7 +75,7 @@ enum TipoActividad {
     );
 }
 
-class ActividadEntity {
+class ActividadEntity implements Syncable {
   final int id;
   final int posicionId;
   EstadoActividad estado;
@@ -98,6 +99,17 @@ class ActividadEntity {
     required this.fechaFin,
     required this.segmentos,
   });
+
+  @override
+  String get clientId => 'act-$id';
+
+  @override
+  String? get remoteId => id.toString();
+
+  /// Best-available timestamp. Fields are non-nullable in this entity,
+  /// so `fechaFin` is always the most recent authoritative moment.
+  @override
+  DateTime get updatedAt => fechaFin;
 
   double get longitudTotal =>
     segmentos.fold(0.0, (sum, s) => sum + s.longitud);
@@ -140,6 +152,7 @@ class ActividadEntity {
     );
   }
 
+  @override
   Map<String, dynamic> toJson() => {
     'id': id,
     'posicion_id': posicionId,

@@ -1,9 +1,11 @@
+import '../../core/sync/contracts/syncable.dart';
+
 enum TipoFoto { antes, despues }
 enum SyncStatus { pending, uploading, uploaded, error }
 
-class ImagenSegmentoEntity {
+class ImagenSegmentoEntity implements Syncable {
   final String localId;
-  int? remoteId;
+  int? remoteIntId;
   final int actividadId;
   final int? segmentoId;
   final String localPath;
@@ -16,7 +18,7 @@ class ImagenSegmentoEntity {
 
   ImagenSegmentoEntity({
     required this.localId,
-    this.remoteId,
+    this.remoteIntId,
     required this.actividadId,
     this.segmentoId,
     required this.localPath,
@@ -28,10 +30,19 @@ class ImagenSegmentoEntity {
     this.syncStatus = SyncStatus.pending,
   });
 
+  @override
+  String get clientId => localId;
+
+  @override
+  String? get remoteId => remoteIntId?.toString();
+
+  @override
+  DateTime get updatedAt => capturedAt;
+
   factory ImagenSegmentoEntity.fromMap(Map<String, dynamic> map) {
     return ImagenSegmentoEntity(
       localId: map['local_id'] as String,
-      remoteId: map['remote_id'] as int?,
+      remoteIntId: map['remote_id'] as int?,
       actividadId: map['actividad_id'] as int,
       segmentoId: map['segmento_id'] as int?,
       localPath: map['local_path'] as String,
@@ -52,7 +63,7 @@ class ImagenSegmentoEntity {
 
   Map<String, dynamic> toMap() => {
     'local_id': localId,
-    'remote_id': remoteId,
+    'remote_id': remoteIntId,
     'actividad_id': actividadId,
     'segmento_id': segmentoId,
     'local_path': localPath,
@@ -63,4 +74,9 @@ class ImagenSegmentoEntity {
     'longitude': longitude,
     'sync_status': syncStatus.name,
   };
+
+  /// Alias of [toMap] to satisfy the [Syncable] contract without duplicating
+  /// serialization logic. SQLite schema and key names remain unchanged.
+  @override
+  Map<String, dynamic> toJson() => toMap();
 }

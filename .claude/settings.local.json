@@ -19,7 +19,11 @@
       "Bash(brew install *)",
       "Bash(rsvg-convert -w 512 -h 512 app_icon_512x512.svg -o app_icon_512x512.png)",
       "Bash(rsvg-convert -w 1024 -h 500 feature_graphic_1024x500.svg -o feature_graphic_1024x500.png)",
-      "Bash(flutter --version)"
+      "Bash(flutter --version)",
+      "mcp__dart__run_tests",
+      "Bash(flutter test *)",
+      "WebFetch(domain:docs.powersync.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
