@@ -43,7 +43,7 @@ class MapaGlobalController extends GetxController {
     }
   }
 
-  late final GetActividadesUseCase _actividadesUseCase;
+  late final GetSegmentosUseCase _actividadesUseCase;
   GasoductosService get _gasoductosService => Get.find<GasoductosService>();
 
   bool get isLoading =>
@@ -52,7 +52,7 @@ class MapaGlobalController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _actividadesUseCase = GetActividadesUseCase(ActividadRepositoryImpl());
+    _actividadesUseCase = GetSegmentosUseCase(ActividadRepositoryImpl());
     // Sincronizar polylines del servicio con el observable local
     ever(_gasoductosService.polylines, (lines) => gasoductosPolylines.assignAll(lines));
     loadAll();

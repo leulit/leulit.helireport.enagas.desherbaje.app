@@ -36,7 +36,7 @@ class ActividadDetallePage extends GetView<ActividadDetalleController> {
                 icon: const Icon(Icons.list_alt),
                 tooltip: 'Ver listado',
                 onPressed: () => Get.until(
-                    (route) => route.settings.name == AppRoutes.actividades),
+                    (route) => route.settings.name == AppRoutes.segmentos),
               ),
               IconButton(
                 icon: const Icon(Icons.map_outlined),

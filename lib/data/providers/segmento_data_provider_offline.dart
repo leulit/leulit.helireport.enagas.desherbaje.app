@@ -3,9 +3,9 @@ import '../../core/result/data_result.dart';
 import '../../data/local/local_database.dart';
 import '../../domain/entities/actividad_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
-import 'actividad_data_provider.dart';
+import 'segmento_data_provider.dart';
 
-class ActividadDataProviderOffline implements ActividadDataProvider {
+class SegmentoDataProviderOffline implements SegmentoDataProvider {
   final _db = LocalDatabase.instance;
 
   @override

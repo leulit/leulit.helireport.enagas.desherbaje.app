@@ -890,7 +890,7 @@ CREATE INDEX idx_imagenes_sync ON imagenes_actividad(sync_status);
 ### GetX Controller pattern
 ```dart
 // Patrón obligatorio en toda la app
-class ActividadesListController extends GetxController {
+class SegmentosListController extends GetxController {
   // Estado reactivo
   final actividades = <ActividadEntity>[].obs;
   final isLoading = false.obs;
@@ -920,18 +920,18 @@ class ActividadesListController extends GetxController {
 
 ### Offline-First Factory
 ```dart
-abstract class ActividadDataProvider {
+abstract class SegmentoDataProvider {
   Future<List<ActividadEntity>> getByOperador(int operadorId, List<String> cts);
   Future<ActividadEntity?> getById(int id);
   Future<bool> updateEstado(int id, EstadoActividad estado);
 }
 
-class ActividadDataProviderFactory {
-  static ActividadDataProvider create() {
+class SegmentoDataProviderFactory {
+  static SegmentoDataProvider create() {
     final isOnline = Get.find<ConnectivityService>().isConnected;
     return isOnline
-      ? ActividadDataProviderOnline()
-      : ActividadDataProviderOffline();
+      ? SegmentoDataProviderOnline()
+      : SegmentoDataProviderOffline();
   }
 }
 ```
@@ -950,8 +950,8 @@ class AppRoutes {
 final pages = [
   GetPage(name: AppRoutes.login,       page: () => LoginPage(),
                                         binding: LoginBinding()),
-  GetPage(name: AppRoutes.actividades, page: () => ActividadesListPage(),
-                                        binding: ActividadesListBinding(),
+  GetPage(name: AppRoutes.actividades, page: () => SegmentosListPage(),
+                                        binding: SegmentosListBinding(),
                                         middlewares: [AuthMiddleware()]),
   GetPage(name: AppRoutes.detalle,     page: () => SegmentoDetallePage(),
                                         binding: ActividadDetalleBinding(),
@@ -1060,10 +1060,10 @@ flutter test
 - [ ] `SecureStorage` para JWT
 
 ### Fase 3 — Actividades
-- [ ] `ActividadDataProvider` (abstract + online + offline + factory)
+- [ ] `SegmentoDataProvider` (abstract + online + offline + factory)
 - [ ] `ActividadRepository`
-- [ ] `GetActividadesUseCase`
-- [ ] `ActividadesListPage` + cards
+- [ ] `GetSegmentosUseCase`
+- [ ] `SegmentosListPage` + cards
 - [ ] `SegmentoDetallePage` + mapa con polylines
 - [ ] Cambio de estado de actividad
 

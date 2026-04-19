@@ -21,7 +21,7 @@ class LoginPage extends GetView<LoginPageController> {
                   // Logo placeholder
                   Container(
                     height: 80,
-                    width: 80,
+                    width: 80,                    
                     decoration: BoxDecoration(
                       color: const Color(0xFF388E3C),
                       borderRadius: BorderRadius.circular(16),

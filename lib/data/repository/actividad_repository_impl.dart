@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import '../../core/result/data_result.dart';
 import '../../data/local/local_database.dart';
-import '../../data/providers/actividad_data_provider_factory.dart';
+import '../providers/segmento_data_provider_factory.dart';
 import '../../domain/entities/actividad_entity.dart';
 import '../../domain/repository/actividad_repository.dart';
 
@@ -12,7 +12,7 @@ class ActividadRepositoryImpl implements ActividadRepository {
   @override
   Future<DataResult<List<ActividadEntity>>> getByOperador(
       int operadorId, List<String> cts) async {
-    final provider = ActividadDataProviderFactory.create();
+    final provider = SegmentoDataProviderFactory.create();
     final result = await provider.getByOperador(operadorId, cts);
     if (result.isSuccess) {
       await _cacheActividades(result.dataOrNull ?? []);
@@ -22,13 +22,13 @@ class ActividadRepositoryImpl implements ActividadRepository {
 
   @override
   Future<DataResult<ActividadEntity?>> getById(int id) {
-    final provider = ActividadDataProviderFactory.create();
+    final provider = SegmentoDataProviderFactory.create();
     return provider.getById(id);
   }
 
   @override
   Future<DataResult<bool>> updateEstado(int id, EstadoActividad estado) {
-    final provider = ActividadDataProviderFactory.create();
+    final provider = SegmentoDataProviderFactory.create();
     return provider.updateEstado(id, estado);
   }
 

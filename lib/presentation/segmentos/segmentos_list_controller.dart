@@ -4,8 +4,8 @@ import '../../data/repository/actividad_repository_impl.dart';
 import '../../domain/entities/actividad_entity.dart';
 import '../../domain/usecases/get_actividades_usecase.dart';
 
-class ActividadesListController extends GetxController {
-  late final GetActividadesUseCase _useCase;
+class SegmentosListController extends GetxController {
+  late final GetSegmentosUseCase _useCase;
 
   final actividades = <ActividadEntity>[].obs;
   final filtradas = <ActividadEntity>[].obs;
@@ -18,7 +18,7 @@ class ActividadesListController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _useCase = GetActividadesUseCase(ActividadRepositoryImpl());
+    _useCase = GetSegmentosUseCase(ActividadRepositoryImpl());
     debounce(
       filterDescripcion,
       (_) => _applyFilter(),

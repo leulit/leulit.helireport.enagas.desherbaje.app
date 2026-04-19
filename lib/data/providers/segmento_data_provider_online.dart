@@ -5,9 +5,9 @@ import '../../core/result/data_result.dart';
 import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/actividad_entity.dart';
-import 'actividad_data_provider.dart';
+import 'segmento_data_provider.dart';
 
-class ActividadDataProviderOnline implements ActividadDataProvider {
+class SegmentoDataProviderOnline implements SegmentoDataProvider {
   final NetworkService _network = Get.find<NetworkService>();
   final _storage = const FlutterSecureStorage();
 

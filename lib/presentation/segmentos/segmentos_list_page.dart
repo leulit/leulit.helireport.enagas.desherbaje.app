@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../widgets/actividad_card_widget.dart';
-import 'actividades_list_controller.dart';
+import 'segmentos_list_controller.dart';
 
 // ─── Colores de tema ────────────────────────────────────────────────────────
 const _kGreen = Color(0xFF388E3C);
 const _kGreenLight = Color(0xFFA5D6A7);
 const _kGreenBg = Color(0xFFF1F8E9);
 
-class ActividadesListPage extends GetView<ActividadesListController> {
-  const ActividadesListPage({super.key});
+class SegmentosListPage extends GetView<SegmentosListController> {
+  const SegmentosListPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +147,7 @@ class ActividadesListPage extends GetView<ActividadesListController> {
 // ─── Barra de filtros ────────────────────────────────────────────────────────
 
 class _FiltrosBar extends StatelessWidget {
-  final ActividadesListController controller;
+  final SegmentosListController controller;
 
   const _FiltrosBar({required this.controller});
 

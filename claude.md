@@ -162,7 +162,7 @@ lib/
 | Constante | Path | Página | Protegida |
 |---|---|---|---|
 | `AppRoutes.login` | `/login` | `LoginPage` | No |
-| `AppRoutes.actividades` | `/actividades` | `ActividadesListPage` | Sí (`AuthMiddleware`) |
+| `AppRoutes.actividades` | `/actividades` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
 | `AppRoutes.detalle` | `/actividades/detalle` | `SegmentoDetallePage` | Sí |
 | `AppRoutes.fotos` | `/actividades/fotos` | `CapturaFotosPage` | Sí |
 
@@ -229,7 +229,7 @@ lib/
 | Controlador | Archivo | Responsabilidad clave |
 |---|---|---|
 | `LoginPageController` | `presentation/auth/` | Login, toggle password, último usuario, parse errores |
-| `ActividadesListController` | `presentation/actividades/` | Carga lista, filtra por `EstadoActividad`, navega a detalle |
+| `SegmentosListController` | `presentation/actividades/` | Carga lista, filtra por `EstadoActividad`, navega a detalle |
 | `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado de actividad, navega a fotos |
 | `CapturaFotosController` | `presentation/fotos/` | Captura (cámara/galería), gestiona `SyncStatus`, sube pendientes, borra |
 
@@ -247,7 +247,7 @@ lib/
 
 | Caso de Uso | Firma | Descripción |
 |---|---|---|
-| `GetActividadesUseCase` | `execute() → Future<List<ActividadEntity>>` | Obtiene lista desde provider (online/offline) |
+| `GetSegmentosUseCase` | `execute() → Future<List<ActividadEntity>>` | Obtiene lista desde provider (online/offline) |
 | `UpdateActividadUseCase` | `execute(int id, EstadoActividad) → Future<bool>` | Actualiza estado en backend |
 | `UploadImageUseCase` | `uploadPending(int actividadId) → Future<void>` | Sube imágenes con `SyncStatus.pending` |
 
@@ -257,7 +257,7 @@ lib/
 
 ```dart
 // Cada dominio tiene: interface + factory + online + offline
-final provider = ActividadDataProviderFactory.create(); // auto-switch según conectividad
+final provider = SegmentoDataProviderFactory.create(); // auto-switch según conectividad
 // ConnectivityService determina qué implementación se devuelve
 ```
 

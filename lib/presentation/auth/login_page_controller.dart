@@ -56,7 +56,7 @@ class LoginPageController extends GetxController {
         usuarioController.text.trim(),
         passwordController.text,
       );
-      Get.offAllNamed(AppRoutes.actividades);
+      Get.offAllNamed(AppRoutes.segmentos);
     } catch (e) {
       error.value = _parseError(e);
     } finally {
@@ -74,7 +74,7 @@ class LoginPageController extends GetxController {
         usuarioController.text.trim(),
         passwordController.text,
       );
-      Get.offAllNamed(AppRoutes.actividades, arguments: {'autoSync': true});
+      Get.offAllNamed(AppRoutes.segmentos, arguments: {'autoSync': true});
     } catch (e) {
       error.value = _parseError(e);
     } finally {
