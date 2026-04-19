@@ -20,7 +20,7 @@ class LocalDatabase {
     final fullPath = path.join(dbPath, 'helireport_desherbaje.db');
     return openDatabase(
       fullPath,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -30,6 +30,7 @@ class LocalDatabase {
     await _createSegmentosTable(db);
     await _createImagenesTable(db);
     await _createGasoductosTable(db);
+    await _createPksTable(db);
     await OutboxSchema.ensure(db);
   }
 
@@ -74,6 +75,10 @@ class LocalDatabase {
       // próximo arranque online se reconstruye desde el backend.
       await db.execute('DROP TABLE IF EXISTS gasoductos');
       await _createGasoductosTable(db);
+    }
+    if (oldVersion < 8) {
+      // Nueva caché de puntos kilométricos, alimentada por `PksService`.
+      await _createPksTable(db);
     }
   }
 
@@ -149,6 +154,23 @@ class LocalDatabase {
     await db.execute(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_imagenes_segmento_remote '
       'ON imagenes_segmento(id) WHERE id IS NOT NULL',
+    );
+  }
+
+  Future<void> _createPksTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pks (
+        id        TEXT NOT NULL,
+        ct_id     INTEGER NOT NULL,
+        label     TEXT NOT NULL DEFAULT '',
+        lat       REAL NOT NULL,
+        lng       REAL NOT NULL,
+        synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (id, ct_id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pks_ct ON pks(ct_id)',
     );
   }
 

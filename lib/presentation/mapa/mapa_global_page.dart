@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
@@ -92,6 +94,25 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               Obx(() => PolylineLayer(
                     polylines: controller.gasoductosPolylines.toList(),
                   )),
+              // PKs layer — solo visibles a partir de zoom > 12 para evitar
+              // sobrecargar el mapa.
+              Obx(() {
+                if (controller.currentZoom.value <= 12) {
+                  return const SizedBox.shrink();
+                }
+                return MarkerLayer(
+                  markers: controller.pks.map((p) {
+                    final w = (p.label.length * 7.0 + 24).clamp(56.0, 140.0);
+                    return Marker(
+                      point: p.point,
+                      width: w,
+                      height: 30,
+                      alignment: Alignment.bottomCenter,
+                      child: _PkMarker(label: p.label),
+                    );
+                  }).toList(),
+                );
+              }),
               // Actividades layer — polylines coloreadas por estado
               Obx(() {
                 // Re-leemos los Rx de filtros para que el Obx se suscriba.
@@ -242,6 +263,85 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
       ),
     );
   }
+}
+
+/// Marcador estilo pin para un PK: label en una píldora con cola triangular
+/// apuntando hacia la coordenada exacta. La punta del triángulo coincide con
+/// el geo-point gracias a `Marker.alignment = Alignment.bottomCenter`.
+class _PkMarker extends StatelessWidget {
+  final String label;
+  const _PkMarker({required this.label});
+
+  static const _fill = Color(0xFFFFC107); // amber 500
+  static const _border = Color(0xFF263238); // blue grey 900
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: _fill,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: _border, width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black38,
+                blurRadius: 2,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+            softWrap: false,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: Colors.black,
+              height: 1.1,
+            ),
+          ),
+        ),
+        CustomPaint(
+          size: const Size(10, 7),
+          painter: _PkTrianglePainter(fill: _fill, border: _border),
+        ),
+      ],
+    );
+  }
+}
+
+class _PkTrianglePainter extends CustomPainter {
+  final Color fill;
+  final Color border;
+  const _PkTrianglePainter({required this.fill, required this.border});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PkTrianglePainter old) =>
+      old.fill != fill || old.border != border;
 }
 
 // ─── Barra de filtros (Estado / Tipo) ────────────────────────────────────────

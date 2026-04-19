@@ -5,7 +5,9 @@ import 'package:latlong2/latlong.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
+import '../../core/services/pks_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
+import '../../domain/entities/pk_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
 
@@ -28,10 +30,13 @@ class MapaGlobalController extends GetxController {
 
   final gasoductosPolylines = <Polyline>[].obs;
   final segmentos = <SegmentoMapInfo>[].obs;
+  final pks = <PkEntity>[].obs;
   final isLoadingGasoductos = false.obs;
   final isLoadingSegmentos = false.obs;
+  final isLoadingPks = false.obs;
   final errorGasoductos = Rx<String?>(null);
   final errorSegmentos = Rx<String?>(null);
+  final errorPks = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
   // ──────────────────────────── Filtros ────────────────────────────
@@ -55,36 +60,45 @@ class MapaGlobalController extends GetxController {
   }
 
   void onMapEvent(MapEvent event) {
-    if (event is MapEventMoveEnd || event is MapEventScrollWheelZoom) {
-      currentZoom.value = mapController.camera.zoom;
-    }
+    // Sync con cualquier evento de cámara — pinch, doble-tap, fling y
+    // movimientos programáticos también deben refrescar el zoom para que las
+    // capas dependientes (PKs, labels) reaccionen.
+    final z = mapController.camera.zoom;
+    if (currentZoom.value != z) currentZoom.value = z;
   }
 
   late final GetSegmentosUseCase _segmentosUseCase;
   GasoductosService get _gasoductosService => Get.find<GasoductosService>();
+  PksService get _pksService => Get.find<PksService>();
 
   bool get isLoading =>
-      isLoadingGasoductos.value || isLoadingSegmentos.value;
+      isLoadingGasoductos.value ||
+      isLoadingSegmentos.value ||
+      isLoadingPks.value;
 
   @override
   void onInit() {
     super.onInit();
     _segmentosUseCase = GetSegmentosUseCase(SegmentoRepositoryImpl());
-    // Sincronizar polylines del servicio con el observable local
-    ever(_gasoductosService.polylines, (lines) => gasoductosPolylines.assignAll(lines));
+    ever(_gasoductosService.polylines,
+        (lines) => gasoductosPolylines.assignAll(lines));
+    ever(_pksService.pks, (entities) => pks.assignAll(entities));
     loadAll();
   }
 
   Future<void> loadAll() async {
-    await Future.wait([loadGasoductos(), loadSegmentos()]);
+    // Secuencial: el `JsonLoaderService` serializa internamente, pero los
+    // eventos completed son broadcast — encadenar evita ambigüedad.
+    await loadGasoductos();
+    await loadPks();
+    await loadSegmentos();
     _fitAllBounds();
   }
 
   Future<void> reloadAll() async {
-    await Future.wait([
-      loadGasoductos(forceRefresh: true),
-      loadSegmentos(),
-    ]);
+    await loadGasoductos(forceRefresh: true);
+    await loadPks(forceRefresh: true);
+    await loadSegmentos();
     _fitAllBounds();
   }
 
@@ -108,6 +122,24 @@ class MapaGlobalController extends GetxController {
       debugPrint('MapaGlobal gasoductos: $e');
     } finally {
       isLoadingGasoductos.value = false;
+    }
+  }
+
+  Future<void> loadPks({bool forceRefresh = false}) async {
+    isLoadingPks.value = true;
+    errorPks.value = null;
+    try {
+      if (forceRefresh) {
+        await _pksService.reload();
+      } else {
+        await _pksService.ensureLoaded();
+      }
+      pks.assignAll(_pksService.pks);
+    } catch (e) {
+      errorPks.value = 'Error cargando PKs';
+      debugPrint('MapaGlobal PKs: $e');
+    } finally {
+      isLoadingPks.value = false;
     }
   }
 
@@ -142,12 +174,16 @@ class MapaGlobalController extends GetxController {
 
   void zoomIn() {
     final cam = mapController.camera;
-    mapController.move(cam.center, (cam.zoom + 1).clamp(5, 20));
+    final z = (cam.zoom + 1).clamp(5.0, 20.0);
+    mapController.move(cam.center, z);
+    currentZoom.value = z;
   }
 
   void zoomOut() {
     final cam = mapController.camera;
-    mapController.move(cam.center, (cam.zoom - 1).clamp(5, 20));
+    final z = (cam.zoom - 1).clamp(5.0, 20.0);
+    mapController.move(cam.center, z);
+    currentZoom.value = z;
   }
 
   void navigateToSegmento(SegmentoEntity segmento) {

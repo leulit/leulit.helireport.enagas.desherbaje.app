@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
@@ -13,29 +12,21 @@ import '../../data/local/local_database.dart';
 import '../../data/model/file_data.dart';
 import '../../data/services/json_loader_service.dart';
 import '../../domain/entities/ct_info_entity.dart';
-import '../../domain/entities/gasoducto_entity.dart';
+import '../../domain/entities/pk_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../app_typed_actions.dart';
 import 'connectivity_service.dart';
 
-/// Group identifier usado por [JsonLoaderService] para distinguir los
-/// ficheros de gasoductos del resto de descargas. Otros consumidores
-/// (segmentos GIS, capas adicionales) usarán otros groups.
-const String kFileGroupGasoducto = 'gasoducto';
+/// Group identifier que distingue los ficheros `*-pk.json` del resto de
+/// descargas que pasan por [JsonLoaderService].
+const String kFileGroupPk = 'pk';
 
-/// Servicio singleton que mantiene en memoria las polylines de gasoductos
-/// durante toda la sesión.
-///
-/// Flujo:
-/// 1. `ensureLoaded()` o `reload()` calcula la lista de [FileData] (un fichero
-///    `*-gasoductos.json` por cada CT del usuario logueado) y pide a
-///    [JsonLoaderService] que los descargue.
-/// 2. Mientras tanto, escucha `AppTypedActions.geoJsonLoaded` filtrando por
-///    `group == kFileGroupGasoducto` y va construyendo `polylines` y la
-///    caché SQLite incrementalmente.
-/// 3. Si el dispositivo está offline, salta directamente a la caché local.
-class GasoductosService extends GetxService {
-  final polylines = <Polyline>[].obs;
+/// Servicio singleton que mantiene en memoria los puntos kilométricos de los
+/// CTs del usuario. Mismo flujo que [GasoductosService] pero produciendo
+/// `PkEntity` (puntos para una capa de marcadores).
+class PksService extends GetxService {
+  /// PKs disponibles en sesión (después de cargar online o desde caché).
+  final pks = <PkEntity>[].obs;
   final isLoading = false.obs;
   bool _loaded = false;
 
@@ -45,7 +36,7 @@ class GasoductosService extends GetxService {
   String? _onCompletedHandlerId;
 
   Completer<void>? _runCompleter;
-  final _entitiesBuffer = <GasoductoEntity>[];
+  final _entitiesBuffer = <PkEntity>[];
 
   JsonLoaderService get _loader => Get.find<JsonLoaderService>();
   ConnectivityService get _conn => Get.find<ConnectivityService>();
@@ -69,14 +60,14 @@ class GasoductosService extends GetxService {
     super.onClose();
   }
 
-  /// Carga las trazas solo si no se han cargado aún en esta sesión.
+  /// Carga los PKs solo si no se han cargado aún en esta sesión.
   Future<void> ensureLoaded() async {
     if (_loaded || isLoading.value) return;
     await _runOnce(forceRefresh: false);
   }
 
-  /// Fuerza recarga ignorando la caché de sesión (pero usando caché SQLite
-  /// si no hay conexión).
+  /// Fuerza recarga ignorando la caché de sesión (pero usando caché SQLite si
+  /// no hay conexión).
   Future<void> reload() async {
     _loaded = false;
     await _runOnce(forceRefresh: true);
@@ -87,14 +78,12 @@ class GasoductosService extends GetxService {
     try {
       final ctInfos = await _ctInfosFromPrefs();
 
-      // Sin conexión → caché local directamente.
       if (!_conn.isConnected) {
         await _loadFromCache(ctInfos.map((c) => c.id).toList());
         _loaded = true;
         return;
       }
 
-      // Si no es refresh forzado y la caché tiene datos, evitamos red.
       if (!forceRefresh) {
         final ctIds = ctInfos.map((c) => c.id).toList();
         if (await _hasCache(ctIds)) {
@@ -109,26 +98,23 @@ class GasoductosService extends GetxService {
 
       final files = ctInfos
           .map((c) => FileData(
-                group: kFileGroupGasoducto,
-                filename: c.gasoductosUrl,
+                group: kFileGroupPk,
+                filename: c.pkUrl,
                 tag: c.id,
               ))
           .toList();
 
       await _loader.loadFiles(files);
-      // El pipeline ya ha terminado al volver de `loadFiles`, pero esperamos
-      // al evento `geoJsonLoadCompleted` por si llega tras un microtask
-      // (broadcast asíncrono). Timeout de 1s como salvaguarda.
       await _runCompleter?.future
           .timeout(const Duration(seconds: 1), onTimeout: () {});
 
-      polylines.assignAll(_toPolylines(_entitiesBuffer));
+      pks.assignAll(_entitiesBuffer);
       if (_entitiesBuffer.isNotEmpty) {
-        await _cacheGasoductos(_entitiesBuffer);
+        await _cachePks(_entitiesBuffer);
       }
       _loaded = true;
     } catch (e) {
-      debugPrint('GasoductosService: error cargando trazas — $e');
+      debugPrint('PksService: error cargando PKs — $e');
     } finally {
       _entitiesBuffer.clear();
       _runCompleter = null;
@@ -141,17 +127,17 @@ class GasoductosService extends GetxService {
   void _onGeoJsonLoaded(ActionEvent<FileLoadGeoJsonResult> event) {
     final result = event.data;
     if (result is! FileLoadGeoJsonResult) return;
-    if (result.originalFileData.group != kFileGroupGasoducto) return;
+    if (result.originalFileData.group != kFileGroupPk) return;
     if (result.processedData.isEmpty) return;
 
-    final ctId =
-        result.originalFileData.tag is int ? result.originalFileData.tag as int : 0;
+    final ctId = result.originalFileData.tag is int
+        ? result.originalFileData.tag as int
+        : 0;
     try {
-      final entities =
-          GasoductoEntity.fromGeoJson(result.processedData, ctId);
+      final entities = PkEntity.fromGeoJson(result.processedData, ctId);
       _entitiesBuffer.addAll(entities);
     } catch (e) {
-      debugPrint('GasoductosService: parse error CT $ctId — $e');
+      debugPrint('PksService: parse error CT $ctId — $e');
     }
   }
 
@@ -184,7 +170,7 @@ class GasoductosService extends GetxService {
     final placeholders = ctIds.map((_) => '?').join(',');
     final count = Sqflite.firstIntValue(
       await db.rawQuery(
-        'SELECT COUNT(*) FROM gasoductos WHERE ct_id IN ($placeholders)',
+        'SELECT COUNT(*) FROM pks WHERE ct_id IN ($placeholders)',
         ctIds,
       ),
     );
@@ -193,37 +179,32 @@ class GasoductosService extends GetxService {
 
   Future<void> _loadFromCache(List<int> ctIds) async {
     if (ctIds.isEmpty) {
-      polylines.clear();
+      pks.clear();
       return;
     }
     final db = await LocalDatabase.instance.database;
     final placeholders = ctIds.map((_) => '?').join(',');
     final rows = await db.query(
-      'gasoductos',
+      'pks',
       where: 'ct_id IN ($placeholders)',
       whereArgs: ctIds,
     );
-    polylines.assignAll(rows.map(_rowToPolyline).toList());
+    pks.assignAll(rows.map(_rowToPk).toList());
   }
 
-  Future<void> _cacheGasoductos(List<GasoductoEntity> gasoductos) async {
-    if (gasoductos.isEmpty) return;
+  Future<void> _cachePks(List<PkEntity> entities) async {
+    if (entities.isEmpty) return;
     final db = await LocalDatabase.instance.database;
     final batch = db.batch();
-    for (final g in gasoductos) {
+    for (final p in entities) {
       batch.insert(
-        'gasoductos',
+        'pks',
         {
-          'id': g.id,
-          'nombre': g.nombre,
-          'ct_id': g.ctId,
-          'points_json': jsonEncode(
-            g.points
-                .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-                .toList(),
-          ),
-          'color_value': g.colorValue,
-          'stroke_width': g.strokeWidth,
+          'id': p.id,
+          'ct_id': p.ctId,
+          'label': p.label,
+          'lat': p.point.latitude,
+          'lng': p.point.longitude,
           'synced_at': DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -232,31 +213,13 @@ class GasoductosService extends GetxService {
     await batch.commit(noResult: true);
   }
 
-  // ──────────────────────────── Mappers ────────────────────────────
-
-  List<Polyline> _toPolylines(List<GasoductoEntity> gasoductos) => gasoductos
-      .map(
-        (g) => Polyline(
-          points: g.points,
-          color: Color(g.colorValue),
-          strokeWidth: g.strokeWidth,
+  PkEntity _rowToPk(Map<String, Object?> row) => PkEntity(
+        id: row['id'] as String,
+        ctId: row['ct_id'] as int,
+        label: (row['label'] as String?) ?? '',
+        point: LatLng(
+          (row['lat'] as num).toDouble(),
+          (row['lng'] as num).toDouble(),
         ),
-      )
-      .toList();
-
-  Polyline _rowToPolyline(Map<String, Object?> row) {
-    final pointsRaw = jsonDecode(row['points_json'] as String) as List<dynamic>;
-    final points = pointsRaw.map((p) {
-      final m = p as Map<String, dynamic>;
-      return LatLng(
-        (m['lat'] as num).toDouble(),
-        (m['lng'] as num).toDouble(),
       );
-    }).toList();
-    return Polyline(
-      points: points,
-      color: Color(row['color_value'] as int),
-      strokeWidth: (row['stroke_width'] as num).toDouble(),
-    );
-  }
 }

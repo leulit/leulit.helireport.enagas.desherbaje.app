@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/local/local_database.dart';
 import '../data/network/network_service.dart';
+import '../data/services/json_loader_service.dart';
 import '../data/sync/imagen_local_store.dart';
 import '../data/sync/imagen_remote_adapter.dart';
 import '../data/sync/segmento_local_store.dart';
@@ -12,6 +13,7 @@ import '../domain/entities/segmento_entity.dart';
 import 'services/connectivity_service.dart';
 import 'services/gasoductos_service.dart';
 import 'services/gps_service.dart';
+import 'services/pks_service.dart';
 import 'sync/sync.dart';
 
 class AppDI {
@@ -25,7 +27,9 @@ class AppDI {
       permanent: true,
     );
     Get.put<GpsService>(GpsService(), permanent: true);
+    Get.put<JsonLoaderService>(JsonLoaderService(), permanent: true);
     Get.put<GasoductosService>(GasoductosService(), permanent: true);
+    Get.put<PksService>(PksService(), permanent: true);
 
     await _initSync();
   }

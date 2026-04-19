@@ -56,6 +56,10 @@ class ApiEndpoints {
   static String gasoductosTrack(String filename) =>
       '$baseUrl/tracks/json/$filename-gasoductos.json';
 
+  /// JSON con los puntos kilométricos (PKs) del CT identificado por [filename].
+  static String pkTrack(String filename) =>
+      '$baseUrl/tracks/json/$filename-pk.json';
+
   // ──────────────────────────── Imágenes ────────────────────────────
 
   /// Subida multipart de imágenes (legacy: `/operador/additem`).
