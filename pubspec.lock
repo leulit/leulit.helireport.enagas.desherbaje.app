@@ -560,6 +560,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  leulit_pipeline_pattern:
+    dependency: "direct main"
+    description:
+      path: "/Users/emiloalvarez/Work/PROYECTOS/CUSTOM-LIBRARIES-FLUTTER/WORKFLOW-MANAGER/leulit_pipeline_pattern"
+      relative: false
+    source: path
+    version: "1.0.0"
   lints:
     dependency: transitive
     description:

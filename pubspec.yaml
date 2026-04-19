@@ -27,6 +27,8 @@ dependencies:
 
   leulit_flutter_actionmanager: ^5.6.0
   leulit_flutter_fullresponsive: ^3.0.0
+  leulit_pipeline_pattern:
+    path: /Users/emiloalvarez/Work/PROYECTOS/CUSTOM-LIBRARIES-FLUTTER/WORKFLOW-MANAGER/leulit_pipeline_pattern  
 
   logger: ^2.7.0
   photo_view: ^0.15.0
