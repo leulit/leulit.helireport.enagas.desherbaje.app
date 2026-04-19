@@ -150,7 +150,7 @@ class SegmentoEntity extends AbsBaseModel
   TipoActividad tipoActividad = TipoActividad.desherbajeSelectivo;
   EstadoActividad estado = EstadoActividad.propuesta;
   List<ImagenSegmentoEntity> imagenes = [];
-  List<MensajeEntity> mensajes = [];
+  List<MensajeSegmentoEntity> mensajes = [];
   DateTime? createdAt;
   DateTime? fechaInicio;
   DateTime? fechaFin;
@@ -273,7 +273,7 @@ class SegmentoEntity extends AbsBaseModel
     if (mensajesRaw is List) {
       entity.mensajes = mensajesRaw
           .whereType<Map<String, dynamic>>()
-          .map(MensajeEntity.fromJson)
+          .map(MensajeSegmentoEntity.fromJson)
           .toList();
     }
 
@@ -395,7 +395,7 @@ class SegmentoEntity extends AbsBaseModel
     TipoActividad? tipoActividad,
     EstadoActividad? estado,
     List<ImagenSegmentoEntity>? imagenes,
-    List<MensajeEntity>? mensajes,
+    List<MensajeSegmentoEntity>? mensajes,
     DateTime? createdAt,
     DateTime? fechaInicio,
     DateTime? fechaFin,
@@ -419,7 +419,7 @@ class SegmentoEntity extends AbsBaseModel
     copy.estado = estado ?? this.estado;
     copy.imagenes =
         imagenes ?? List<ImagenSegmentoEntity>.from(this.imagenes);
-    copy.mensajes = mensajes ?? List<MensajeEntity>.from(this.mensajes);
+    copy.mensajes = mensajes ?? List<MensajeSegmentoEntity>.from(this.mensajes);
     copy.createdAt = createdAt ?? this.createdAt;
     copy.fechaInicio = fechaInicio ?? this.fechaInicio;
     copy.fechaFin = fechaFin ?? this.fechaFin;

@@ -219,16 +219,16 @@ class _SegmentoRowMapper {
     }
   }
 
-  static List<MensajeEntity> _parseMensajes(String? raw) {
-    if (raw == null || raw.isEmpty) return const <MensajeEntity>[];
+  static List<MensajeSegmentoEntity> _parseMensajes(String? raw) {
+    if (raw == null || raw.isEmpty) return const <MensajeSegmentoEntity>[];
     try {
       final decoded = jsonDecode(raw) as List;
       return decoded
           .whereType<Map>()
-          .map((m) => MensajeEntity.fromJson(m.cast<String, dynamic>()))
+          .map((m) => MensajeSegmentoEntity.fromJson(m.cast<String, dynamic>()))
           .toList();
     } catch (_) {
-      return const <MensajeEntity>[];
+      return const <MensajeSegmentoEntity>[];
     }
   }
 }

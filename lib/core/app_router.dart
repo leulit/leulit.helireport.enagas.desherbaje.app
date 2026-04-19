@@ -6,17 +6,16 @@ import '../presentation/segmentos/segmentos_list_page.dart';
 import '../presentation/segmentos/segmentos_list_binding.dart';
 import '../presentation/detalle/segmento_detalle_page.dart';
 import '../presentation/detalle/segmento_detalle_binding.dart';
-import '../presentation/fotos/captura_fotos_page.dart';
-import '../presentation/fotos/captura_fotos_binding.dart';
+import '../presentation/camera/camera_capture_page.dart';
 import '../presentation/mapa/mapa_global_page.dart';
 import '../presentation/mapa/mapa_global_binding.dart';
 
 class AppRoutes {
-  static const login       = '/login';
+  static const login = '/login';
   static const segmentos = '/segmentos';
-  static const detalle     = '/segmentos/detalle';
-  static const fotos       = '/segmentos/fotos';
-  static const mapa        = '/mapa';
+  static const detalle = '/segmentos/detalle';
+  static const camera = '/camera';
+  static const mapa = '/mapa';
 }
 
 class AppPages {
@@ -39,9 +38,8 @@ class AppPages {
       middlewares: [AuthMiddleware()],
     ),
     GetPage(
-      name: AppRoutes.fotos,
-      page: () => const CapturaFotosPage(),
-      binding: CapturaFotosBinding(),
+      name: AppRoutes.camera,
+      page: () => const CameraCapturePage(),
       middlewares: [AuthMiddleware()],
     ),
     GetPage(

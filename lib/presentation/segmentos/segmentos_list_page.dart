@@ -129,22 +129,203 @@ class _FiltrosBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.moduleGreenLight,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      child: TextField(
-        onChanged: (v) => controller.filterDescripcion.value = v,
-        decoration: InputDecoration(
-          hintText: 'Buscar por descripción…',
-          hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
-          prefixIcon: const Icon(Icons.search,
-              color: AppColors.moduleGreen, size: 20),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-          border: _border,
-          enabledBorder: _border,
-          focusedBorder: _borderFocused,
-          filled: true,
-          fillColor: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            onChanged: (v) => controller.filterDescripcion.value = v,
+            decoration: InputDecoration(
+              hintText: 'Buscar por descripción…',
+              hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+              prefixIcon: const Icon(Icons.search,
+                  color: AppColors.moduleGreen, size: 20),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: _border,
+              enabledBorder: _border,
+              focusedBorder: _borderFocused,
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          _DropdownsBar(controller: controller),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Barra de filtros por dropdowns (Estado / Tipo) ─────────────────────────
+
+const Map<EstadoActividad, Color> _estadoFilterColors = {
+  EstadoActividad.propuesta: Color(0xFF78909C),
+  EstadoActividad.validada: Color(0xFF1976D2),
+  EstadoActividad.contratista: Color.fromARGB(255, 241, 70, 219),
+  EstadoActividad.ejecucion: Color(0xFFF57C00),
+  EstadoActividad.finalizada: Color(0xFF388E3C),
+  EstadoActividad.cerrada: Color(0xFF546E7A),
+};
+
+const Map<TipoActividad, Color> _tipoFilterColors = {
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
+  TipoActividad.desbroceManual: Color(0xFF6D4C41),
+  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.desratizacion: Color(0xFF6A1B9A),
+};
+
+class _DropdownsBar extends StatelessWidget {
+  final SegmentosListController controller;
+  const _DropdownsBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(14),
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _FilterDropdown<EstadoActividad>(
+              icon: Icons.flag_outlined,
+              label: '',
+              groupColor: const Color(0xFF455A64),
+              rxValue: controller.selectedEstado,
+              items: EstadoActividad.values,
+              itemLabel: (e) => e.etiqueta,
+              itemColor: (e) =>
+                  _estadoFilterColors[e] ?? const Color(0xFF455A64),
+              onChanged: controller.filterByEstado,
+            ),
+            _FilterDropdown<TipoActividad>(
+              icon: Icons.construction_outlined,
+              label: '',
+              groupColor: const Color(0xFF2E7D32),
+              rxValue: controller.selectedTipo,
+              items: TipoActividad.values,
+              itemLabel: (t) => t.etiqueta,
+              itemColor: (t) =>
+                  _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
+              onChanged: controller.filterByTipo,
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _FilterDropdown<T> extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color groupColor;
+  final Rx<T?> rxValue;
+  final List<T> items;
+  final String Function(T) itemLabel;
+  final Color Function(T) itemColor;
+  final void Function(T?) onChanged;
+
+  const _FilterDropdown({
+    required this.icon,
+    required this.label,
+    required this.groupColor,
+    required this.rxValue,
+    required this.items,
+    required this.itemLabel,
+    required this.itemColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      decoration: BoxDecoration(
+        color: groupColor.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: groupColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: groupColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Obx(() {
+            final selected = rxValue.value;
+            final selectedColor =
+                selected != null ? itemColor(selected) : groupColor;
+            return DropdownButton<T?>(
+              value: selected,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              icon:
+                  Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
+              style: TextStyle(
+                fontSize: 12,
+                color: selectedColor,
+                fontWeight: FontWeight.w600,
+              ),
+              selectedItemBuilder: (_) => [
+                Text('Todos',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: groupColor,
+                        fontWeight: FontWeight.w600)),
+                ...items.map((e) => Text(
+                      itemLabel(e),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: itemColor(e),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )),
+              ],
+              items: [
+                DropdownMenuItem<T?>(
+                  value: null,
+                  child: Text('Todos',
+                      style: TextStyle(fontSize: 12, color: groupColor)),
+                ),
+                ...items.map((e) => DropdownMenuItem<T?>(
+                      value: e,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: itemColor(e),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(itemLabel(e),
+                              style: TextStyle(
+                                  fontSize: 12, color: itemColor(e))),
+                        ],
+                      ),
+                    )),
+              ],
+              onChanged: onChanged,
+            );
+          }),
+        ],
       ),
     );
   }

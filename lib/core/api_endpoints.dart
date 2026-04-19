@@ -41,6 +41,8 @@ class ApiEndpoints {
   static String get segmentoAdd => '$baseUrl/segmentos/create';
   static String get segmentosByEstado => '$baseUrl/segmentos/byestado';
   static String mensajesBySegmento(int id) => '$baseUrl/segmentos/mensajes/$id';
+  static String mensajeAdd(int segmentoId) =>
+      '$baseUrl/segmentos/mensajes/$segmentoId';
   static String deleteSegmento(int id) => '$baseUrl/segmentos/delete/$id';
 
   // ──────────────────────────── CTs ────────────────────────────

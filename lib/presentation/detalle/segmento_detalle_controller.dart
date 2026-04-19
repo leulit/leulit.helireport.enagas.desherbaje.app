@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../core/app_router.dart';
+import '../../core/app_theme.dart';
 import '../../core/my_getx_controller.dart';
 import '../../core/services/gasoductos_service.dart';
+import '../../data/model/mensaje_entity.dart';
 import '../../data/repository/auth_repository_impl.dart';
+import '../../data/repository/imagen_repository_impl.dart';
+import '../../data/repository/mensaje_segmento_repository.dart';
 import '../../data/repository/segmento_repository_impl.dart';
+import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
 
 class SegmentoDetalleController extends MyGetxController {
   final _authRepo = AuthRepositoryImpl();
   final _segmentoRepo = SegmentoRepositoryImpl();
+  final _imagenRepo = ImagenRepositoryImpl();
+  final _mensajeRepo = MensajeSegmentoRepository();
+  final _picker = ImagePicker();
 
   late final SegmentoEntity segmento;
   final user = Rx<UserModel?>(null);
@@ -26,19 +36,23 @@ class SegmentoDetalleController extends MyGetxController {
   final descripcion = ''.obs;
   final isSaving = false.obs;
 
-  /// Centro inicial del mapa: centro del segmento o, si no tiene, centroide
-  /// de Madrid como fallback razonable.
+  /// Imágenes mostradas en los carruseles (remotas + capturadas localmente).
+  final imagenes = <ImagenSegmentoEntity>[].obs;
+
+  // ──────────────────────────── Mensajes ────────────────────────────
+  final mensajes = <MensajeSegmentoEntity>[].obs;
+  final isLoadingMensajes = false.obs;
+  final isSendingMensaje = false.obs;
+  final textMensajeController = TextEditingController();
+  final mensajesScrollController = ScrollController();
+
   late final LatLng initialCenter;
   late final double initialZoom;
-
-  /// Polyline destacada (el segmento actual sobre el mapa).
   late final Polyline highlightedSegment;
 
-  /// Polylines de gasoductos cacheadas en el `GasoductosService`.
   final gasoductosPolylines = <Polyline>[].obs;
 
-  GasoductosService get _gasoductosService =>
-      Get.find<GasoductosService>();
+  GasoductosService get _gasoductosService => Get.find<GasoductosService>();
 
   @override
   void myOnInit() {
@@ -50,20 +64,43 @@ class SegmentoDetalleController extends MyGetxController {
 
     _initMap();
     _loadUser();
+    _loadImagenes();
+    _loadMensajes();
     _ensureGasoductos();
+  }
+
+  @override
+  void onClose() {
+    textMensajeController.dispose();
+    mensajesScrollController.dispose();
+    super.onClose();
   }
 
   Future<void> _loadUser() async {
     user.value = await _authRepo.getCurrentUser();
   }
 
-  /// Nombre legible del CT al que pertenece el segmento. Reactivo respecto a
-  /// [user]: en cuanto se carga el usuario, los `Obx` que usen este getter se
-  /// reconstruyen automáticamente.
   String get ctName {
     final name = user.value?.ctNameById(segmento.ctId);
     if (name != null && name.isNotEmpty) return name;
     return 'CT ${segmento.ctId}';
+  }
+
+  /// Imágenes filtradas por tipo (antes / después) para los carruseles.
+  List<ImagenSegmentoEntity> imagenesPorTipo(TipoFoto tipo) =>
+      imagenes.where((i) => i.tipoFoto == tipo).toList();
+
+  Future<void> _loadImagenes() async {
+    final remote = segmento.imagenes;
+    final segId = segmento.id;
+    if (segId == null) {
+      imagenes.assignAll(remote);
+      return;
+    }
+    final local = await _imagenRepo.getAllBySegmento(segId);
+    final extras =
+        local.where((l) => !remote.any((r) => r.clientId == l.clientId));
+    imagenes.assignAll([...remote, ...extras]);
   }
 
   void _initMap() {
@@ -91,10 +128,10 @@ class SegmentoDetalleController extends MyGetxController {
   Future<void> _ensureGasoductos() async {
     await _gasoductosService.ensureLoaded();
     gasoductosPolylines.assignAll(_gasoductosService.polylines);
-    ever<List<Polyline>>(
+    addWorker(ever<List<Polyline>>(
       _gasoductosService.polylines,
       gasoductosPolylines.assignAll,
-    );
+    ));
   }
 
   void zoomIn() {
@@ -105,6 +142,138 @@ class SegmentoDetalleController extends MyGetxController {
   void zoomOut() {
     final cam = mapController.camera;
     mapController.move(cam.center, (cam.zoom - 1).clamp(5, 20));
+  }
+
+  // ──────────────────────────── Captura de foto ────────────────────────────
+
+  /// Pide al usuario el origen (galería / cámara), obtiene el path y lo
+  /// persiste como `ImagenSegmentoEntity` del [tipo] indicado.
+  Future<void> capturarFoto(TipoFoto tipo) async {
+    final source = await _showSourceDialog(tipo);
+    if (source == null) return;
+
+    String? path;
+    if (source == _PickSource.gallery) {
+      final xFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      path = xFile?.path;
+    } else {
+      path = await Get.toNamed<String?>(AppRoutes.camera);
+    }
+
+    if (path == null || path.isEmpty) return;
+    await _addImagen(path, tipo);
+  }
+
+  Future<_PickSource?> _showSourceDialog(TipoFoto tipo) async {
+    return Get.dialog<_PickSource>(
+      AlertDialog(
+        title: Text(
+          tipo == TipoFoto.antes ? 'Capturar foto antes' : 'Capturar foto después',
+          style: const TextStyle(fontSize: 16),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_library, color: AppColors.moduleGreen),
+              title: const Text('Galería'),
+              onTap: () => Get.back<_PickSource>(result: _PickSource.gallery),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.photo_camera, color: AppColors.moduleGreen),
+              title: const Text('Cámara'),
+              onTap: () => Get.back<_PickSource>(result: _PickSource.camera),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<_PickSource>(result: null),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addImagen(String localPath, TipoFoto tipo) async {
+    final segId = segmento.id;
+    if (segId == null) return;
+    final filename = localPath.split('/').last;
+    final imagen = ImagenSegmentoEntity(
+      actividadId: 0,
+      segmentoId: segId,
+      tipoFoto: tipo,
+      filename: filename,
+      ruta: localPath,
+      capturadaAt: DateTime.now(),
+    );
+    await _imagenRepo.saveLocal(imagen);
+    await _loadImagenes();
+  }
+
+  // ──────────────────────────── Mensajes — fetch / send ────────────────────
+
+  Future<void> _loadMensajes() async {
+    final segId = segmento.id;
+    if (segId == null) return;
+    isLoadingMensajes.value = true;
+    final result = await _mensajeRepo.mensajesBySegmento(id: segId);
+    if (result.isSuccess) {
+      mensajes.assignAll(result.dataOrNull ?? const <MensajeSegmentoEntity>[]);
+    }
+    isLoadingMensajes.value = false;
+  }
+
+  Future<void> sendMensaje() async {
+    final text = textMensajeController.text.trim();
+    if (text.isEmpty || isSendingMensaje.value) return;
+
+    final segId = segmento.id;
+    if (segId == null) return;
+
+    final me = user.value;
+    final myId = me?.id ?? 0;
+
+    // Insert optimista al principio (la lista se pinta con `reverse: true` →
+    // index 0 == último cronológico). Limpiamos el input antes de la red.
+    final optimistic = MensajeSegmentoEntity(
+      segmentoId: segId,
+      mensaje: text,
+      enviadoPor: myId,
+    );
+    mensajes.insert(0, optimistic);
+    textMensajeController.clear();
+    _scrollToBottom();
+
+    isSendingMensaje.value = true;
+    final result = await _mensajeRepo.add(
+      segmentoId: segId,
+      mensaje: text,
+      enviadoPor: myId,
+    );
+    if (result.isSuccess) {
+      final saved = result.dataOrNull;
+      if (saved != null && saved.id != null) {
+        mensajes[0] = saved;
+      }
+    }
+    isSendingMensaje.value = false;
+  }
+
+  void _scrollToBottom() {
+    if (!mensajesScrollController.hasClients) return;
+    mensajesScrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
   }
 
   /// Actualiza el segmento en backend (estado/tipo/descripción) usando el
@@ -124,3 +293,5 @@ class SegmentoDetalleController extends MyGetxController {
     }
   }
 }
+
+enum _PickSource { gallery, camera }

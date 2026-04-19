@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_fullresponsive/leulit_flutter_fullreponsive.dart';
 import '../../core/api_endpoints.dart';
 import '../../core/app_theme.dart';
+import '../../domain/entities/segmento_entity.dart';
 import 'mapa_global_controller.dart';
 
 class MapaGlobalPage extends GetView<MapaGlobalController> {
@@ -27,7 +28,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
           child: Icon(Icons.eco, color: AppColors.moduleGreen),
         ),
         title: const Text(
-          'Mapa de Actividades',
+          'Mapa',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -92,31 +93,39 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                     polylines: controller.gasoductosPolylines.toList(),
                   )),
               // Actividades layer — polylines coloreadas por estado
-              Obx(() => PolylineLayer(
-                    polylines: controller.segmentos
-                        .map((s) => Polyline(
-                              points: s.points,
-                              color: s.color,
-                              strokeWidth: 5.0,
-                              borderColor: Colors.white,
-                              borderStrokeWidth: 1.0,
-                            ))
-                        .toList(),
-                  )),
+              Obx(() {
+                // Re-leemos los Rx de filtros para que el Obx se suscriba.
+                controller.rxEstado.value;
+                controller.rxTipo.value;
+                return PolylineLayer(
+                  polylines: controller.filteredSegmentos
+                      .map((s) => Polyline(
+                            points: s.points,
+                            color: s.color,
+                            strokeWidth: 5.0,
+                            borderColor: Colors.white,
+                            borderStrokeWidth: 1.0,
+                          ))
+                      .toList(),
+                );
+              }),
               // Actividades layer — labels en el centroide de cada segmento (zoom > 14)
               Obx(() {
                 if (controller.currentZoom.value <= 12) {
                   return const SizedBox.shrink();
                 }
+                controller.rxEstado.value;
+                controller.rxTipo.value;
                 return MarkerLayer(
-                  markers: controller.segmentos
+                  markers: controller.filteredSegmentos
                       .map((s) => Marker(
                             point: s.centroid,
                             width: 0.2.w,
                             height: 32,
                             child: _SegmentoLabel(
                               segmentoInfo: s,
-                              onTap: () => controller.navigateToSegmento(s.segmento),
+                              onTap: () =>
+                                  controller.navigateToSegmento(s.segmento),
                             ),
                           ))
                       .toList(),
@@ -133,6 +142,13 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               const _ZoomDisplay(),
             ],
           ),
+          // Filtros (Estado / Tipo) en la parte superior, sobre el mapa.
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: _FiltrosBar(controller: controller),
+          ),
           // Botones de zoom (bottom-right, a la izquierda del compass)
           Positioned(
             bottom: 40,
@@ -145,7 +161,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             final errA = controller.errorSegmentos.value;
             if (errG == null && errA == null) return const SizedBox.shrink();
             return Positioned(
-              top: 12,
+              top: 64,
               left: 16,
               right: 16,
               child: Material(
@@ -220,6 +236,189 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   ),
                 ),
               ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Barra de filtros (Estado / Tipo) ────────────────────────────────────────
+
+const Map<EstadoActividad, Color> _estadoFilterColors = {
+  EstadoActividad.propuesta: Color(0xFF78909C),
+  EstadoActividad.validada: Color(0xFF1976D2),
+  EstadoActividad.contratista: Color.fromARGB(255, 241, 70, 219),
+  EstadoActividad.ejecucion: Color(0xFFF57C00),
+  EstadoActividad.finalizada: Color(0xFF388E3C),
+  EstadoActividad.cerrada: Color(0xFF546E7A),
+};
+
+const Map<TipoActividad, Color> _tipoFilterColors = {
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
+  TipoActividad.desbroceManual: Color(0xFF6D4C41),
+  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.desratizacion: Color(0xFF6A1B9A),
+};
+
+class _FiltrosBar extends StatelessWidget {
+  final MapaGlobalController controller;
+  const _FiltrosBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(14),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _FilterDropdown<EstadoActividad>(
+              icon: Icons.flag_outlined,
+              label: '',
+              groupColor: const Color(0xFF455A64),
+              rxValue: controller.rxEstado,
+              items: EstadoActividad.values,
+              itemLabel: (e) => e.etiqueta,
+              itemColor: (e) =>
+                  _estadoFilterColors[e] ?? const Color(0xFF455A64),
+              onChanged: controller.setEstado,
+            ),
+            _FilterDropdown<TipoActividad>(
+              icon: Icons.construction_outlined,
+              label: '',
+              groupColor: const Color(0xFF2E7D32),
+              rxValue: controller.rxTipo,
+              items: TipoActividad.values,
+              itemLabel: (t) => t.etiqueta,
+              itemColor: (t) =>
+                  _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
+              onChanged: controller.setTipo,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterDropdown<T> extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color groupColor;
+  final Rx<T?> rxValue;
+  final List<T> items;
+  final String Function(T) itemLabel;
+  final Color Function(T) itemColor;
+  final void Function(T?) onChanged;
+
+  const _FilterDropdown({
+    required this.icon,
+    required this.label,
+    required this.groupColor,
+    required this.rxValue,
+    required this.items,
+    required this.itemLabel,
+    required this.itemColor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      decoration: BoxDecoration(
+        color: groupColor.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: groupColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: groupColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Obx(() {
+            final selected = rxValue.value;
+            final selectedColor =
+                selected != null ? itemColor(selected) : groupColor;
+            return DropdownButton<T?>(
+              value: selected,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              icon:
+                  Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
+              style: TextStyle(
+                fontSize: 12,
+                color: selectedColor,
+                fontWeight: FontWeight.w600,
+              ),
+              selectedItemBuilder: (_) => [
+                Text(
+                  'Todos',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: groupColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                ...items.map((e) => Text(
+                      itemLabel(e),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: itemColor(e),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )),
+              ],
+              items: [
+                DropdownMenuItem<T?>(
+                  value: null,
+                  child: Text(
+                    'Todos',
+                    style: TextStyle(fontSize: 12, color: groupColor),
+                  ),
+                ),
+                ...items.map((e) => DropdownMenuItem<T?>(
+                      value: e,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: itemColor(e),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            itemLabel(e),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: itemColor(e),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+              onChanged: onChanged,
             );
           }),
         ],

@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
@@ -141,13 +144,13 @@ class _PanelDatosTabs extends StatelessWidget {
           child: TabBarView(
             children: [
               _DatosTab(controller: controller),
-              _MensajesTab(mensajes: controller.segmento.mensajes),
+              _MensajesTab(controller: controller),
               _ImagenesCarousel(
-                segmento: controller.segmento,
+                controller: controller,
                 tipo: TipoFoto.antes,
               ),
               _ImagenesCarousel(
-                segmento: controller.segmento,
+                controller: controller,
                 tipo: TipoFoto.despues,
               ),
             ],
@@ -385,70 +388,178 @@ class _InfoRow extends StatelessWidget {
 // ─── Tab Mensajes ───────────────────────────────────────────────────────────
 
 class _MensajesTab extends StatelessWidget {
-  final List<MensajeEntity> mensajes;
-  const _MensajesTab({required this.mensajes});
+  final SegmentoDetalleController controller;
+  const _MensajesTab({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    if (mensajes.isEmpty) {
-      return const _EmptyState(
-        icon: Icons.forum_outlined,
-        message: 'Sin mensajes para este segmento',
-      );
-    }
-    final fmt = DateFormat('dd/MM/yyyy HH:mm');
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: mensajes.length,
-      itemBuilder: (_, i) {
-        final m = mensajes[i];
-        final author =
-            (m.senderUserName != null && m.senderUserName!.isNotEmpty)
-                ? m.senderUserName!
-                : 'Operador #${m.senderUserId ?? 0}';
-        final when = m.sentAt != null ? fmt.format(m.sentAt!) : '';
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: AppColors.moduleGreen,
-                    child: const Icon(Icons.person,
-                        color: Colors.white, size: 14),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      author,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    when,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(m.mensaje, style: const TextStyle(fontSize: 13)),
-            ],
+    return Obx(() {
+      if (controller.isLoadingMensajes.value && controller.mensajes.isEmpty) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (controller.segmento.id == null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Guarda el segmento para ver mensajes',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
           ),
         );
-      },
+      }
+      final currentUserId = controller.user.value?.id ?? 0;
+      return Column(
+        children: [
+          Expanded(
+            child: controller.mensajes.isEmpty
+                ? const _EmptyState(
+                    icon: Icons.chat_bubble_outline,
+                    message: 'Sin mensajes',
+                  )
+                : ListView.builder(
+                    controller: controller.mensajesScrollController,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    reverse: true,
+                    itemCount: controller.mensajes.length,
+                    itemBuilder: (_, i) {
+                      final msg = controller.mensajes[i];
+                      return _MensajeBubble(
+                        mensaje: msg,
+                        isSender: msg.enviadoPor == currentUserId,
+                      );
+                    },
+                  ),
+          ),
+          _MensajeInput(controller: controller),
+        ],
+      );
+    });
+  }
+}
+
+class _MensajeBubble extends StatelessWidget {
+  final MensajeSegmentoEntity mensaje;
+  final bool isSender;
+
+  const _MensajeBubble({required this.mensaje, required this.isSender});
+
+  @override
+  Widget build(BuildContext context) {
+    final timeStr = DateFormat('dd/MM HH:mm').format(mensaje.createdAt);
+    final author = isSender
+        ? null
+        : (mensaje.enviadoPor != null
+            ? 'Operador #${mensaje.enviadoPor}'
+            : 'Operador');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Column(
+        crossAxisAlignment:
+            isSender ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          if (author != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 2),
+              child: Text(
+                author,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          BubbleSpecialThree(
+            text: mensaje.mensaje,
+            color:
+                isSender ? AppColors.moduleGreen : const Color(0xFFE8E8EE),
+            tail: true,
+            isSender: isSender,
+            textStyle: TextStyle(
+              color: isSender ? Colors.white : Colors.black87,
+              fontSize: 14,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 2),
+            child: Text(
+              timeStr,
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MensajeInput extends StatelessWidget {
+  final SegmentoDetalleController controller;
+  const _MensajeInput({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller.textMensajeController,
+              minLines: 1,
+              maxLines: 3,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => controller.sendMensaje(),
+              decoration: InputDecoration(
+                hintText: 'Escribe un mensaje…',
+                hintStyle:
+                    TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(
+                    color: AppColors.moduleGreen,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Obx(() => IconButton(
+                onPressed: controller.isSendingMensaje.value
+                    ? null
+                    : controller.sendMensaje,
+                icon: controller.isSendingMensaje.value
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+                color: AppColors.moduleGreen,
+                tooltip: 'Enviar',
+              )),
+        ],
+      ),
     );
   }
 }
@@ -456,13 +567,14 @@ class _MensajesTab extends StatelessWidget {
 // ─── Tab Imágenes ───────────────────────────────────────────────────────────
 
 /// Carrusel + botón de captura de fotos para un único [TipoFoto] (antes /
-/// después). Usa [PageView] con un indicador de puntos.
+/// después). Usa [PageView] con un indicador de puntos. Lee de
+/// `controller.imagenes` (Rx) para reaccionar a las capturas nuevas.
 class _ImagenesCarousel extends StatefulWidget {
-  final SegmentoEntity segmento;
+  final SegmentoDetalleController controller;
   final TipoFoto tipo;
 
   const _ImagenesCarousel({
-    required this.segmento,
+    required this.controller,
     required this.tipo,
   });
 
@@ -482,52 +594,57 @@ class _ImagenesCarouselState extends State<_ImagenesCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final imagenes = widget.segmento.imagenes
-        .where((i) => i.tipoFoto == widget.tipo)
-        .toList();
-
     return Column(
       children: [
         Expanded(
-          child: imagenes.isEmpty
-              ? _EmptyState(
-                  icon: Icons.photo_library_outlined,
-                  message:
-                      'Sin imágenes ${widget.tipo == TipoFoto.antes ? 'antes' : 'después'}',
-                )
-              : Stack(
-                  children: [
-                    PageView.builder(
-                      controller: _pageController,
-                      itemCount: imagenes.length,
-                      onPageChanged: (i) => setState(() => _current = i),
-                      itemBuilder: (_, i) => _CarouselSlide(imagen: imagenes[i]),
-                    ),
-                    if (imagenes.length > 1)
-                      Positioned(
-                        bottom: 8,
-                        left: 0,
-                        right: 0,
-                        child: _DotsIndicator(
-                          count: imagenes.length,
-                          current: _current,
-                        ),
-                      ),
-                  ],
+          child: Obx(() {
+            final imagenes = widget.controller.imagenesPorTipo(widget.tipo);
+            if (imagenes.isEmpty) {
+              return _EmptyState(
+                icon: Icons.photo_library_outlined,
+                message:
+                    'Sin imágenes ${widget.tipo == TipoFoto.antes ? 'antes' : 'después'}',
+              );
+            }
+            // Reposicionar el indicador si la lista cambió y desbordamos.
+            if (_current >= imagenes.length) _current = imagenes.length - 1;
+            return Stack(
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: imagenes.length,
+                  onPageChanged: (i) => setState(() => _current = i),
+                  itemBuilder: (_, i) => _CarouselSlide(imagen: imagenes[i]),
                 ),
+                // Contador "n / N" arriba-derecha — siempre visible.
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: _CountChip(
+                    current: _current + 1,
+                    total: imagenes.length,
+                  ),
+                ),
+                if (imagenes.length > 1)
+                  Positioned(
+                    bottom: 12,
+                    left: 0,
+                    right: 0,
+                    child: _DotsIndicator(
+                      count: imagenes.length,
+                      current: _current,
+                    ),
+                  ),
+              ],
+            );
+          }),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => Get.toNamed(
-                AppRoutes.fotos,
-                arguments: {
-                  'segmento': widget.segmento,
-                  'tipo': widget.tipo,
-                },
-              ),
+              onPressed: () => widget.controller.capturarFoto(widget.tipo),
               icon: const Icon(Icons.add_a_photo),
               label: Text(
                 widget.tipo == TipoFoto.antes
@@ -549,25 +666,32 @@ class _CarouselSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = imagen.url;
-    if (url == null || url.isEmpty) {
+    if (url != null && url.isNotEmpty) {
+      final fullUrl =
+          url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
       return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(Icons.image_not_supported, color: Colors.grey, size: 48),
+        color: Colors.black,
+        child: CachedNetworkImage(
+          imageUrl: fullUrl,
+          fit: BoxFit.contain,
+          placeholder: (_, __) =>
+              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          errorWidget: (_, __, ___) =>
+              const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
         ),
       );
     }
-    final fullUrl =
-        url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
+    // Sin URL remota → la imagen aún vive solo en disco local.
+    if (imagen.ruta.isNotEmpty) {
+      return Container(
+        color: Colors.black,
+        child: Image.file(File(imagen.ruta), fit: BoxFit.contain),
+      );
+    }
     return Container(
-      color: Colors.black,
-      child: CachedNetworkImage(
-        imageUrl: fullUrl,
-        fit: BoxFit.contain,
-        placeholder: (_, __) =>
-            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        errorWidget: (_, __, ___) =>
-            const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+      color: Colors.grey.shade200,
+      child: const Center(
+        child: Icon(Icons.image_not_supported, color: Colors.grey, size: 48),
       ),
     );
   }
@@ -580,22 +704,63 @@ class _DotsIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(count, (i) {
-        final active = i == current;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: active ? 10 : 6,
-          height: active ? 10 : 6,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          decoration: BoxDecoration(
-            color: active ? AppColors.moduleGreen : Colors.white70,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.black26, width: 0.5),
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(count, (i) {
+            final active = i == current;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: active ? 18 : 8,
+              height: 8,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: active ? AppColors.moduleGreen : Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+class _CountChip extends StatelessWidget {
+  final int current;
+  final int total;
+  const _CountChip({required this.current, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.photo_library,
+              color: Colors.white, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            '$current / $total',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        );
-      }),
+        ],
+      ),
     );
   }
 }

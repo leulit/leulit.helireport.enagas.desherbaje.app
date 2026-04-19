@@ -34,6 +34,26 @@ class MapaGlobalController extends GetxController {
   final errorSegmentos = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
+  // ──────────────────────────── Filtros ────────────────────────────
+  final rxEstado = Rx<EstadoActividad?>(null);
+  final rxTipo = Rx<TipoActividad?>(null);
+
+  void setEstado(EstadoActividad? value) => rxEstado.value = value;
+  void setTipo(TipoActividad? value) => rxTipo.value = value;
+
+  /// Subconjunto de [segmentos] tras aplicar los filtros activos. Se usa
+  /// tanto para pintar las polylines como para los marcadores con etiqueta.
+  List<SegmentoMapInfo> get filteredSegmentos {
+    final estado = rxEstado.value;
+    final tipo = rxTipo.value;
+    if (estado == null && tipo == null) return segmentos.toList();
+    return segmentos.where((info) {
+      if (estado != null && info.segmento.estado != estado) return false;
+      if (tipo != null && info.segmento.tipoActividad != tipo) return false;
+      return true;
+    }).toList();
+  }
+
   void onMapEvent(MapEvent event) {
     if (event is MapEventMoveEnd || event is MapEventScrollWheelZoom) {
       currentZoom.value = mapController.camera.zoom;
