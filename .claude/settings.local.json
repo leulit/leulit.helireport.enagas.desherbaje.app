@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__dart__create_project",
+      "mcp__dart__pub",
+      "mcp__dart__analyze_files",
+      "Bash(flutter analyze:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(xcrun simctl:*)",
+      "mcp__dart__list_devices",
+      "Bash(xcodebuild -version)",
+      "Bash(flutter pub:*)",
+      "Bash(find ~/.pub-cache/hosted/pub.dev/flutter_map_compass-1.1.1 -name *.dart -exec grep -l \"cupertino\\\\|MapCompass\" {})",
+      "Bash(python3 -c \"import cairosvg\")",
+      "Bash(convert -size 512x512 app_icon_512x512.svg app_icon_512x512.png)",
+      "Bash(convert -size 1024x500 feature_graphic_1024x500.svg feature_graphic_1024x500.png)",
+      "Bash(brew list *)",
+      "Bash(brew install *)",
+      "Bash(rsvg-convert -w 512 -h 512 app_icon_512x512.svg -o app_icon_512x512.png)",
+      "Bash(rsvg-convert -w 1024 -h 500 feature_graphic_1024x500.svg -o feature_graphic_1024x500.png)",
+      "Bash(flutter --version)"
+    ]
+  }
+}

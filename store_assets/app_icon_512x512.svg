@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="112" ry="112" fill="#388E3C"/>
+
+  <!-- Leaf icon (white) centered -->
+  <g transform="translate(256,256)">
+    <!-- Main leaf shape -->
+    <path d="
+      M 0,-110
+      C 60,-90 110,-40 110,20
+      C 110,80 70,120 0,130
+      C -70,120 -110,80 -110,20
+      C -110,-40 -60,-90 0,-110
+      Z
+    " fill="white" opacity="0.95"/>
+    <!-- Stem -->
+    <line x1="0" y1="130" x2="0" y2="160" stroke="white" stroke-width="16" stroke-linecap="round"/>
+    <!-- Center vein -->
+    <path d="M 0,-80 Q 10,40 0,130" stroke="#388E3C" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <!-- Side veins -->
+    <path d="M 0,-20 Q 50,10 80,40" stroke="#388E3C" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 0,-20 Q -50,10 -80,40" stroke="#388E3C" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 0,30 Q 45,50 65,80" stroke="#388E3C" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 0,30 Q -45,50 -65,80" stroke="#388E3C" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
+  </g>
+</svg>

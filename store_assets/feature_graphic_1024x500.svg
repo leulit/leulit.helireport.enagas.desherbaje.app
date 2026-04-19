@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+
+  <!-- Background -->
+  <rect width="1024" height="500" fill="#1B5E20"/>
+  <rect width="1024" height="500" fill="#388E3C" opacity="0.6"/>
+
+  <!-- Decorative circles -->
+  <circle cx="820" cy="250" r="320" fill="white" opacity="0.05"/>
+  <circle cx="900" cy="80" r="180" fill="white" opacity="0.05"/>
+  <circle cx="150" cy="420" r="200" fill="white" opacity="0.05"/>
+
+  <!-- Icon background -->
+  <rect x="80" y="170" width="160" height="160" rx="36" ry="36" fill="white" opacity="0.15"/>
+
+  <!-- Leaf icon -->
+  <g transform="translate(160,250)">
+    <path d="M 0,-52 C 28,-42 52,-19 52,9 C 52,38 33,57 0,62 C -33,57 -52,38 -52,9 C -52,-19 -28,-42 0,-52 Z" fill="white"/>
+    <line x1="0" y1="62" x2="0" y2="76" stroke="white" stroke-width="7" stroke-linecap="round"/>
+    <path d="M 0,-38 Q 5,19 0,62" stroke="#388E3C" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M 0,-9 Q 24,5 38,19" stroke="#388E3C" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+    <path d="M 0,-9 Q -24,5 -38,19" stroke="#388E3C" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  </g>
+
+  <!-- App name — two separate tspan words to avoid overlap -->
+  <text x="290" y="210" font-family="Arial, sans-serif" font-size="64" font-weight="bold" fill="white">Helireport Desherbaje</text>
+
+  <!-- Subtitle -->
+  <text x="292" y="268" font-family="Arial, sans-serif" font-size="26" fill="white" opacity="0.85">Gestión de campo para redes de gasoductos</text>
+
+  <!-- Divider -->
+  <line x1="290" y1="300" x2="940" y2="300" stroke="white" stroke-width="1" opacity="0.3"/>
+
+  <!-- Feature tags — columna izquierda -->
+  <circle cx="300" cy="338" r="5" fill="white" opacity="0.85"/>
+  <text x="318" y="344" font-family="Arial, sans-serif" font-size="20" fill="white" opacity="0.85">Captura georeferenciada</text>
+
+  <circle cx="300" cy="378" r="5" fill="white" opacity="0.85"/>
+  <text x="318" y="384" font-family="Arial, sans-serif" font-size="20" fill="white" opacity="0.85">Trabajo sin conexion</text>
+
+  <!-- Feature tags — columna derecha -->
+  <circle cx="640" cy="338" r="5" fill="white" opacity="0.85"/>
+  <text x="658" y="344" font-family="Arial, sans-serif" font-size="20" fill="white" opacity="0.85">Gestion de actividades</text>
+
+  <circle cx="640" cy="378" r="5" fill="white" opacity="0.85"/>
+  <text x="658" y="384" font-family="Arial, sans-serif" font-size="20" fill="white" opacity="0.85">Visualizacion en mapa</text>
+
+</svg>
