@@ -94,25 +94,6 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               Obx(() => PolylineLayer(
                     polylines: controller.gasoductosPolylines.toList(),
                   )),
-              // PKs layer — solo visibles a partir de zoom > 12 para evitar
-              // sobrecargar el mapa.
-              Obx(() {
-                if (controller.currentZoom.value <= 12) {
-                  return const SizedBox.shrink();
-                }
-                return MarkerLayer(
-                  markers: controller.pks.map((p) {
-                    final w = (p.label.length * 7.0 + 24).clamp(56.0, 140.0);
-                    return Marker(
-                      point: p.point,
-                      width: w,
-                      height: 30,
-                      alignment: Alignment.bottomCenter,
-                      child: _PkMarker(label: p.label),
-                    );
-                  }).toList(),
-                );
-              }),
               // Actividades layer — polylines coloreadas por estado
               Obx(() {
                 // Re-leemos los Rx de filtros para que el Obx se suscriba.
@@ -150,6 +131,25 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                             ),
                           ))
                       .toList(),
+                );
+              }),
+              // PKs layer — solo visibles a partir de zoom > 12 para evitar
+              // sobrecargar el mapa.
+              Obx(() {
+                if (controller.currentZoom.value <= 12) {
+                  return const SizedBox.shrink();
+                }
+                return MarkerLayer(
+                  markers: controller.pks.map((p) {
+                    final w = (p.label.length * 7.0 + 24).clamp(56.0, 140.0);
+                    return Marker(
+                      point: p.point,
+                      width: w,
+                      height: 30,
+                      alignment: Alignment.bottomCenter,
+                      child: _PkMarker(label: p.label),
+                    );
+                  }).toList(),
                 );
               }),
               // Brújula estilo cupertino (bottom-right, encima del indicador de zoom)
