@@ -7,6 +7,7 @@
 ### Core Skills (Activated)
 @.claude/skills/flutter-core/SKILL.md
 @.claude/skills/flutter-efficiency/SKILL.md
+@.claude/skills/flutter-ci-cd/SKILL.md
 @.claude/skills/flutter-imaging/SKILL.md
 @.claude/skills/flutter-gis/SKILL.md
 @.claude/skills/flutter-ci-cd/SKILL.md
