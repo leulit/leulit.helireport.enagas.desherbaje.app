@@ -37,6 +37,10 @@ const String kFileGroupGasoducto = 'gasoducto';
 class GasoductosService extends GetxService {
   final polylines = <Polyline>[].obs;
   final isLoading = false.obs;
+  /// Total de ficheros del lote en curso (0 cuando no hay carga activa).
+  final totalFiles = 0.obs;
+  /// Ficheros ya procesados dentro del lote en curso.
+  final processedFiles = 0.obs;
   bool _loaded = false;
 
   bool get isLoaded => _loaded;
@@ -115,6 +119,9 @@ class GasoductosService extends GetxService {
               ))
           .toList();
 
+      totalFiles.value = files.length;
+      processedFiles.value = 0;
+
       await _loader.loadFiles(files);
       // El pipeline ya ha terminado al volver de `loadFiles`, pero esperamos
       // al evento `geoJsonLoadCompleted` por si llega tras un microtask
@@ -133,6 +140,8 @@ class GasoductosService extends GetxService {
       _entitiesBuffer.clear();
       _runCompleter = null;
       isLoading.value = false;
+      totalFiles.value = 0;
+      processedFiles.value = 0;
     }
   }
 
@@ -142,6 +151,9 @@ class GasoductosService extends GetxService {
     final result = event.data;
     if (result is! FileLoadGeoJsonResult) return;
     if (result.originalFileData.group != kFileGroupGasoducto) return;
+
+    processedFiles.value = processedFiles.value + 1;
+
     if (result.processedData.isEmpty) return;
 
     final ctId =

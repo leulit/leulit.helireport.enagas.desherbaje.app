@@ -39,6 +39,14 @@ class MapaGlobalController extends GetxController {
   final errorPks = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
+  // ─────────────────────── Alta de segmento ────────────────────────
+  /// Modo "añadir segmento": mientras esté activo, cada long-press sobre el
+  /// mapa añade un punto a [nuevosPuntos].
+  final isAddingSegmento = false.obs;
+  /// Puntos capturados vía long-press durante el alta. A partir del segundo
+  /// se dibuja una polyline roja que los une.
+  final nuevosPuntos = <LatLng>[].obs;
+
   // ──────────────────────────── Filtros ────────────────────────────
   final rxEstado = Rx<EstadoActividad?>(null);
   final rxTipo = Rx<TipoActividad?>(null);
@@ -188,6 +196,43 @@ class MapaGlobalController extends GetxController {
 
   void navigateToSegmento(SegmentoEntity segmento) {
     Get.offAndToNamed(AppRoutes.detalle, arguments: segmento);
+  }
+
+  void addSegmento() {
+    nuevosPuntos.clear();
+    isAddingSegmento.value = true;
+  }
+
+  void cancelarSegmento() {
+    isAddingSegmento.value = false;
+    nuevosPuntos.clear();
+  }
+
+  /// Genera un [SegmentoEntity] nuevo con la traza dibujada en el mapa y
+  /// navega al detalle para editarlo (mismo flujo que al pulsar una card del
+  /// listado). `longitud` y `superficie` son getters derivados de
+  /// `ubicacionGis` en la propia entidad — no requieren cálculo explícito.
+  void crearSegmento() {
+    if (nuevosPuntos.length < 2) return;
+    final puntos = List<LatLng>.from(nuevosPuntos);
+    final nuevo = SegmentoEntity.empty()
+      ..ubicacionGis = puntos
+      ..latInicio = puntos.first.latitude
+      ..lngInicio = puntos.first.longitude
+      ..latFin = puntos.last.latitude
+      ..lngFin = puntos.last.longitude;
+
+    isAddingSegmento.value = false;
+    nuevosPuntos.clear();
+
+    Get.toNamed(AppRoutes.detalle, arguments: nuevo);
+  }
+
+  /// Añade un punto al trazado en construcción. Sólo tiene efecto si el modo
+  /// alta está activo.
+  void onMapLongPress(LatLng point) {
+    if (!isAddingSegmento.value) return;
+    nuevosPuntos.add(point);
   }
 
   void _fitAllBounds() {

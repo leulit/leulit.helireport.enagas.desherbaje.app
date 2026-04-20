@@ -9,6 +9,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_fullresponsive/leulit_flutter_fullreponsive.dart';
 import '../../core/api_endpoints.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/gasoductos_service.dart';
+import '../../core/services/pks_service.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'mapa_global_controller.dart';
 
@@ -59,7 +61,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             }
             return IconButton(
               icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
-              onPressed: controller.reloadSegmentos,
+              onPressed: controller.reloadAll,
             );
           }),
           _LeyendaButton(),
@@ -75,6 +77,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               minZoom: 5,
               maxZoom: 20,
               onMapEvent: controller.onMapEvent,
+              onLongPress: (_, point) => controller.onMapLongPress(point),
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
@@ -152,6 +155,37 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   }).toList(),
                 );
               }),
+              // Polyline roja del segmento en construcción (≥ 2 puntos).
+              Obx(() {
+                final pts = controller.nuevosPuntos.toList();
+                if (pts.length < 2) return const SizedBox.shrink();
+                return PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: pts,
+                      color: Colors.red,
+                      strokeWidth: 4,
+                      borderColor: Colors.white,
+                      borderStrokeWidth: 1,
+                    ),
+                  ],
+                );
+              }),
+              // Vértices individuales del segmento en construcción.
+              Obx(() {
+                final pts = controller.nuevosPuntos.toList();
+                if (pts.isEmpty) return const SizedBox.shrink();
+                return MarkerLayer(
+                  markers: pts
+                      .map((p) => Marker(
+                            point: p,
+                            width: 14,
+                            height: 14,
+                            child: const _NuevoPuntoMarker(),
+                          ))
+                      .toList(),
+                );
+              }),
               // Brújula estilo cupertino (bottom-right, encima del indicador de zoom)
               const MapCompass.cupertino(
                 rotationDuration: Duration(milliseconds: 300),
@@ -175,6 +209,20 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             bottom: 40,
             right: 58,
             child: _ZoomControls(controller: controller),
+          ),
+          // Acciones de alta de segmento (bottom-left).
+          Positioned(
+            bottom: 40,
+            left: 10,
+            child: Obx(() => controller.isAddingSegmento.value
+                ? _AddSegmentoActiveActions(controller: controller)
+                : _AddSegmentoButton(controller: controller)),
+          ),
+          // Status de la carga de PKs (bottom-right, encima del compass)
+          const Positioned(
+            bottom: 96,
+            right: 10,
+            child: _PksLoadStatus(),
           ),
           // Banner de error no-bloqueante
           Obx(() {
@@ -226,39 +274,13 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               ),
             );
           }),
-          // Indicador de carga sutil en la parte inferior
-          Obx(() {
-            if (!controller.isLoading) return const SizedBox.shrink();
-            return const Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
-              child: Material(
-                borderRadius: BorderRadius.all(Radius.circular(8)),
-                elevation: 3,
-                child: Padding(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.moduleGreen,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text('Cargando datos del mapa...',
-                          style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
+          // Indicador de carga en la parte inferior con progreso por etapa
+          const Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: _MapLoadBanner(),
+          ),
         ],
       ),
     );
@@ -527,6 +549,101 @@ class _FilterDropdown<T> extends StatelessWidget {
   }
 }
 
+/// Botón redondo para iniciar el alta de un nuevo segmento desde el mapa.
+class _AddSegmentoButton extends StatelessWidget {
+  final MapaGlobalController controller;
+  const _AddSegmentoButton({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return _RoundMapButton(
+      color: AppColors.moduleGreen,
+      icon: Icons.add,
+      onTap: controller.addSegmento,
+    );
+  }
+}
+
+/// Par de botones que sustituye al "+" mientras el modo alta está activo:
+/// cancelar (descartar trazado) y crear (persistir el segmento).
+class _AddSegmentoActiveActions extends StatelessWidget {
+  final MapaGlobalController controller;
+  const _AddSegmentoActiveActions({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _RoundMapButton(
+          color: Colors.red.shade600,
+          icon: Icons.close,
+          onTap: controller.cancelarSegmento,
+        ),
+        const SizedBox(width: 8),
+        Obx(() => _RoundMapButton(
+              color: controller.nuevosPuntos.length >= 2
+                  ? AppColors.moduleGreen
+                  : Colors.grey,
+              icon: Icons.check,
+              onTap: controller.nuevosPuntos.length >= 2
+                  ? controller.crearSegmento
+                  : null,
+            )),
+      ],
+    );
+  }
+}
+
+class _RoundMapButton extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _RoundMapButton({
+    required this.color,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      shape: const CircleBorder(),
+      elevation: 3,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(icon, color: Colors.white, size: 24),
+        ),
+      ),
+    );
+  }
+}
+
+/// Punto rojo con borde blanco para cada vértice del segmento en construcción.
+class _NuevoPuntoMarker extends StatelessWidget {
+  const _NuevoPuntoMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.red,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(0, 1)),
+        ],
+      ),
+    );
+  }
+}
+
 /// Botones + / - para controlar el zoom del mapa.
 class _ZoomControls extends StatelessWidget {
   final MapaGlobalController controller;
@@ -709,6 +826,146 @@ class _LeyendaButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Indicador de progreso del pipeline de descarga de PKs. Se muestra solo
+/// mientras `PksService.isLoading` es true y, si hay total conocido, pinta
+/// el contador `procesados/total` de ficheros JSON.
+class _PksLoadStatus extends StatelessWidget {
+  const _PksLoadStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final pksService = Get.find<PksService>();
+    return Obx(() {
+      if (!pksService.isLoading.value) return const SizedBox.shrink();
+      final total = pksService.totalFiles.value;
+      final done = pksService.processedFiles.value;
+      final label = total == 0 ? 'Cargando PKs…' : 'PKs $done/$total';
+      return Material(
+        borderRadius: BorderRadius.circular(8),
+        elevation: 3,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.moduleGreen,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+}
+
+/// Banner inferior con el progreso global de carga del mapa. Lee de forma
+/// reactiva los contadores de `GasoductosService` y `PksService`, y el flag
+/// `isLoadingSegmentos` del controlador. Muestra la etapa activa (etiqueta +
+/// contador `X/Y`) y una barra de progreso determinista cuando el total es
+/// conocido; si no, cae a un indicador indeterminado.
+class _MapLoadBanner extends StatelessWidget {
+  const _MapLoadBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.find<MapaGlobalController>();
+    final gasoductos = Get.find<GasoductosService>();
+    final pks = Get.find<PksService>();
+
+    return Obx(() {
+      final isGas = controller.isLoadingGasoductos.value;
+      final isPks = controller.isLoadingPks.value;
+      final isSeg = controller.isLoadingSegmentos.value;
+      if (!isGas && !isPks && !isSeg) return const SizedBox.shrink();
+
+      final String stageLabel;
+      final int total;
+      final int done;
+      if (isGas) {
+        stageLabel = 'Cargando gasoductos';
+        total = gasoductos.totalFiles.value;
+        done = gasoductos.processedFiles.value;
+      } else if (isPks) {
+        stageLabel = 'Cargando PKs';
+        total = pks.totalFiles.value;
+        done = pks.processedFiles.value;
+      } else {
+        stageLabel = 'Cargando actividades';
+        total = 0;
+        done = 0;
+      }
+
+      final hasDeterminate = total > 0;
+      final progress = hasDeterminate ? (done / total).clamp(0.0, 1.0) : null;
+      final counter = hasDeterminate ? ' · $done/$total' : '';
+
+      return Material(
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+        elevation: 3,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.moduleGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$stageLabel$counter',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: const BorderRadius.all(Radius.circular(3)),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 4,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    AppColors.moduleGreen,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }
 

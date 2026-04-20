@@ -28,6 +28,10 @@ class PksService extends GetxService {
   /// PKs disponibles en sesión (después de cargar online o desde caché).
   final pks = <PkEntity>[].obs;
   final isLoading = false.obs;
+  /// Total de ficheros del lote en curso (0 cuando no hay carga activa).
+  final totalFiles = 0.obs;
+  /// Ficheros ya procesados dentro del lote en curso.
+  final processedFiles = 0.obs;
   bool _loaded = false;
 
   bool get isLoaded => _loaded;
@@ -104,6 +108,9 @@ class PksService extends GetxService {
               ))
           .toList();
 
+      totalFiles.value = files.length;
+      processedFiles.value = 0;
+
       await _loader.loadFiles(files);
       await _runCompleter?.future
           .timeout(const Duration(seconds: 1), onTimeout: () {});
@@ -119,6 +126,8 @@ class PksService extends GetxService {
       _entitiesBuffer.clear();
       _runCompleter = null;
       isLoading.value = false;
+      totalFiles.value = 0;
+      processedFiles.value = 0;
     }
   }
 
@@ -128,6 +137,9 @@ class PksService extends GetxService {
     final result = event.data;
     if (result is! FileLoadGeoJsonResult) return;
     if (result.originalFileData.group != kFileGroupPk) return;
+
+    processedFiles.value = processedFiles.value + 1;
+
     if (result.processedData.isEmpty) return;
 
     final ctId = result.originalFileData.tag is int
