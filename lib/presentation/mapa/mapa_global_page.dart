@@ -97,21 +97,30 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               Obx(() => PolylineLayer(
                     polylines: controller.gasoductosPolylines.toList(),
                   )),
-              // Actividades layer — polylines coloreadas por estado
+              // Actividades layer — polylines coloreadas por estado.
+              // Envuelta en GestureDetector para permitir tap-to-edit: el
+              // hit-test del PolylineLayer solo dispara onTap si el tap cae
+              // sobre una línea, por lo que fuera de ellas el gesto pasa al
+              // mapa.
               Obx(() {
                 // Re-leemos los Rx de filtros para que el Obx se suscriba.
                 controller.rxEstado.value;
                 controller.rxTipo.value;
-                return PolylineLayer(
-                  polylines: controller.filteredSegmentos
-                      .map((s) => Polyline(
-                            points: s.points,
-                            color: s.color,
-                            strokeWidth: 5.0,
-                            borderColor: Colors.white,
-                            borderStrokeWidth: 1.0,
-                          ))
-                      .toList(),
+                return GestureDetector(
+                  onTap: controller.onSegmentoPolylineTap,
+                  child: PolylineLayer<SegmentoEntity>(
+                    hitNotifier: controller.segmentosHitNotifier,
+                    polylines: controller.filteredSegmentos
+                        .map((s) => Polyline<SegmentoEntity>(
+                              points: s.points,
+                              color: s.color,
+                              strokeWidth: 5.0,
+                              borderColor: Colors.white,
+                              borderStrokeWidth: 1.0,
+                              hitValue: s.segmento,
+                            ))
+                        .toList(),
+                  ),
                 );
               }),
               // Actividades layer — labels en el centroide de cada segmento (zoom > 14)
@@ -210,13 +219,20 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             right: 58,
             child: _ZoomControls(controller: controller),
           ),
-          // Acciones de alta de segmento (bottom-left).
+          // Acciones de alta de segmento (bottom-left). El "+" sólo aparece
+          // por encima de [MapaGlobalController.addSegmentoMinZoom]; los
+          // botones de cancelar/confirmar se mantienen mientras el alta está
+          // activa para permitir siempre salir del flujo.
           Positioned(
             bottom: 40,
             left: 10,
-            child: Obx(() => controller.isAddingSegmento.value
-                ? _AddSegmentoActiveActions(controller: controller)
-                : _AddSegmentoButton(controller: controller)),
+            child: Obx(() {
+              if (controller.isAddingSegmento.value) {
+                return _AddSegmentoActiveActions(controller: controller);
+              }
+              if (!controller.canAddSegmento) return const SizedBox.shrink();
+              return _AddSegmentoButton(controller: controller);
+            }),
           ),
           // Status de la carga de PKs (bottom-right, encima del compass)
           const Positioned(

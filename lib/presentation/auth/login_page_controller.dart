@@ -74,7 +74,7 @@ class LoginPageController extends GetxController {
         usuarioController.text.trim(),
         passwordController.text,
       );
-      Get.offAllNamed(AppRoutes.segmentos, arguments: {'autoSync': true});
+      Get.offAllNamed(AppRoutes.sincronizacion);
     } catch (e) {
       error.value = _parseError(e);
     } finally {

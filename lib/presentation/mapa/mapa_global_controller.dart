@@ -26,7 +26,17 @@ class SegmentoMapInfo {
 }
 
 class MapaGlobalController extends GetxController {
+  /// Zoom mínimo exigido para poder iniciar el alta de un segmento y añadir
+  /// puntos a su traza. Por debajo del umbral el "+" se oculta y el long-press
+  /// deja de capturar puntos para evitar trazas groseramente imprecisas.
+  static const double addSegmentoMinZoom = 14.0;
+
   final mapController = MapController();
+
+  /// Notifier usado por el `PolylineLayer` de segmentos para hit-testing.
+  /// Cuando el usuario toca una polyline, su `hitValue` (la `SegmentoEntity`
+  /// asociada) queda disponible en `segmentosHitNotifier.value.hitValues`.
+  final segmentosHitNotifier = LayerHitNotifier<SegmentoEntity>(null);
 
   final gasoductosPolylines = <Polyline>[].obs;
   final segmentos = <SegmentoMapInfo>[].obs;
@@ -53,6 +63,11 @@ class MapaGlobalController extends GetxController {
 
   void setEstado(EstadoActividad? value) => rxEstado.value = value;
   void setTipo(TipoActividad? value) => rxTipo.value = value;
+
+  /// Reactivo: el botón "+" y el long-press sólo se habilitan por encima del
+  /// umbral. Leer `currentZoom.value` aquí dispara la suscripción Obx desde el
+  /// llamante.
+  bool get canAddSegmento => currentZoom.value > addSegmentoMinZoom;
 
   /// Subconjunto de [segmentos] tras aplicar los filtros activos. Se usa
   /// tanto para pintar las polylines como para los marcadores con etiqueta.
@@ -92,6 +107,21 @@ class MapaGlobalController extends GetxController {
         (lines) => gasoductosPolylines.assignAll(lines));
     ever(_pksService.pks, (entities) => pks.assignAll(entities));
     loadAll();
+  }
+
+  @override
+  void onClose() {
+    segmentosHitNotifier.dispose();
+    super.onClose();
+  }
+
+  /// Invocado desde el `GestureDetector` que envuelve el `PolylineLayer` de
+  /// segmentos. Si el tap impactó en alguna polyline, navega al detalle del
+  /// primer segmento bajo el dedo (mismo flujo que el tap en el label).
+  void onSegmentoPolylineTap() {
+    final hit = segmentosHitNotifier.value;
+    if (hit == null || hit.hitValues.isEmpty) return;
+    navigateToSegmento(hit.hitValues.first);
   }
 
   Future<void> loadAll() async {
@@ -199,6 +229,7 @@ class MapaGlobalController extends GetxController {
   }
 
   void addSegmento() {
+    if (!canAddSegmento) return;
     nuevosPuntos.clear();
     isAddingSegmento.value = true;
   }
@@ -229,9 +260,10 @@ class MapaGlobalController extends GetxController {
   }
 
   /// Añade un punto al trazado en construcción. Sólo tiene efecto si el modo
-  /// alta está activo.
+  /// alta está activo y el zoom supera el umbral [addSegmentoMinZoom].
   void onMapLongPress(LatLng point) {
     if (!isAddingSegmento.value) return;
+    if (!canAddSegmento) return;
     nuevosPuntos.add(point);
   }
 

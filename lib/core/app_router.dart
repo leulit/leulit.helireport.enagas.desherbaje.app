@@ -9,6 +9,8 @@ import '../presentation/detalle/segmento_detalle_binding.dart';
 import '../presentation/camera/camera_capture_page.dart';
 import '../presentation/mapa/mapa_global_page.dart';
 import '../presentation/mapa/mapa_global_binding.dart';
+import '../presentation/sincronizacion/sincronizacion_page.dart';
+import '../presentation/sincronizacion/sincronizacion_binding.dart';
 
 class AppRoutes {
   static const login = '/login';
@@ -16,6 +18,7 @@ class AppRoutes {
   static const detalle = '/segmentos/detalle';
   static const camera = '/camera';
   static const mapa = '/mapa';
+  static const sincronizacion = '/sincronizacion';
 }
 
 class AppPages {
@@ -46,6 +49,12 @@ class AppPages {
       name: AppRoutes.mapa,
       page: () => const MapaGlobalPage(),
       binding: MapaGlobalBinding(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage(
+      name: AppRoutes.sincronizacion,
+      page: () => const SincronizacionPage(),
+      binding: SincronizacionBinding(),
       middlewares: [AuthMiddleware()],
     ),
   ];

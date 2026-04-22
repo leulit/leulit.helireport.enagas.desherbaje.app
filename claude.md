@@ -147,6 +147,10 @@ lib/
     │   ├── captura_fotos_page.dart
     │   ├── captura_fotos_binding.dart
     │   └── captura_fotos_controller.dart
+    ├── sincronizacion/
+    │   ├── sincronizacion_page.dart
+    │   ├── sincronizacion_binding.dart
+    │   └── sincronizacion_controller.dart          # Métodos iniciar/cancelar/reintentar stub
     ├── mapa/                                       # Pendiente de implementación
     └── widgets/
         ├── actividad_card_widget.dart
@@ -165,6 +169,7 @@ lib/
 | `AppRoutes.actividades` | `/actividades` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
 | `AppRoutes.detalle` | `/actividades/detalle` | `SegmentoDetallePage` | Sí |
 | `AppRoutes.fotos` | `/actividades/fotos` | `CapturaFotosPage` | Sí |
+| `AppRoutes.sincronizacion` | `/sincronizacion` | `SincronizacionPage` | Sí (`AuthMiddleware`) |
 
 ---
 
