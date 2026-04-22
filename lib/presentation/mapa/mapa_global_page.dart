@@ -72,11 +72,6 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             tooltip: 'Forzar envío',
             onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-            tooltip: 'Salir',
-            onPressed: _logout,
-          ),
           Obx(() {
             if (controller.isLoading) {
               return const Padding(
@@ -97,6 +92,11 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             );
           }),
           _LeyendaButton(),
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
+            tooltip: 'Salir',
+            onPressed: _logout,
+          ),
         ],
       ),
       body: Stack(

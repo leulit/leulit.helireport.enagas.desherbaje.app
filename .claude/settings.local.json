@@ -28,7 +28,9 @@
       "Bash(git rm *)",
       "Bash(dart compile *)",
       "Bash(flutter build *)",
-      "mcp__dart__dart_format"
+      "mcp__dart__dart_format",
+      "Bash(chmod +x /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build_android.sh /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build_ios.sh)",
+      "Bash(chmod +x /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build.sh)"
     ]
   }
 }

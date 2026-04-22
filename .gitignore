@@ -1,6 +1,9 @@
 # Miscellaneous
 *.class
 *.log
+
+# Build artefactos publicación
+dist/
 *.pyc
 *.swp
 .DS_Store
