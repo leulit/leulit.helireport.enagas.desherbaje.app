@@ -55,8 +55,8 @@ enum TipoActividad {
 /// Estado del segmento (antes era el estado de la actividad).
 enum EstadoActividad {
   propuesta('propuesta', 'Propuesta'),
+  contratista('contratista', 'Contratista'),
   validada('validada', 'Validada'),
-  contratista('contratita', 'Contratista'),
   ejecucion('ejecución', 'En Ejecución'),
   finalizada('finalizada', 'Finalizada'),
   cerrada('cerrada', 'Cerrada');

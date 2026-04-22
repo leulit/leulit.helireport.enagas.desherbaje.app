@@ -206,6 +206,7 @@ class _DropdownsBar extends StatelessWidget {
               rxValue: controller.selectedEstado,
               items: const [
                 EstadoActividad.propuesta,
+                EstadoActividad.contratista,
                 EstadoActividad.validada,
                 EstadoActividad.ejecucion,
                 EstadoActividad.finalizada,

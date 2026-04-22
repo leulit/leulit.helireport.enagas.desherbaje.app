@@ -170,6 +170,7 @@ class _PanelDatosTabs extends StatelessWidget {
 // ─── Tab Datos ──────────────────────────────────────────────────────────────
 
 const List<EstadoActividad> _estadosEditablesBase = [
+  EstadoActividad.contratista,
   EstadoActividad.validada,
   EstadoActividad.ejecucion,
   EstadoActividad.finalizada,

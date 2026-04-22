@@ -432,6 +432,7 @@ class _FiltrosBar extends StatelessWidget {
               rxValue: controller.rxEstado,
               items: const [
                 EstadoActividad.propuesta,
+                EstadoActividad.contratista,
                 EstadoActividad.validada,
                 EstadoActividad.ejecucion,
                 EstadoActividad.finalizada,
