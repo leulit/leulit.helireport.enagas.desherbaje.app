@@ -87,6 +87,12 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
           onPressed: () => Get.offAllNamed(AppRoutes.mapa),
         ),
         IconButton(
+          icon: const Icon(Icons.cloud_upload_outlined,
+              color: AppColors.moduleGreen),
+          tooltip: 'Forzar envío a nube',
+          onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+        ),
+        IconButton(
           icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
           tooltip: 'Salir',
           onPressed: _logout,
@@ -162,6 +168,17 @@ class _PanelDatosTabs extends StatelessWidget {
 }
 
 // ─── Tab Datos ──────────────────────────────────────────────────────────────
+
+const List<EstadoActividad> _estadosEditablesBase = [
+  EstadoActividad.validada,
+  EstadoActividad.ejecucion,
+  EstadoActividad.finalizada,
+];
+
+List<EstadoActividad> _estadosEditables(EstadoActividad current) {
+  if (_estadosEditablesBase.contains(current)) return _estadosEditablesBase;
+  return [current, ..._estadosEditablesBase];
+}
 
 class _DatosTab extends StatelessWidget {
   final SegmentoDetalleController controller;
@@ -239,7 +256,7 @@ class _DatosTab extends StatelessWidget {
             label: 'Estado',
             icon: Icons.flag_outlined,
             rx: controller.estado,
-            values: EstadoActividad.values,
+            values: _estadosEditables(controller.estado.value),
             labelOf: (e) => e.etiqueta,
           ),
           const SizedBox(height: 16),

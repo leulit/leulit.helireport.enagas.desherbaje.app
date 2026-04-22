@@ -18,9 +18,88 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
     final provider = SegmentoDataProviderFactory.create();
     final result = await provider.getByOperador(operadorId, cts);
     if (result.isSuccess) {
-      await _cacheSegmentos(result.dataOrNull ?? const <SegmentoEntity>[]);
+      final remote = result.dataOrNull ?? const <SegmentoEntity>[];
+      // Conserva ediciones locales aún no propagadas al backend: no refresca
+      // la caché de filas con `needs_sync = 1` y devuelve su versión local
+      // en lugar de la remota, para que el usuario siga viendo lo que acaba
+      // de guardar.
+      final pending = await _readPendingSyncById();
+      final safeToCache = remote
+          .where((s) => s.id == null || !pending.containsKey(s.id))
+          .toList(growable: false);
+      await _cacheSegmentos(safeToCache);
+      final merged = remote
+          .map((s) => (s.id != null && pending[s.id] != null) ? pending[s.id]! : s)
+          .toList(growable: false);
+      final locales = await _readLocalOnly();
+      if (locales.isEmpty) return DataResult.success(merged);
+      return DataResult.success([...locales, ...merged]);
     }
     return result;
+  }
+
+  Future<Map<int, SegmentoEntity>> _readPendingSyncById() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'segmentos',
+      where: 'needs_sync = 1 AND id >= 0',
+    );
+    final map = <int, SegmentoEntity>{};
+    for (final row in rows) {
+      final entity = SegmentoLocalStore.rowToEntity(row);
+      final id = entity.id;
+      if (id != null) map[id] = entity;
+    }
+    return map;
+  }
+
+  /// Upsert completo de un segmento en SQLite. Marca la fila como pendiente
+  /// de sync (`needs_sync = 1`) para que la capa de sincronización la empuje
+  /// al backend cuando haya conectividad.
+  ///
+  /// Pensado para persistir ediciones locales (estado / tipo / descripción)
+  /// antes —o en paralelo— del push remoto.
+  Future<void> saveLocal(SegmentoEntity entity) async {
+    final db = await _db.database;
+    final row = SegmentoLocalStore.entityToRow(entity);
+    await db.insert(
+      'segmentos',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Persiste un segmento creado localmente (aún no enviado al backend) en
+  /// SQLite. Asigna el siguiente id negativo (-1, -2, -3…) para evitar
+  /// colisión con los ids remotos positivos, y lo marca `needs_sync = 1`.
+  /// Devuelve la entidad con el id asignado.
+  Future<SegmentoEntity> insertLocalOnly(SegmentoEntity entity) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      'SELECT MIN(id) AS min_id FROM segmentos',
+    );
+    final currentMin = rows.first['min_id'] as int?;
+    // Si el mínimo existente es positivo (o no hay filas), arrancamos en -1.
+    entity.id = (currentMin == null || currentMin >= 0) ? -1 : currentMin - 1;
+    final row = SegmentoLocalStore.entityToRow(entity)..['needs_sync'] = 1;
+    await db.insert(
+      'segmentos',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return entity;
+  }
+
+  Future<List<SegmentoEntity>> _readLocalOnly() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'segmentos',
+      where: 'id < 0',
+      orderBy: 'id ASC', // más recientes (más negativos) primero
+    );
+    return rows
+        .map(SegmentoLocalStore.rowToEntity)
+        .toList(growable: false);
   }
 
   @override

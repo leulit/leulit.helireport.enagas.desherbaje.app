@@ -98,7 +98,7 @@ class LocalDatabase {
         lat_fin           REAL,
         lng_fin           REAL,
         ubicacion_gis     TEXT,
-        tipo_actividad    TEXT NOT NULL DEFAULT 'desherbaje_selectivo',
+        tipo_actividad    TEXT NOT NULL DEFAULT 'deshierbe_selectivo',
         estado            TEXT NOT NULL DEFAULT 'Propuesta',
         imagenes_json     TEXT,
         mensajes_json     TEXT,

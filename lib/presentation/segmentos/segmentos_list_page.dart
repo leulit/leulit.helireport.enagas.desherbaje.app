@@ -48,6 +48,12 @@ class SegmentosListPage extends GetView<SegmentosListController> {
             onPressed: () => Get.toNamed(AppRoutes.mapa),
           ),
           IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined,
+                color: AppColors.moduleGreen),
+            tooltip: 'Forzar envío',
+            onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
             onPressed: controller.loadSegmentos,
           ),
@@ -169,10 +175,13 @@ const Map<EstadoActividad, Color> _estadoFilterColors = {
 };
 
 const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.resiembre: Color(0xFF558B2F),
+  TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
 class _DropdownsBar extends StatelessWidget {
@@ -195,7 +204,12 @@ class _DropdownsBar extends StatelessWidget {
               label: '',
               groupColor: const Color(0xFF455A64),
               rxValue: controller.selectedEstado,
-              items: EstadoActividad.values,
+              items: const [
+                EstadoActividad.propuesta,
+                EstadoActividad.validada,
+                EstadoActividad.ejecucion,
+                EstadoActividad.finalizada,
+              ],
               itemLabel: (e) => e.etiqueta,
               itemColor: (e) =>
                   _estadoFilterColors[e] ?? const Color(0xFF455A64),
@@ -566,10 +580,13 @@ const Map<EstadoActividad, Color> _estadoBgColors = {
 };
 
 const Map<TipoActividad, Color> _tipoColors = {
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.resiembre: Color(0xFF558B2F),
+  TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
 class _SegmentCard extends StatelessWidget {
@@ -663,17 +680,6 @@ class _SegmentCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.business,
-                              size: 14, color: Colors.blueGrey.shade600),
-                          const SizedBox(width: 4),
-                          Text(
-                            'CT ${segmento.ctId}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blueGrey.shade800,
-                            ),
-                          ),
                           if ((segmento.traza ?? '').isNotEmpty) ...[
                             const SizedBox(width: 10),
                             Icon(Icons.timeline,
