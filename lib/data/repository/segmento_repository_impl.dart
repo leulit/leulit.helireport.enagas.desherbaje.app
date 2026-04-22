@@ -19,14 +19,54 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
     final result = await provider.getByOperador(operadorId, cts);
     if (result.isSuccess) {
       final remote = result.dataOrNull ?? const <SegmentoEntity>[];
-      await _cacheSegmentos(remote);
-      // Mezcla los locales (id < 0, creados en la app y aún sin sincronizar)
-      // con los remotos para que aparezcan en listado y mapa.
+      // Conserva ediciones locales aún no propagadas al backend: no refresca
+      // la caché de filas con `needs_sync = 1` y devuelve su versión local
+      // en lugar de la remota, para que el usuario siga viendo lo que acaba
+      // de guardar.
+      final pending = await _readPendingSyncById();
+      final safeToCache = remote
+          .where((s) => s.id == null || !pending.containsKey(s.id))
+          .toList(growable: false);
+      await _cacheSegmentos(safeToCache);
+      final merged = remote
+          .map((s) => (s.id != null && pending[s.id] != null) ? pending[s.id]! : s)
+          .toList(growable: false);
       final locales = await _readLocalOnly();
-      if (locales.isEmpty) return DataResult.success(remote);
-      return DataResult.success([...locales, ...remote]);
+      if (locales.isEmpty) return DataResult.success(merged);
+      return DataResult.success([...locales, ...merged]);
     }
     return result;
+  }
+
+  Future<Map<int, SegmentoEntity>> _readPendingSyncById() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'segmentos',
+      where: 'needs_sync = 1 AND id >= 0',
+    );
+    final map = <int, SegmentoEntity>{};
+    for (final row in rows) {
+      final entity = SegmentoLocalStore.rowToEntity(row);
+      final id = entity.id;
+      if (id != null) map[id] = entity;
+    }
+    return map;
+  }
+
+  /// Upsert completo de un segmento en SQLite. Marca la fila como pendiente
+  /// de sync (`needs_sync = 1`) para que la capa de sincronización la empuje
+  /// al backend cuando haya conectividad.
+  ///
+  /// Pensado para persistir ediciones locales (estado / tipo / descripción)
+  /// antes —o en paralelo— del push remoto.
+  Future<void> saveLocal(SegmentoEntity entity) async {
+    final db = await _db.database;
+    final row = SegmentoLocalStore.entityToRow(entity);
+    await db.insert(
+      'segmentos',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// Persiste un segmento creado localmente (aún no enviado al backend) en

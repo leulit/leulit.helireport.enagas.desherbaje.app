@@ -27,7 +27,8 @@
       "Bash(git mv *)",
       "Bash(git rm *)",
       "Bash(dart compile *)",
-      "Bash(flutter build *)"
+      "Bash(flutter build *)",
+      "mcp__dart__dart_format"
     ]
   }
 }

@@ -48,6 +48,12 @@ class SegmentosListPage extends GetView<SegmentosListController> {
             onPressed: () => Get.toNamed(AppRoutes.mapa),
           ),
           IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined,
+                color: AppColors.moduleGreen),
+            tooltip: 'Forzar envío',
+            onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
             onPressed: controller.loadSegmentos,
           ),
@@ -674,17 +680,6 @@ class _SegmentCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.business,
-                              size: 14, color: Colors.blueGrey.shade600),
-                          const SizedBox(width: 4),
-                          Text(
-                            'CT ${segmento.ctId}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blueGrey.shade800,
-                            ),
-                          ),
                           if ((segmento.traza ?? '').isNotEmpty) ...[
                             const SizedBox(width: 10),
                             Icon(Icons.timeline,

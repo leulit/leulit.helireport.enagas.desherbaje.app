@@ -87,6 +87,12 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
           onPressed: () => Get.offAllNamed(AppRoutes.mapa),
         ),
         IconButton(
+          icon: const Icon(Icons.cloud_upload_outlined,
+              color: AppColors.moduleGreen),
+          tooltip: 'Forzar envío a nube',
+          onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+        ),
+        IconButton(
           icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
           tooltip: 'Salir',
           onPressed: _logout,

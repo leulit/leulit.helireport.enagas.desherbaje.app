@@ -11,6 +11,8 @@ import '../presentation/mapa/mapa_global_page.dart';
 import '../presentation/mapa/mapa_global_binding.dart';
 import '../presentation/sincronizacion/sincronizacion_page.dart';
 import '../presentation/sincronizacion/sincronizacion_binding.dart';
+import '../presentation/forzar_envio/forzar_envio_page.dart';
+import '../presentation/forzar_envio/forzar_envio_binding.dart';
 
 class AppRoutes {
   static const login = '/login';
@@ -19,6 +21,7 @@ class AppRoutes {
   static const camera = '/camera';
   static const mapa = '/mapa';
   static const sincronizacion = '/sincronizacion';
+  static const forzarEnvio = '/forzar-envio';
 }
 
 class AppPages {
@@ -55,6 +58,12 @@ class AppPages {
       name: AppRoutes.sincronizacion,
       page: () => const SincronizacionPage(),
       binding: SincronizacionBinding(),
+      middlewares: [AuthMiddleware()],
+    ),
+    GetPage(
+      name: AppRoutes.forzarEnvio,
+      page: () => const ForzarEnvioPage(),
+      binding: ForzarEnvioBinding(),
       middlewares: [AuthMiddleware()],
     ),
   ];

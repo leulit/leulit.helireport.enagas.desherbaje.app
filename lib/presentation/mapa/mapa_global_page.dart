@@ -19,6 +19,25 @@ import 'mapa_global_controller.dart';
 class MapaGlobalPage extends GetView<MapaGlobalController> {
   const MapaGlobalPage({super.key});
 
+  void _logout() {
+    Get.dialog(
+      AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Seguro que quieres cerrar sesión?'),
+        actions: [
+          TextButton(onPressed: Get.back, child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () {
+              Get.back();
+              Get.offAllNamed(AppRoutes.login);
+            },
+            child: const Text('Salir', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,6 +65,17 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
             tooltip: 'Ver listado',
             onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
+          ),
+          IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined,
+                color: AppColors.moduleGreen),
+            tooltip: 'Forzar envío',
+            onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
+            tooltip: 'Salir',
+            onPressed: _logout,
           ),
           Obx(() {
             if (controller.isLoading) {
@@ -151,7 +181,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               // PKs layer — solo visibles a partir de zoom > 12 para evitar
               // sobrecargar el mapa.
               Obx(() {
-                if (controller.currentZoom.value <= 12) {
+                if (controller.currentZoom.value <= 14) {
                   return const SizedBox.shrink();
                 }
                 return MarkerLayer(

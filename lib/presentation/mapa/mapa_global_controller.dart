@@ -318,14 +318,14 @@ class MapaGlobalController extends GetxController {
 
   void zoomIn() {
     final cam = mapController.camera;
-    final z = (cam.zoom + 1).clamp(5.0, 20.0);
+    final z = (cam.zoom + 0.25).clamp(5.0, 20.0);
     mapController.move(cam.center, z);
     currentZoom.value = z;
   }
 
   void zoomOut() {
     final cam = mapController.camera;
-    final z = (cam.zoom - 1).clamp(5.0, 20.0);
+    final z = (cam.zoom - 0.25).clamp(5.0, 20.0);
     mapController.move(cam.center, z);
     currentZoom.value = z;
   }

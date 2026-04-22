@@ -276,8 +276,10 @@ class SegmentoDetalleController extends MyGetxController {
     );
   }
 
-  /// Actualiza el segmento en backend (estado/tipo/descripción) usando el
-  /// repositorio offline-first.
+  /// Offline-first: persiste en SQLite todas las ediciones (estado / tipo /
+  /// descripción) marcándolas como pendientes de sync, y como best-effort
+  /// intenta propagar al backend el cambio de estado. Muestra feedback al
+  /// usuario y se queda en la misma página.
   Future<void> guardar() async {
     isSaving.value = true;
     try {
@@ -285,12 +287,39 @@ class SegmentoDetalleController extends MyGetxController {
       segmento.tipoActividad = tipoActividad.value;
       segmento.descripcion = descripcion.value;
       if (segmento.id != null) {
+        await _segmentoRepo.saveLocal(segmento);
         await _segmentoRepo.updateEstado(segmento.id!, estado.value);
       }
-      Get.back(result: segmento);
+      _showSnack(
+        title: 'Guardado',
+        message: 'Cambios guardados correctamente',
+        isError: false,
+      );
+    } catch (e) {
+      _showSnack(
+        title: 'Error',
+        message: 'No se han podido guardar los cambios: $e',
+        isError: true,
+      );
     } finally {
       isSaving.value = false;
     }
+  }
+
+  void _showSnack({
+    required String title,
+    required String message,
+    required bool isError,
+  }) {
+    Get.snackbar(
+      title,
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: isError ? Colors.red.shade700 : AppColors.moduleGreen,
+      colorText: Colors.white,
+      margin: const EdgeInsets.all(12),
+      duration: const Duration(seconds: 2),
+    );
   }
 }
 
