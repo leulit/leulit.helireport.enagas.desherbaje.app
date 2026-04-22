@@ -10,10 +10,14 @@ import '../network/sync_outcome_from_network_error.dart';
 
 /// [RemoteAdapter] for [SegmentoEntity].
 ///
-/// The backend owns creation; the app only pushes `update` to change
-/// `estado`. `create`/`delete` are explicitly rejected as unrecoverable.
+/// The backend owns creation; the app only pushes `update`. `create`/`delete`
+/// are explicitly rejected as unrecoverable.
 ///
-/// El endpoint es `POST /segmentos/update/{id}` con body `{estado: ...}`.
+/// El endpoint es `POST /segmentos/update/{id}`. El body incluye siempre el
+/// `estado`, y opcionalmente las coordenadas de los extremos
+/// (`lat_inicio`/`lng_inicio`/`lat_fin`/`lng_fin`) y la polilínea
+/// `ubicacion_gis` en formato GeoJSON LineString — todos los campos
+/// editables desde la UI viajan en la misma request.
 ///
 /// Conflicts (`NetworkErrorCategory.conflict`) are currently reported as
 /// [SyncUnrecoverable] because the backend response body for this endpoint
@@ -40,9 +44,19 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
     }
 
     try {
+      final body = <String, dynamic>{
+        'estado': entity.estado.descripcion,
+        if (entity.latInicio != null) 'lat_inicio': entity.latInicio,
+        if (entity.lngInicio != null) 'lng_inicio': entity.lngInicio,
+        if (entity.latFin != null) 'lat_fin': entity.latFin,
+        if (entity.lngFin != null) 'lng_fin': entity.lngFin,
+        if (entity.ubicacionGis.isNotEmpty)
+          'ubicacion_gis': entity.ubicacionGisAsGeoJSON,
+      };
+
       final response = await _network.post(
         ApiEndpoints.segmentoUpd(entity.id!),
-        body: {'estado': entity.estado.descripcion},
+        body: body,
         headers: await _authHeader(),
       );
 

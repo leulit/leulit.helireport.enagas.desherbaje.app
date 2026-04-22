@@ -818,6 +818,7 @@ class _MapaSegmento extends StatelessWidget {
         FlutterMap(
           mapController: controller.mapController,
           options: MapOptions(
+            initialCameraFit: controller.initialCameraFit,
             initialCenter: controller.initialCenter,
             initialZoom: controller.initialZoom,
             minZoom: 5,
@@ -837,13 +838,48 @@ class _MapaSegmento extends StatelessWidget {
                   polylines: controller.gasoductosPolylines.toList(),
                 )),
             // Segmento actual destacado
-            PolylineLayer(polylines: [controller.highlightedSegment]),
+            Obx(() => PolylineLayer(
+                  polylines: [controller.highlightedSegment.value],
+                )),
           ],
         ),
         Positioned(
           bottom: 12,
           right: 12,
           child: _ZoomControls(controller: controller),
+        ),
+        Positioned(
+          bottom: 12,
+          left: 12,
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            elevation: 3,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: controller.abrirEdicionExtremos,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.edit_location_alt_outlined,
+                        size: 18, color: AppColors.moduleGreen),
+                    SizedBox(width: 6),
+                    Text(
+                      'Editar extremos',
+                      style: TextStyle(
+                        color: AppColors.moduleGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
