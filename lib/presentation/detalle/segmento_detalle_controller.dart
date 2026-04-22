@@ -16,6 +16,7 @@ import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
+import 'edit_extremos/edit_extremos_dialog.dart';
 
 class SegmentoDetalleController extends MyGetxController {
   final _authRepo = AuthRepositoryImpl();
@@ -24,7 +25,7 @@ class SegmentoDetalleController extends MyGetxController {
   final _mensajeRepo = MensajeSegmentoRepository();
   final _picker = ImagePicker();
 
-  late final SegmentoEntity segmento;
+  late SegmentoEntity segmento;
   final user = Rx<UserModel?>(null);
 
   /// Controlador del mapa, expuesto para que los botones +/- de zoom puedan
@@ -48,7 +49,20 @@ class SegmentoDetalleController extends MyGetxController {
 
   late final LatLng initialCenter;
   late final double initialZoom;
-  late final Polyline highlightedSegment;
+  final highlightedSegment = Rx<Polyline>(Polyline(points: const []));
+
+  /// Encuadre inicial del mapa embebido. Si la traza tiene ≥2 puntos usa
+  /// `CameraFit.bounds` para garantizar que todo el segmento quepa con
+  /// padding; si no, se cae a `initialCenter`/`initialZoom`.
+  CameraFit? get initialCameraFit {
+    final pts = segmento.ubicacionGis;
+    if (pts.length < 2) return null;
+    return CameraFit.bounds(
+      bounds: LatLngBounds.fromPoints(pts),
+      padding: const EdgeInsets.all(40),
+      maxZoom: 19,
+    );
+  }
 
   final gasoductosPolylines = <Polyline>[].obs;
 
@@ -116,12 +130,52 @@ class SegmentoDetalleController extends MyGetxController {
       initialZoom = 7;
     }
 
-    highlightedSegment = Polyline(
+    highlightedSegment.value = Polyline(
       points: pts.isEmpty ? const [] : pts,
       color: const Color(0xFFFFC107),
       strokeWidth: 6,
       borderColor: Colors.white,
       borderStrokeWidth: 2,
+    );
+  }
+
+  /// Abre el diálogo de edición de extremos. Al volver con una entidad
+  /// actualizada, refresca la polilínea destacada en el mapa embebido y
+  /// mueve la cámara al nuevo centro.
+  Future<void> abrirEdicionExtremos() async {
+    final updated = await Get.dialog<SegmentoEntity?>(
+      EditExtremosDialog(segmento: segmento),
+      barrierDismissible: false,
+    );
+    if (updated == null) return;
+    segmento = updated;
+
+    final pts = updated.ubicacionGis;
+    highlightedSegment.value = Polyline(
+      points: pts.isEmpty ? const [] : pts,
+      color: const Color(0xFFFFC107),
+      strokeWidth: 6,
+      borderColor: Colors.white,
+      borderStrokeWidth: 2,
+    );
+
+    if (pts.length >= 2) {
+      mapController.fitCamera(CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(pts),
+        padding: const EdgeInsets.all(40),
+        maxZoom: 19,
+      ));
+    } else if (updated.latInicio != null && updated.lngInicio != null) {
+      mapController.move(
+        LatLng(updated.latInicio!, updated.lngInicio!),
+        mapController.camera.zoom,
+      );
+    }
+
+    _showSnack(
+      title: 'Extremos actualizados',
+      message: 'Los extremos del segmento se han guardado localmente',
+      isError: false,
     );
   }
 
