@@ -169,10 +169,13 @@ const Map<EstadoActividad, Color> _estadoFilterColors = {
 };
 
 const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.resiembre: Color(0xFF558B2F),
+  TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
 class _DropdownsBar extends StatelessWidget {
@@ -195,7 +198,12 @@ class _DropdownsBar extends StatelessWidget {
               label: '',
               groupColor: const Color(0xFF455A64),
               rxValue: controller.selectedEstado,
-              items: EstadoActividad.values,
+              items: const [
+                EstadoActividad.propuesta,
+                EstadoActividad.validada,
+                EstadoActividad.ejecucion,
+                EstadoActividad.finalizada,
+              ],
               itemLabel: (e) => e.etiqueta,
               itemColor: (e) =>
                   _estadoFilterColors[e] ?? const Color(0xFF455A64),
@@ -566,10 +574,13 @@ const Map<EstadoActividad, Color> _estadoBgColors = {
 };
 
 const Map<TipoActividad, Color> _tipoColors = {
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.resiembre: Color(0xFF558B2F),
+  TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
 class _SegmentCard extends StatelessWidget {

@@ -18,9 +18,48 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
     final provider = SegmentoDataProviderFactory.create();
     final result = await provider.getByOperador(operadorId, cts);
     if (result.isSuccess) {
-      await _cacheSegmentos(result.dataOrNull ?? const <SegmentoEntity>[]);
+      final remote = result.dataOrNull ?? const <SegmentoEntity>[];
+      await _cacheSegmentos(remote);
+      // Mezcla los locales (id < 0, creados en la app y aún sin sincronizar)
+      // con los remotos para que aparezcan en listado y mapa.
+      final locales = await _readLocalOnly();
+      if (locales.isEmpty) return DataResult.success(remote);
+      return DataResult.success([...locales, ...remote]);
     }
     return result;
+  }
+
+  /// Persiste un segmento creado localmente (aún no enviado al backend) en
+  /// SQLite. Asigna el siguiente id negativo (-1, -2, -3…) para evitar
+  /// colisión con los ids remotos positivos, y lo marca `needs_sync = 1`.
+  /// Devuelve la entidad con el id asignado.
+  Future<SegmentoEntity> insertLocalOnly(SegmentoEntity entity) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      'SELECT MIN(id) AS min_id FROM segmentos',
+    );
+    final currentMin = rows.first['min_id'] as int?;
+    // Si el mínimo existente es positivo (o no hay filas), arrancamos en -1.
+    entity.id = (currentMin == null || currentMin >= 0) ? -1 : currentMin - 1;
+    final row = SegmentoLocalStore.entityToRow(entity)..['needs_sync'] = 1;
+    await db.insert(
+      'segmentos',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return entity;
+  }
+
+  Future<List<SegmentoEntity>> _readLocalOnly() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'segmentos',
+      where: 'id < 0',
+      orderBy: 'id ASC', // más recientes (más negativos) primero
+    );
+    return rows
+        .map(SegmentoLocalStore.rowToEntity)
+        .toList(growable: false);
   }
 
   @override

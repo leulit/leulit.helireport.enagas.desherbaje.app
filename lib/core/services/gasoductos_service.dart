@@ -15,6 +15,7 @@ import '../../data/services/json_loader_service.dart';
 import '../../domain/entities/ct_info_entity.dart';
 import '../../domain/entities/gasoducto_entity.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../presentation/mapa/lines_cut/polyline_hit_data.dart';
 import '../app_typed_actions.dart';
 import 'connectivity_service.dart';
 
@@ -50,6 +51,11 @@ class GasoductosService extends GetxService {
 
   Completer<void>? _runCompleter;
   final _entitiesBuffer = <GasoductoEntity>[];
+
+  /// Mapa ctId→nombre del CT (poblado desde `user.cts` en cada ejecución).
+  /// Usado para construir el `hitValue` de cada polyline de forma que el
+  /// motor de corte pueda resolver ctId/ctName sin acceder a prefs.
+  Map<int, String> _ctNameById = const {};
 
   JsonLoaderService get _loader => Get.find<JsonLoaderService>();
   ConnectivityService get _conn => Get.find<ConnectivityService>();
@@ -90,6 +96,7 @@ class GasoductosService extends GetxService {
     isLoading.value = true;
     try {
       final ctInfos = await _ctInfosFromPrefs();
+      _ctNameById = {for (final c in ctInfos) c.id: c.nombre};
 
       // Sin conexión → caché local directamente.
       if (!_conn.isConnected) {
@@ -252,6 +259,12 @@ class GasoductosService extends GetxService {
           points: g.points,
           color: Color(g.colorValue),
           strokeWidth: g.strokeWidth,
+          hitValue: GasoductoHitData(
+            id: g.id,
+            ctId: g.ctId,
+            ct: _ctNameById[g.ctId] ?? '',
+            name: g.nombre,
+          ),
         ),
       )
       .toList();
@@ -265,10 +278,18 @@ class GasoductosService extends GetxService {
         (m['lng'] as num).toDouble(),
       );
     }).toList();
+    final ctId = row['ct_id'] as int? ?? 0;
+    final nombre = (row['nombre'] as String?) ?? '';
     return Polyline(
       points: points,
       color: Color(row['color_value'] as int),
       strokeWidth: (row['stroke_width'] as num).toDouble(),
+      hitValue: GasoductoHitData(
+        id: (row['id'] as String?) ?? '$ctId',
+        ctId: ctId,
+        ct: _ctNameById[ctId] ?? '',
+        name: nombre,
+      ),
     );
   }
 }

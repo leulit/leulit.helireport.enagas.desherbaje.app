@@ -151,7 +151,20 @@ lib/
     │   ├── sincronizacion_page.dart
     │   ├── sincronizacion_binding.dart
     │   └── sincronizacion_controller.dart          # Métodos iniciar/cancelar/reintentar stub
-    ├── mapa/                                       # Pendiente de implementación
+    ├── mapa/
+    │   ├── mapa_global_page.dart
+    │   ├── mapa_global_binding.dart
+    │   ├── mapa_global_controller.dart             # Registra LinesCutController en onInit
+    │   ├── lines_cut/                              # Feature "Líneas de corte" (portada del web)
+    │   │   ├── lines_cut_math.dart                 # Orientación, intersección, sideOfLine
+    │   │   ├── lines_cut_engine.dart               # extractSegmentsBetweenCutLines
+    │   │   ├── lines_cut_controller.dart           # GetxController: line1/line2, canCut, apply
+    │   │   ├── lines_cut_ui.dart                   # Map layers + botón modo + panel control
+    │   │   ├── lines_cut_dialog.dart               # Captura descripción/tipo/estado
+    │   │   ├── polyline_segment.dart               # Modelo de salida con extractores
+    │   │   └── polyline_hit_data.dart              # `GasoductoHitData` (hitValue)
+    │   └── legacy/
+    │       └── add_segmento_longpress_legacy.dart  # Flujo antiguo long-press (archivado)
     └── widgets/
         ├── actividad_card_widget.dart
         ├── estado_badge_widget.dart
@@ -339,6 +352,7 @@ final provider = SegmentoDataProviderFactory.create(); // auto-switch según con
 
 ## Pendiente / TODO
 
-- Módulo `mapa/` — visualización de segmentos en flutter_map
+- Filtro de solapamientos del corte contra segmentos ya existentes
+  (ver `docs/LINES_CUT_MOBILE_INTEGRATION.md` §8)
 - Barrel exports (`export_*.dart`) — aún no creados
 - `AppConfig.hmacSecret` hardcodeado — migrar a variable de entorno o secret en CI/CD

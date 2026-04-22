@@ -163,6 +163,17 @@ class _PanelDatosTabs extends StatelessWidget {
 
 // ─── Tab Datos ──────────────────────────────────────────────────────────────
 
+const List<EstadoActividad> _estadosEditablesBase = [
+  EstadoActividad.validada,
+  EstadoActividad.ejecucion,
+  EstadoActividad.finalizada,
+];
+
+List<EstadoActividad> _estadosEditables(EstadoActividad current) {
+  if (_estadosEditablesBase.contains(current)) return _estadosEditablesBase;
+  return [current, ..._estadosEditablesBase];
+}
+
 class _DatosTab extends StatelessWidget {
   final SegmentoDetalleController controller;
   const _DatosTab({required this.controller});
@@ -239,7 +250,7 @@ class _DatosTab extends StatelessWidget {
             label: 'Estado',
             icon: Icons.flag_outlined,
             rx: controller.estado,
-            values: EstadoActividad.values,
+            values: _estadosEditables(controller.estado.value),
             labelOf: (e) => e.etiqueta,
           ),
           const SizedBox(height: 16),

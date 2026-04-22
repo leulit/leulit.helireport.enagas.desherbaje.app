@@ -27,10 +27,13 @@ enum TipoInstalacion {
 
 /// Tipo de actividad de desherbaje asociado al segmento.
 enum TipoActividad {
-  desherbajeSelectivo('desherbaje_selectivo', 'Desherbaje Selectivo'),
   desbroceManual('desbroce_manual', 'Desbroce Manual'),
   desbroceMecanico('desbroce_mecanico', 'Desbroce Mecánico'),
-  desratizacion('desratizacion', 'Desratización');
+  deshierbePosiciones('deshierbe_posiciones', 'Deshierbe Posiciones'),
+  desherbajeSelectivo('deshierbe_selectivo', 'Deshierbe Selectivo'),
+  desratizacion('desratizacion', 'Desratización'),
+  resiembre('resiembre', 'Resiembre'),
+  talaArboles('tala_arboles', 'Tala de Árboles');
 
   final String descripcion;
   final String etiqueta;
@@ -38,6 +41,10 @@ enum TipoActividad {
 
   static TipoActividad fromString(String? value) {
     if (value == null) return TipoActividad.desherbajeSelectivo;
+    // Compatibilidad con el valor legacy antes del cambio a "deshierbe_*":
+    // filas existentes en SQLite o respuestas antiguas del backend que
+    // todavía lleven "desherbaje_selectivo" deben mapear al mismo caso.
+    if (value == 'desherbaje_selectivo') return TipoActividad.desherbajeSelectivo;
     return TipoActividad.values.firstWhere(
       (e) => e.descripcion == value,
       orElse: () => TipoActividad.desherbajeSelectivo,

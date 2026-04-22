@@ -8,10 +8,12 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_fullresponsive/leulit_flutter_fullreponsive.dart';
 import '../../core/api_endpoints.dart';
+import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/pks_service.dart';
 import '../../domain/entities/segmento_entity.dart';
+import 'lines_cut/lines_cut_ui.dart';
 import 'mapa_global_controller.dart';
 
 class MapaGlobalPage extends GetView<MapaGlobalController> {
@@ -43,7 +45,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
           IconButton(
             icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
             tooltip: 'Ver listado',
-            onPressed: Get.back,
+            onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
           ),
           Obx(() {
             if (controller.isLoading) {
@@ -76,8 +78,9 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               initialZoom: 7,
               minZoom: 5,
               maxZoom: 20,
+              onMapReady: controller.onMapReady,
               onMapEvent: controller.onMapEvent,
-              onLongPress: (_, point) => controller.onMapLongPress(point),
+              onTap: controller.onMapTap,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
@@ -164,37 +167,9 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   }).toList(),
                 );
               }),
-              // Polyline roja del segmento en construcción (≥ 2 puntos).
-              Obx(() {
-                final pts = controller.nuevosPuntos.toList();
-                if (pts.length < 2) return const SizedBox.shrink();
-                return PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: pts,
-                      color: Colors.red,
-                      strokeWidth: 4,
-                      borderColor: Colors.white,
-                      borderStrokeWidth: 1,
-                    ),
-                  ],
-                );
-              }),
-              // Vértices individuales del segmento en construcción.
-              Obx(() {
-                final pts = controller.nuevosPuntos.toList();
-                if (pts.isEmpty) return const SizedBox.shrink();
-                return MarkerLayer(
-                  markers: pts
-                      .map((p) => Marker(
-                            point: p,
-                            width: 14,
-                            height: 14,
-                            child: const _NuevoPuntoMarker(),
-                          ))
-                      .toList(),
-                );
-              }),
+              // Capas de "Líneas de corte" (polylines + drag markers +
+              // warning). Internamente filtran por cutStateOn && zoomOk.
+              ...buildLinesCutMapLayers(controller.linesCut),
               // Brújula estilo cupertino (bottom-right, encima del indicador de zoom)
               const MapCompass.cupertino(
                 rotationDuration: Duration(milliseconds: 300),
@@ -219,20 +194,22 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             right: 58,
             child: _ZoomControls(controller: controller),
           ),
-          // Acciones de alta de segmento (bottom-left). El "+" sólo aparece
-          // por encima de [MapaGlobalController.addSegmentoMinZoom]; los
-          // botones de cancelar/confirmar se mantienen mientras el alta está
-          // activa para permitir siempre salir del flujo.
+          // Botón principal "Líneas de corte" (bottom-left). Cambia a
+          // "Aplicar corte" cuando las dos líneas están listas.
           Positioned(
             bottom: 40,
             left: 10,
-            child: Obx(() {
-              if (controller.isAddingSegmento.value) {
-                return _AddSegmentoActiveActions(controller: controller);
-              }
-              if (!controller.canAddSegmento) return const SizedBox.shrink();
-              return _AddSegmentoButton(controller: controller);
-            }),
+            child: LinesCutModeButton(
+              controller: controller.linesCut,
+              onApplyCut: controller.applyLinesCut,
+            ),
+          ),
+          // Panel de control de la feature (arriba-izquierda, bajo filtros).
+          Positioned(
+            top: 56,
+            left: 8,
+            right: 8,
+            child: LinesCutControlPanel(controller: controller.linesCut),
           ),
           // Status de la carga de PKs (bottom-right, encima del compass)
           const Positioned(
@@ -394,10 +371,13 @@ const Map<EstadoActividad, Color> _estadoFilterColors = {
 };
 
 const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
+  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
+  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
   TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.resiembre: Color(0xFF558B2F),
+  TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
 class _FiltrosBar extends StatelessWidget {
@@ -420,7 +400,12 @@ class _FiltrosBar extends StatelessWidget {
               label: '',
               groupColor: const Color(0xFF455A64),
               rxValue: controller.rxEstado,
-              items: EstadoActividad.values,
+              items: const [
+                EstadoActividad.propuesta,
+                EstadoActividad.validada,
+                EstadoActividad.ejecucion,
+                EstadoActividad.finalizada,
+              ],
               itemLabel: (e) => e.etiqueta,
               itemColor: (e) =>
                   _estadoFilterColors[e] ?? const Color(0xFF455A64),
@@ -559,101 +544,6 @@ class _FilterDropdown<T> extends StatelessWidget {
               onChanged: onChanged,
             );
           }),
-        ],
-      ),
-    );
-  }
-}
-
-/// Botón redondo para iniciar el alta de un nuevo segmento desde el mapa.
-class _AddSegmentoButton extends StatelessWidget {
-  final MapaGlobalController controller;
-  const _AddSegmentoButton({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return _RoundMapButton(
-      color: AppColors.moduleGreen,
-      icon: Icons.add,
-      onTap: controller.addSegmento,
-    );
-  }
-}
-
-/// Par de botones que sustituye al "+" mientras el modo alta está activo:
-/// cancelar (descartar trazado) y crear (persistir el segmento).
-class _AddSegmentoActiveActions extends StatelessWidget {
-  final MapaGlobalController controller;
-  const _AddSegmentoActiveActions({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _RoundMapButton(
-          color: Colors.red.shade600,
-          icon: Icons.close,
-          onTap: controller.cancelarSegmento,
-        ),
-        const SizedBox(width: 8),
-        Obx(() => _RoundMapButton(
-              color: controller.nuevosPuntos.length >= 2
-                  ? AppColors.moduleGreen
-                  : Colors.grey,
-              icon: Icons.check,
-              onTap: controller.nuevosPuntos.length >= 2
-                  ? controller.crearSegmento
-                  : null,
-            )),
-      ],
-    );
-  }
-}
-
-class _RoundMapButton extends StatelessWidget {
-  final Color color;
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  const _RoundMapButton({
-    required this.color,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      shape: const CircleBorder(),
-      elevation: 3,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(icon, color: Colors.white, size: 24),
-        ),
-      ),
-    );
-  }
-}
-
-/// Punto rojo con borde blanco para cada vértice del segmento en construcción.
-class _NuevoPuntoMarker extends StatelessWidget {
-  const _NuevoPuntoMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.red,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: const [
-          BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(0, 1)),
         ],
       ),
     );
