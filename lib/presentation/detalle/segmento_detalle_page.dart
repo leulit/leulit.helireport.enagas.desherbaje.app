@@ -41,14 +41,10 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
     return AppBar(
       backgroundColor: AppColors.moduleGreenLight,
       elevation: 0,
+      automaticallyImplyLeading: false,
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 2, color: const Color(0xFFA5D6A7)),
-      ),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: AppColors.moduleGreen),
-        tooltip: 'Volver al listado',
-        onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
       ),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

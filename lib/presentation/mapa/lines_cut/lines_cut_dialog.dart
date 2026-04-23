@@ -19,7 +19,7 @@ class CutDialogResult {
 
 /// Abre un modal con los campos mínimos (descripción / tipo) que se aplicarán
 /// a todos los segmentos extraídos del corte. El estado es siempre
-/// [EstadoActividad.propuesta] para los segmentos creados desde la app.
+/// [EstadoActividad.contratista] para los segmentos creados desde la app.
 /// Devuelve `null` si el usuario cancela.
 Future<CutDialogResult?> showLinesCutCaptureDialog({
   required String headerTitle,
@@ -131,7 +131,7 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
                       result: CutDialogResult(
                         descripcion: descripcionCtrl.text.trim(),
                         tipoActividad: tipoRx.value,
-                        estado: EstadoActividad.propuesta,
+                        estado: EstadoActividad.contratista,
                       ),
                     ),
                   ),

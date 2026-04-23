@@ -334,7 +334,15 @@ class SegmentoDetalleController extends MyGetxController {
   /// descripción) marcándolas como pendientes de sync, y como best-effort
   /// intenta propagar al backend el cambio de estado. Muestra feedback al
   /// usuario y se queda en la misma página.
+  ///
+  /// Valida antes de guardar que el estado no sea uno "gestionado por el
+  /// gestor de tierra" (propuesta / validada): desde la app móvil el
+  /// operario solo puede transicionar a `contratista`, `ejecución` o
+  /// `finalizada`. Si el estado es inválido, se muestra un diálogo
+  /// informativo y se aborta el guardado.
   Future<void> guardar() async {
+    if (!_validateEstadoEditable()) return;
+
     isSaving.value = true;
     try {
       segmento.estado = estado.value;
@@ -358,6 +366,43 @@ class SegmentoDetalleController extends MyGetxController {
     } finally {
       isSaving.value = false;
     }
+  }
+
+  /// Valida que el estado actual es uno que el operario puede asignar desde
+  /// la app. Devuelve `false` y muestra un diálogo explicativo si no lo es.
+  bool _validateEstadoEditable() {
+    final e = estado.value;
+    if (e != EstadoActividad.propuesta && e != EstadoActividad.validada) {
+      return true;
+    }
+    Get.dialog<void>(
+      AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Expanded(child: Text('Estado no permitido')),
+          ],
+        ),
+        content: Text(
+          'El estado "${e.etiqueta}" es asignado por el gestor de la infraestructura y '
+          'y mientras la tarea este en este estado no puede modificarse.\n\n'
+          'Si has modificado algún valor de la tarea, cambia el estado a '
+          'uno de los siguientes antes de guardar:\n\n'
+          '  •  Contratista — para que el gestor valide los cambios.\n'
+          '  •  En Ejecución — para iniciar los trabajos.\n'
+          '  •  Finalizada — si los trabajos ya han terminado.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: Get.back,
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    return false;
   }
 
   void _showSnack({
