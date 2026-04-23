@@ -209,7 +209,6 @@ class _DropdownsBar extends StatelessWidget {
                 EstadoActividad.contratista,
                 EstadoActividad.validada,
                 EstadoActividad.ejecucion,
-                EstadoActividad.finalizada,
               ],
               itemLabel: (e) => e.etiqueta,
               itemColor: (e) =>

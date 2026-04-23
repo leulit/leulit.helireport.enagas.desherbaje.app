@@ -97,6 +97,9 @@ class SegmentosListController extends MyGetxController {
     final tipo = selectedTipo.value;
 
     filtradas.assignAll(segmentos.where((s) {
+      // Los segmentos finalizados no aparecen en el listado del operario:
+      // ya no hay acción que tomar sobre ellos.
+      if (s.estado == EstadoActividad.finalizada) return false;
       if (estado != null && s.estado != estado) return false;
       if (tipo != null && s.tipoActividad != tipo) return false;
       if (query.isNotEmpty && !s.descripcion.toLowerCase().contains(query)) {
