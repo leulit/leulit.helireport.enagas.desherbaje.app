@@ -16,6 +16,7 @@
 @.claude/skills/flutter-offline-sync/SKILL.md
 @.claude/skills/flutter-forms-validation/SKILL.md
 @.claude/skills/flutter-backend-integration/SKILL.md
+@.claude/skills/grill-me/SKILL.md
 
 ## Response Behaviour (Claude Code)
 

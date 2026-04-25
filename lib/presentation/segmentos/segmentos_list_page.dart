@@ -439,71 +439,48 @@ class _CtHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // El color de fondo indica el estado del acordión: más intenso cuando
+    // está abierto, claro cuando está cerrado. Sustituye al chevron para
+    // que toda la información quepa en una sola línea.
+    final bg = isExpanded
+        ? const Color(0xFFC8E6C9)
+        : AppColors.moduleGreenLight;
     return Material(
-      color: AppColors.moduleGreenLight,
+      color: bg,
       child: InkWell(
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              // Fila 1: icono + nombre CT + contador + chevron
-              Row(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: AppColors.moduleGreen,
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: const Icon(Icons.business,
-                        color: Colors.white, size: 18),
+              // Badge del contador en la cabecera (sustituye al icono).
+              _HeaderBadge(value: '$total', strong: true),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ctName,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.moduleGreenText,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      ctName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.moduleGreenText,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  _HeaderBadge(value: '$total', strong: true),
-                  const SizedBox(width: 6),
-                  AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more,
-                        color: AppColors.moduleGreenText),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Fila 2: chips de longitud y superficie alineados con el nombre
-              Padding(
-                padding: const EdgeInsets.only(left: 40),
-                child: Row(
-                  children: [
-                    _HeaderBadge(
-                      icon: Icons.straighten,
-                      value:
-                          '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
-                    ),
-                    const SizedBox(width: 6),
-                    _HeaderBadge(
-                      icon: Icons.square_foot,
-                      value:
-                          '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
-                    ),
-                  ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              const SizedBox(width: 10),
+              _HeaderBadge(
+                value:
+                    '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
+                bold: false,
+                width: 90,
+              ),
+              const SizedBox(width: 6),
+              _HeaderBadge(
+                value:
+                    '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
+                bold: false,
+                width: 90,
               ),
             ],
           ),
@@ -514,14 +491,16 @@ class _CtHeader extends StatelessWidget {
 }
 
 class _HeaderBadge extends StatelessWidget {
-  final IconData? icon;
   final String value;
   final bool strong;
+  final bool bold;
+  final double? width;
 
   const _HeaderBadge({
-    this.icon,
     required this.value,
     this.strong = false,
+    this.bold = true,
+    this.width,
   });
 
   @override
@@ -532,28 +511,21 @@ class _HeaderBadge extends StatelessWidget {
         strong ? AppColors.moduleGreen : const Color(0xFFA5D6A7);
 
     return Container(
+      width: width,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: border),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13, color: fg),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: fg,
-            ),
-          ),
-        ],
+      alignment: width == null ? null : Alignment.center,
+      child: Text(
+        value,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+          color: fg,
+        ),
       ),
     );
   }
