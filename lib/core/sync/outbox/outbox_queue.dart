@@ -1,190 +1,228 @@
-import 'dart:async';
-
 import 'package:sqflite/sqflite.dart';
 
 import '../contracts/sync_job.dart';
-import 'outbox_schema.dart';
+import '../database/offline_database.dart';
+import '../sync_actions.dart';
 
+/// Persistent operation queue for the sync engine.
+///
+/// Stores rows of pending writes (`create | update | delete`) per entity.
+/// The engine drains the queue manually (no automatic retry, no backoff,
+/// no expiration) when the user asks for it.
 class OutboxQueue {
+  static const _table = OfflineDatabase.syncQueueTable;
+
   final Database _db;
-  final StreamController<void> _changes = StreamController<void>.broadcast();
 
   OutboxQueue(this._db);
 
-  Stream<void> get changes => _changes.stream;
-
+  /// Enqueues an operation. Idempotent on the unique
+  /// `(entity_type, client_id, operation)` triple — replacing a row resets
+  /// `attempts`, `status`, and `last_error`.
   Future<int> enqueue({
     required String entityType,
-    required String entityId,
+    required String clientId,
     required SyncOperation operation,
-    String? payload,
     DatabaseExecutor? txn,
   }) async {
     final executor = txn ?? _db;
     final id = await executor.insert(
-      OutboxSchema.tableName,
+      _table,
       {
         'entity_type': entityType,
-        'entity_id': entityId,
+        'client_id': clientId,
         'operation': operation.wireName,
         'status': SyncStatus.pending.wireName,
         'attempts': 0,
-        'payload': payload,
+        'last_error': null,
+        'status_code': null,
         'created_at': DateTime.now().millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    _notify();
+    SyncActions.entityQueued.dispatch(
+      data: EntityQueuedEvent(
+        entityType: entityType,
+        clientId: clientId,
+        operation: operation,
+      ),
+    );
     return id;
   }
 
-  Future<List<SyncJob>> nextPending({int limit = 5}) async {
+  /// Returns up to [limit] pending jobs in FIFO order, optionally filtered by
+  /// [entityType].
+  Future<List<SyncJob>> nextPending({
+    String? entityType,
+    int limit = 100,
+  }) async {
     final rows = await _db.query(
-      OutboxSchema.tableName,
-      where: 'status = ?',
-      whereArgs: [SyncStatus.pending.wireName],
+      _table,
+      where: entityType == null
+          ? 'status = ?'
+          : 'status = ? AND entity_type = ?',
+      whereArgs: entityType == null
+          ? [SyncStatus.pending.wireName]
+          : [SyncStatus.pending.wireName, entityType],
       orderBy: 'created_at ASC, id ASC',
       limit: limit,
     );
     return rows.map(SyncJob.fromRow).toList(growable: false);
   }
 
-  Future<int> countPending() async {
-    final result = await _db.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${OutboxSchema.tableName} '
-      'WHERE status IN (?, ?)',
-      [SyncStatus.pending.wireName, SyncStatus.syncing.wireName],
-    );
-    return (result.first['c'] as int?) ?? 0;
-  }
+  Future<List<SyncJob>> pendingJobs({String? entityType}) =>
+      _allWithStatus(SyncStatus.pending, entityType: entityType);
 
-  Future<int> countByStatus(SyncStatus status) async {
-    final result = await _db.rawQuery(
-      'SELECT COUNT(*) AS c FROM ${OutboxSchema.tableName} WHERE status = ?',
-      [status.wireName],
-    );
-    return (result.first['c'] as int?) ?? 0;
-  }
+  Future<List<SyncJob>> rejectedJobs({String? entityType}) =>
+      _allWithStatus(SyncStatus.rejected, entityType: entityType);
 
-  Future<List<SyncJob>> allWithStatus(SyncStatus status) async {
+  Future<int> countPending({String? entityType}) =>
+      _countByStatus(SyncStatus.pending, entityType: entityType);
+
+  Future<int> countRejected({String? entityType}) =>
+      _countByStatus(SyncStatus.rejected, entityType: entityType);
+
+  Future<SyncJob?> byId(int jobId) async {
     final rows = await _db.query(
-      OutboxSchema.tableName,
-      where: 'status = ?',
-      whereArgs: [status.wireName],
-      orderBy: 'created_at DESC',
-    );
-    return rows.map(SyncJob.fromRow).toList(growable: false);
-  }
-
-  Future<SyncJob?> byId(int id) async {
-    final rows = await _db.query(
-      OutboxSchema.tableName,
+      _table,
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [jobId],
       limit: 1,
     );
     if (rows.isEmpty) return null;
     return SyncJob.fromRow(rows.first);
   }
 
-  Future<void> markSyncing(int id) async {
+  Future<void> markSyncing(int jobId) async {
+    final current = await byId(jobId);
+    final attempts = (current?.attempts ?? 0) + 1;
     await _db.update(
-      OutboxSchema.tableName,
+      _table,
       {
         'status': SyncStatus.syncing.wireName,
-        'attempts': await _incrementedAttempts(id),
+        'attempts': attempts,
       },
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [jobId],
     );
-    _notify();
   }
 
-  Future<void> markSynced(int id, {String? remoteId}) async {
+  Future<void> markSynced(int jobId, {String? remoteId}) async {
     await _db.update(
-      OutboxSchema.tableName,
+      _table,
       {
         'status': SyncStatus.synced.wireName,
         'synced_at': DateTime.now().millisecondsSinceEpoch,
         'remote_id': remoteId,
         'last_error': null,
+        'status_code': null,
       },
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [jobId],
     );
-    _notify();
   }
 
-  Future<void> markPending(int id, {required String error}) async {
+  Future<void> markPendingAgain(
+    int jobId, {
+    required String error,
+    int? statusCode,
+  }) async {
     await _db.update(
-      OutboxSchema.tableName,
+      _table,
       {
         'status': SyncStatus.pending.wireName,
         'last_error': error,
+        'status_code': statusCode,
       },
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [jobId],
     );
-    _notify();
   }
 
-  Future<void> markDead(int id, {required String reason}) async {
+  Future<void> markRejected(
+    int jobId, {
+    required String error,
+    int? statusCode,
+  }) async {
     await _db.update(
-      OutboxSchema.tableName,
+      _table,
       {
-        'status': SyncStatus.dead.wireName,
-        'last_error': reason,
+        'status': SyncStatus.rejected.wireName,
+        'last_error': error,
+        'status_code': statusCode,
       },
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [jobId],
     );
-    _notify();
   }
 
+  /// Promotes a rejected job back to pending so the user can retry it.
+  Future<void> retryRejected(int jobId) async {
+    await _db.update(
+      _table,
+      {
+        'status': SyncStatus.pending.wireName,
+        'last_error': null,
+        'status_code': null,
+      },
+      where: 'id = ? AND status = ?',
+      whereArgs: [jobId, SyncStatus.rejected.wireName],
+    );
+  }
+
+  /// Removes a job from the queue (used by "Descartar" in the UI).
+  Future<void> discardJob(int jobId) async {
+    await _db.delete(_table, where: 'id = ?', whereArgs: [jobId]);
+  }
+
+  /// Removes any pending job referencing the given entity. Called when the
+  /// repository deletes the local row before any push has succeeded.
   Future<void> removeForEntity({
     required String entityType,
-    required String entityId,
+    required String clientId,
   }) async {
     await _db.delete(
-      OutboxSchema.tableName,
-      where: 'entity_type = ? AND entity_id = ?',
-      whereArgs: [entityType, entityId],
+      _table,
+      where: 'entity_type = ? AND client_id = ?',
+      whereArgs: [entityType, clientId],
     );
-    _notify();
   }
 
-  Future<void> delete(int id) async {
-    await _db.delete(
-      OutboxSchema.tableName,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    _notify();
-  }
-
+  /// Garbage-collects long-since synced rows. Default 7 days.
   Future<int> purgeSynced({Duration olderThan = const Duration(days: 7)}) async {
     final threshold =
         DateTime.now().subtract(olderThan).millisecondsSinceEpoch;
-    final deleted = await _db.delete(
-      OutboxSchema.tableName,
+    return _db.delete(
+      _table,
       where: 'status = ? AND synced_at IS NOT NULL AND synced_at < ?',
       whereArgs: [SyncStatus.synced.wireName, threshold],
     );
-    if (deleted > 0) _notify();
-    return deleted;
   }
 
-  Future<int> _incrementedAttempts(int id) async {
-    final row = await byId(id);
-    return (row?.attempts ?? 0) + 1;
+  Future<List<SyncJob>> _allWithStatus(
+    SyncStatus status, {
+    String? entityType,
+  }) async {
+    final rows = await _db.query(
+      _table,
+      where: entityType == null
+          ? 'status = ?'
+          : 'status = ? AND entity_type = ?',
+      whereArgs: entityType == null
+          ? [status.wireName]
+          : [status.wireName, entityType],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(SyncJob.fromRow).toList(growable: false);
   }
 
-  void _notify() {
-    if (_changes.isClosed) return;
-    _changes.add(null);
-  }
-
-  Future<void> dispose() async {
-    await _changes.close();
+  Future<int> _countByStatus(SyncStatus status, {String? entityType}) async {
+    final result = await _db.rawQuery(
+      entityType == null
+          ? 'SELECT COUNT(*) AS c FROM $_table WHERE status = ?'
+          : 'SELECT COUNT(*) AS c FROM $_table WHERE status = ? AND entity_type = ?',
+      entityType == null ? [status.wireName] : [status.wireName, entityType],
+    );
+    return (result.first['c'] as int?) ?? 0;
   }
 }

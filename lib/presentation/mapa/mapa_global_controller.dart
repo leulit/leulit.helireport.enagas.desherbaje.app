@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
+import '../../core/services/gps_background_service.dart';
 import '../../core/services/pks_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/pk_entity.dart';
@@ -151,6 +152,9 @@ class MapaGlobalController extends GetxController {
     _loadUserCts();
     _loadSavedView();
     loadAll();
+    // GPS tracking lifecycle is bound to this screen (decision P15+P16):
+    // start when entering the map, stop on close.
+    unawaited(Get.find<GpsBackgroundService>().start());
   }
 
   @override
@@ -160,6 +164,7 @@ class MapaGlobalController extends GetxController {
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
+    unawaited(Get.find<GpsBackgroundService>().stop());
     super.onClose();
   }
 

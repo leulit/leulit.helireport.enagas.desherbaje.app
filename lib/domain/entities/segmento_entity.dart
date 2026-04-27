@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:latlong2/latlong.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/sync/contracts/syncable.dart';
 import '../../data/model/base_model.dart';
@@ -7,7 +9,6 @@ import '../../data/model/json_parsing_utils.dart';
 import '../../data/model/mensaje_entity.dart';
 import 'imagen_segmento_entity.dart';
 
-/// Define el tipo de instalación según la tabla `inventario_segmentos`.
 enum TipoInstalacion {
   concentrada,
   lineal;
@@ -25,7 +26,6 @@ enum TipoInstalacion {
   String get asString => name;
 }
 
-/// Tipo de actividad de desherbaje asociado al segmento.
 enum TipoActividad {
   desbroceManual('desbroce_manual', 'Desbroce Manual'),
   desbroceMecanico('desbroce_mecanico', 'Desbroce Mecánico'),
@@ -41,10 +41,6 @@ enum TipoActividad {
 
   static TipoActividad fromString(String? value) {
     if (value == null) return TipoActividad.desherbajeSelectivo;
-    // Compatibilidad con el valor legacy antes del cambio a "deshierbe_*":
-    // filas existentes en SQLite o respuestas antiguas del backend que
-    // todavía lleven "desherbaje_selectivo" deben mapear al mismo caso.
-    if (value == 'desherbaje_selectivo') return TipoActividad.desherbajeSelectivo;
     return TipoActividad.values.firstWhere(
       (e) => e.descripcion == value,
       orElse: () => TipoActividad.desherbajeSelectivo,
@@ -52,7 +48,6 @@ enum TipoActividad {
   }
 }
 
-/// Estado del segmento (antes era el estado de la actividad).
 enum EstadoActividad {
   propuesta('propuesta', 'Propuesta'),
   contratista('contratista', 'Contratista'),
@@ -85,6 +80,7 @@ enum EstadoActividad {
 
 enum SegmentoEntityFieldNames {
   id('id'),
+  clientId('client_id'),
   ctId('ct_id'),
   nombre('nombre'),
   descripcion('descripcion'),
@@ -103,17 +99,15 @@ enum SegmentoEntityFieldNames {
   estado('estado'),
   createdAt('created_at'),
   fechaInicio('fecha_inico'),
-  fechaFin('fecha_fin');
+  fechaFin('fecha_fin'),
+  updatedAt('updated_at');
 
   final String value;
   const SegmentoEntityFieldNames(this.value);
 }
 
-/// Entidad que representa un segmento de inventario (`inventario_segmentos`).
-///
-/// Absorbe los campos que antes vivían en `ActividadEntity` (`estado`,
-/// `tipoActividad`, `fechaInicio`, `fechaFin`, etc.). No hay un concepto
-/// separado de "actividad" en el dominio de la app.
+/// Segmento de inventario. Implementa [Syncable] con identidad estable por
+/// [clientId] (UUID v4). El `id` entero del backend viaja en [remoteId].
 class SegmentoEntity extends AbsBaseModel
     with BaseModelMixin
     implements Syncable {
@@ -121,14 +115,16 @@ class SegmentoEntity extends AbsBaseModel
     this.id,
     this.ctId,
     this.tipoInstalacion,
-    this.ubicacionGis,
-  );
+    this.ubicacionGis, {
+    String? clientId,
+  }) : _clientId = clientId ?? const Uuid().v4();
 
-  SegmentoEntity.empty() {
-    id = null;
-    ctId = 0;
-    tipoInstalacion = TipoInstalacion.lineal;
-    ubicacionGis = [];
+  SegmentoEntity.empty()
+      : id = null,
+        ctId = 0,
+        tipoInstalacion = TipoInstalacion.lineal,
+        ubicacionGis = [],
+        _clientId = const Uuid().v4() {
     nombre = null;
     descripcion = '';
     traza = null;
@@ -140,6 +136,8 @@ class SegmentoEntity extends AbsBaseModel
     fechaInicio = null;
     fechaFin = null;
   }
+
+  final String _clientId;
 
   int? id;
   int ctId = 0;
@@ -161,11 +159,23 @@ class SegmentoEntity extends AbsBaseModel
   DateTime? createdAt;
   DateTime? fechaInicio;
   DateTime? fechaFin;
+  DateTime _updatedAt = DateTime.now();
+
+  /// Set automatically by [touchUpdated] whenever the entity is mutated by a
+  /// repository operation. Drives conflict detection during pulls.
+  void touchUpdated() {
+    _updatedAt = DateTime.now();
+  }
 
   factory SegmentoEntity.fromJson(Map<String, dynamic> json) {
     final id = readJsonDataUtil<int?>(
       json,
       SegmentoEntityFieldNames.id.value,
+      null,
+    );
+    final clientId = readJsonDataUtil<String?>(
+      json,
+      SegmentoEntityFieldNames.clientId.value,
       null,
     );
     final ctId = readJsonDataUtil<int>(
@@ -204,7 +214,13 @@ class SegmentoEntity extends AbsBaseModel
       } catch (_) {}
     }
 
-    final entity = SegmentoEntity(id, ctId, tipoInstalacion, parsedUbicacion);
+    final entity = SegmentoEntity(
+      id,
+      ctId,
+      tipoInstalacion,
+      parsedUbicacion,
+      clientId: clientId,
+    );
 
     entity.nombre = readJsonDataUtil<String?>(
       json,
@@ -221,37 +237,12 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.descripcion.value,
       '',
     );
-
-    entity.pkInicio = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.pkInicio.value,
-      null,
-    ))?.toDouble();
-    entity.pkFin = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.pkFin.value,
-      null,
-    ))?.toDouble();
-    entity.latInicio = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.latInicio.value,
-      null,
-    ))?.toDouble();
-    entity.lngInicio = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.lngInicio.value,
-      null,
-    ))?.toDouble();
-    entity.latFin = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.latFin.value,
-      null,
-    ))?.toDouble();
-    entity.lngFin = (readJsonDataUtil<num?>(
-      json,
-      SegmentoEntityFieldNames.lngFin.value,
-      null,
-    ))?.toDouble();
+    entity.pkInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.pkInicio.value, null))?.toDouble();
+    entity.pkFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.pkFin.value, null))?.toDouble();
+    entity.latInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.latInicio.value, null))?.toDouble();
+    entity.lngInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.lngInicio.value, null))?.toDouble();
+    entity.latFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.latFin.value, null))?.toDouble();
+    entity.lngFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.lngFin.value, null))?.toDouble();
 
     entity.tipoActividad = TipoActividad.fromString(
       readJsonDataUtil<String>(
@@ -308,6 +299,16 @@ class SegmentoEntity extends AbsBaseModel
     entity.fechaFin =
         fechaFinRaw != null ? DateTime.tryParse(fechaFinRaw) : null;
 
+    final updatedAtRaw = readJsonDataUtil<String?>(
+      json,
+      SegmentoEntityFieldNames.updatedAt.value,
+      null,
+    );
+    if (updatedAtRaw != null) {
+      final parsed = DateTime.tryParse(updatedAtRaw);
+      if (parsed != null) entity._updatedAt = parsed;
+    }
+
     return entity;
   }
 
@@ -315,6 +316,7 @@ class SegmentoEntity extends AbsBaseModel
   Map<String, dynamic> toJson() {
     return {
       SegmentoEntityFieldNames.id.value: id,
+      SegmentoEntityFieldNames.clientId.value: clientId,
       SegmentoEntityFieldNames.ctId.value: ctId,
       SegmentoEntityFieldNames.nombre.value: nombre,
       SegmentoEntityFieldNames.descripcion.value: descripcion,
@@ -334,23 +336,22 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.mensajes.value:
           mensajes.map((e) => e.toJson()).toList(),
       SegmentoEntityFieldNames.createdAt.value: createdAt?.toIso8601String(),
-      SegmentoEntityFieldNames.fechaInicio.value:
-          fechaInicio?.toIso8601String(),
+      SegmentoEntityFieldNames.fechaInicio.value: fechaInicio?.toIso8601String(),
       SegmentoEntityFieldNames.fechaFin.value: fechaFin?.toIso8601String(),
+      SegmentoEntityFieldNames.updatedAt.value: updatedAt.toIso8601String(),
     };
   }
 
   // ──────────────────────────── Syncable ────────────────────────────
 
   @override
-  String get clientId => 'seg-${id ?? 0}';
+  String get clientId => _clientId;
 
   @override
   String? get remoteId => id?.toString();
 
   @override
-  DateTime get updatedAt =>
-      fechaFin ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime get updatedAt => _updatedAt;
 
   // ──────────────────────────── Derived ────────────────────────────
 
@@ -359,7 +360,6 @@ class SegmentoEntity extends AbsBaseModel
         traza,
       ].where((s) => s != null && s.isNotEmpty).join(' - ');
 
-  /// Longitud del segmento en metros calculada con Haversine sobre la traza GIS.
   double get longitud {
     if (ubicacionGis.length < 2) return 0.0;
     const distance = Distance();
@@ -373,7 +373,6 @@ class SegmentoEntity extends AbsBaseModel
 
   double get longitudKm => longitud / 1000;
 
-  /// Superficie estimada en m² (ancho de traza fijo de 4 m).
   double get superficie => longitud * 4;
 
   Map<String, dynamic> get ubicacionGisAsGeoJSON => {
@@ -382,7 +381,6 @@ class SegmentoEntity extends AbsBaseModel
             ubicacionGis.map((p) => [p.longitude, p.latitude]).toList(),
       };
 
-  /// Etiqueta del tipo de actividad (compatibilidad con callers previos).
   String get tipoLabel => tipoActividad.etiqueta;
 
   SegmentoEntity copyWith({
@@ -412,6 +410,7 @@ class SegmentoEntity extends AbsBaseModel
       ctId ?? this.ctId,
       tipoInstalacion ?? this.tipoInstalacion,
       ubicacionGis ?? List<LatLng>.from(this.ubicacionGis),
+      clientId: _clientId,
     );
     copy.nombre = nombre ?? this.nombre;
     copy.descripcion = descripcion ?? this.descripcion;
@@ -430,24 +429,20 @@ class SegmentoEntity extends AbsBaseModel
     copy.createdAt = createdAt ?? this.createdAt;
     copy.fechaInicio = fechaInicio ?? this.fechaInicio;
     copy.fechaFin = fechaFin ?? this.fechaFin;
+    copy._updatedAt = _updatedAt;
     return copy;
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SegmentoEntity &&
-          other.id == id &&
-          other.ctId == ctId &&
-          other.nombre == nombre &&
-          other.traza == traza);
+      (other is SegmentoEntity && other._clientId == _clientId);
 
   @override
-  int get hashCode =>
-      id.hashCode ^ ctId.hashCode ^ nombre.hashCode ^ traza.hashCode;
+  int get hashCode => _clientId.hashCode;
 
   @override
   String toString() =>
-      'SegmentoEntity(id: $id, ctId: $ctId, nombre: $nombre, '
+      'SegmentoEntity(clientId: $_clientId, id: $id, ctId: $ctId, '
       'estado: ${estado.descripcion}, longitud: ${longitudKm.toStringAsFixed(2)}km)';
 }

@@ -1,22 +1,34 @@
 import 'contracts/conflict_resolver.dart';
 import 'contracts/local_store.dart';
 import 'contracts/remote_adapter.dart';
+import 'contracts/remote_fetcher.dart';
 import 'contracts/syncable.dart';
 
 class TypeRegistration<T extends Syncable> {
   final String entityType;
-  final RemoteAdapter<T> adapter;
+  final LocalStore<T> store;
   final ConflictResolver<T> conflictResolver;
   final T Function(Map<String, dynamic> json) fromJson;
-  final LocalStore<T>? localStore;
+  final RemoteAdapter<T>? adapter;
+  final RemoteFetcher<T>? fetcher;
+
+  /// Maps an entity to a human-readable `{label: value}` map used by the
+  /// conflict diff view. Required when [conflictResolver] is
+  /// [InteractiveConflictResolver]; ignored otherwise.
+  final Map<String, String> Function(T entity)? formatForDisplay;
 
   const TypeRegistration({
     required this.entityType,
-    required this.adapter,
+    required this.store,
     required this.conflictResolver,
     required this.fromJson,
-    this.localStore,
+    this.adapter,
+    this.fetcher,
+    this.formatForDisplay,
   });
+
+  bool get hasAdapter => adapter != null;
+  bool get hasFetcher => fetcher != null;
 }
 
 class TypeRegistry {
@@ -28,6 +40,12 @@ class TypeRegistry {
         'Type "${registration.entityType}" is already registered.',
       );
     }
+    if (!registration.hasAdapter && !registration.hasFetcher) {
+      throw ArgumentError(
+        'Type "${registration.entityType}" must declare at least one of '
+        'adapter (push) or fetcher (pull).',
+      );
+    }
     _registrations[registration.entityType] =
         registration as TypeRegistration<Syncable>;
   }
@@ -35,10 +53,13 @@ class TypeRegistry {
   TypeRegistration<Syncable>? lookup(String entityType) =>
       _registrations[entityType];
 
-  bool isRegistered(String entityType) =>
-      _registrations.containsKey(entityType);
+  Iterable<TypeRegistration<Syncable>> get registrations =>
+      _registrations.values;
 
   Iterable<String> get registeredTypes => _registrations.keys;
+
+  bool isRegistered(String entityType) =>
+      _registrations.containsKey(entityType);
 
   bool get isEmpty => _registrations.isEmpty;
 

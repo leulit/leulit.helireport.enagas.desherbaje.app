@@ -1,64 +1,54 @@
 import 'syncable.dart';
 
-enum ConflictDecision { keepLocal, keepServer, merged, manual }
-
-class ResolutionResult<T extends Syncable> {
-  final ConflictDecision decision;
-  final T? resolved;
-
-  const ResolutionResult(this.decision, {this.resolved});
-
-  const ResolutionResult.keepLocal(T local)
-      : decision = ConflictDecision.keepLocal,
-        resolved = local;
-
-  const ResolutionResult.keepServer(T server)
-      : decision = ConflictDecision.keepServer,
-        resolved = server;
-
-  const ResolutionResult.merged(T merged)
-      : decision = ConflictDecision.merged,
-        resolved = merged;
-
-  const ResolutionResult.manual()
-      : decision = ConflictDecision.manual,
-        resolved = null;
-}
-
+/// Decides how to reconcile a divergence between the local copy of an entity
+/// and the version coming from the server (either via 409 on push or via
+/// `localUpdatedAt > remoteUpdatedAt` on pull / outbox-pending divergence).
+///
+/// Implementations are stateless and must be safe to share across calls.
+/// A `null` return value is the explicit signal "I cannot decide; defer to
+/// the user" — only [InteractiveConflictResolver] uses it.
 abstract class ConflictResolver<T extends Syncable> {
-  ResolutionResult<T> resolve({required T local, required T server});
+  /// Returns the version that should be persisted locally, or `null` to
+  /// hand off the decision to the user (the engine enqueues a row in
+  /// `sync_conflicts`).
+  T? resolve({required T local, required T remote});
 }
 
-class LastWriteWinsResolver<T extends Syncable> implements ConflictResolver<T> {
-  const LastWriteWinsResolver();
-
-  @override
-  ResolutionResult<T> resolve({required T local, required T server}) =>
-      local.updatedAt.isAfter(server.updatedAt)
-          ? ResolutionResult.keepLocal(local)
-          : ResolutionResult.keepServer(server);
-}
-
+/// Cloud is the source of truth. Used for read-only master data
+/// (`Gasoducto`, `PK`, …) where the operator never edits.
 class ServerWinsResolver<T extends Syncable> implements ConflictResolver<T> {
   const ServerWinsResolver();
 
   @override
-  ResolutionResult<T> resolve({required T local, required T server}) =>
-      ResolutionResult.keepServer(server);
+  T resolve({required T local, required T remote}) => remote;
 }
 
-class ClientWinsResolver<T extends Syncable> implements ConflictResolver<T> {
-  const ClientWinsResolver();
+/// Local always wins. Rare; reserve for cases where the operator's offline
+/// observation is authoritative regardless of backend state.
+class LocalWinsResolver<T extends Syncable> implements ConflictResolver<T> {
+  const LocalWinsResolver();
 
   @override
-  ResolutionResult<T> resolve({required T local, required T server}) =>
-      ResolutionResult.keepLocal(local);
+  T resolve({required T local, required T remote}) => local;
 }
 
-class ManualResolver<T extends Syncable> implements ConflictResolver<T> {
-  const ManualResolver();
+/// Compares timestamps. Useful for append-only / log-style entities where
+/// the freshest write is the correct one.
+class LastWriteWinsResolver<T extends Syncable> implements ConflictResolver<T> {
+  const LastWriteWinsResolver();
 
   @override
-  ResolutionResult<T> resolve({required T local, required T server}) =>
-      const ResolutionResult.manual();
+  T resolve({required T local, required T remote}) =>
+      local.updatedAt.isAfter(remote.updatedAt) ? local : remote;
+}
+
+/// Defers the decision to the user. The engine enqueues the divergence in
+/// `sync_conflicts` and the sync page renders a diff for the operator to
+/// resolve.
+class InteractiveConflictResolver<T extends Syncable>
+    implements ConflictResolver<T> {
+  const InteractiveConflictResolver();
+
+  @override
+  T? resolve({required T local, required T remote}) => null;
 }

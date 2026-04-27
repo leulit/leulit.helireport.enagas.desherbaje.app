@@ -1,35 +1,31 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:sqflite/sqflite.dart';
 
 import '../contracts/local_store.dart';
 import '../contracts/sync_job.dart';
 import '../contracts/syncable.dart';
-import '../engine/sync_engine.dart';
 import '../outbox/outbox_queue.dart';
-import '../sync_actions.dart';
 
+/// Generic CRUD façade over a [LocalStore] + [OutboxQueue] pair.
+///
+/// Writes always land in the local store first, then enqueue a sync job.
+/// Reads are on-demand from the local store (no streams, no caching).
+///
+/// **Does not trigger sync.** Drains happen exclusively when the user asks
+/// for them through the sync page or per-entity buttons.
 class OfflineRepository<T extends Syncable> {
   final String entityType;
   final Database _db;
   final LocalStore<T> _store;
   final OutboxQueue _outbox;
-  final SyncEngine _engine;
-  final bool Function() _isOnline;
 
   OfflineRepository({
     required this.entityType,
     required Database db,
     required LocalStore<T> store,
     required OutboxQueue outbox,
-    required SyncEngine engine,
-    required bool Function() isOnline,
   })  : _db = db,
         _store = store,
-        _outbox = outbox,
-        _engine = engine,
-        _isOnline = isOnline;
+        _outbox = outbox;
 
   Future<void> create(T entity) =>
       _persistAndEnqueue(entity, SyncOperation.create);
@@ -42,20 +38,11 @@ class OfflineRepository<T extends Syncable> {
       await _store.delete(entity.clientId, txn: txn);
       await _outbox.enqueue(
         entityType: entityType,
-        entityId: entity.clientId,
+        clientId: entity.clientId,
         operation: SyncOperation.delete,
-        payload: jsonEncode(entity.toJson()),
         txn: txn,
       );
     });
-    SyncActions.entityQueued.dispatch(
-      data: EntityQueuedEvent(
-        entityType: entityType,
-        entityId: entity.clientId,
-        operation: SyncOperation.delete,
-      ),
-    );
-    _triggerDrain();
   }
 
   Future<T?> findByClientId(String clientId) =>
@@ -68,24 +55,10 @@ class OfflineRepository<T extends Syncable> {
       await _store.upsert(entity, txn: txn);
       await _outbox.enqueue(
         entityType: entityType,
-        entityId: entity.clientId,
+        clientId: entity.clientId,
         operation: op,
-        payload: jsonEncode(entity.toJson()),
         txn: txn,
       );
     });
-    SyncActions.entityQueued.dispatch(
-      data: EntityQueuedEvent(
-        entityType: entityType,
-        entityId: entity.clientId,
-        operation: op,
-      ),
-    );
-    _triggerDrain();
-  }
-
-  void _triggerDrain() {
-    if (!_isOnline()) return;
-    unawaited(_engine.drain());
   }
 }

@@ -4,20 +4,33 @@ import 'package:sqflite/sqflite.dart';
 import '../data/local/local_database.dart';
 import '../data/network/network_service.dart';
 import '../data/services/json_loader_service.dart';
+import '../data/model/mensaje_entity.dart';
 import '../data/sync/imagen_local_store.dart';
 import '../data/sync/imagen_remote_adapter.dart';
+import '../data/sync/mensaje_local_store.dart';
+import '../data/sync/mensaje_remote_adapter.dart';
+import '../data/sync/position_batch_remote_adapter.dart';
+import '../data/sync/position_local_store.dart';
 import '../data/sync/segmento_local_store.dart';
 import '../data/sync/segmento_remote_adapter.dart';
+import '../data/sync/segmento_remote_fetcher.dart';
 import '../domain/entities/imagen_segmento_entity.dart';
+import '../domain/entities/position_batch_entity.dart';
 import '../domain/entities/segmento_entity.dart';
+import 'services/auth_expiration_handler.dart';
 import 'services/connectivity_service.dart';
 import 'services/gasoductos_service.dart';
+import 'services/gps_background_service.dart';
 import 'services/gps_service.dart';
 import 'services/pks_service.dart';
 import 'sync/sync.dart';
 
 class AppDI {
   static Future<void> init() async {
+    // Order matters: registry must exist before LocalDatabase opens, because
+    // OfflineDatabase.open iterates the registry to migrate each entity.
+    Get.put<TypeRegistry>(TypeRegistry(), permanent: true);
+
     await Get.putAsync<ConnectivityService>(
       () async => ConnectivityService(),
       permanent: true,
@@ -30,113 +43,81 @@ class AppDI {
     Get.put<JsonLoaderService>(JsonLoaderService(), permanent: true);
     Get.put<GasoductosService>(GasoductosService(), permanent: true);
     Get.put<PksService>(PksService(), permanent: true);
+    Get.put<AuthExpirationHandler>(AuthExpirationHandler(), permanent: true);
 
-    await _initSync();
-  }
-
-  static Future<void> _initSync() async {
     final db = await LocalDatabase.instance.database;
-    final connectivity = Get.find<ConnectivityService>();
-    final network = Get.find<NetworkService>();
+    Get.put<Database>(db, permanent: true);
 
-    final registry = TypeRegistry();
-    Get.put<TypeRegistry>(registry, permanent: true);
     final outbox = OutboxQueue(db);
     Get.put<OutboxQueue>(outbox, permanent: true);
-    final engine = SyncEngine(
-      outbox: outbox,
-      registry: registry,
-      isOnline: () => connectivity.isConnected,
-    );
-    Get.put<SyncEngine>(engine, permanent: true);
-    engine.start();
-
-    _registerSegmento(
-      db: db,
-      network: network,
-      registry: registry,
-      outbox: outbox,
-      engine: engine,
-      connectivity: connectivity,
-    );
-    _registerImagen(
-      db: db,
-      network: network,
-      registry: registry,
-      outbox: outbox,
-      engine: engine,
-      connectivity: connectivity,
-    );
-
-    final coordinator = BackgroundSyncCoordinator(
-      outbox: outbox,
-      engine: engine,
-    );
-    Get.put<BackgroundSyncCoordinator>(coordinator, permanent: true);
-    await coordinator.start();
-  }
-
-  static void _registerSegmento({
-    required Database db,
-    required NetworkService network,
-    required TypeRegistry registry,
-    required OutboxQueue outbox,
-    required SyncEngine engine,
-    required ConnectivityService connectivity,
-  }) {
-    final store = SegmentoLocalStore(db);
-    final adapter = SegmentoRemoteAdapter(network);
-    registry.register<SegmentoEntity>(
-      TypeRegistration<SegmentoEntity>(
-        entityType: 'segmento',
-        adapter: adapter,
-        conflictResolver: const ServerWinsResolver<SegmentoEntity>(),
-        fromJson: SegmentoEntity.fromJson,
-        localStore: store,
-      ),
-    );
-    Get.put<OfflineRepository<SegmentoEntity>>(
-      OfflineRepository<SegmentoEntity>(
-        entityType: 'segmento',
-        db: db,
-        store: store,
+    Get.put<SyncEngine>(
+      SyncEngine(
         outbox: outbox,
-        engine: engine,
-        isOnline: () => connectivity.isConnected,
+        registry: Get.find<TypeRegistry>(),
+        db: db,
       ),
       permanent: true,
     );
+
+    await _registerEntities(db);
   }
 
-  static void _registerImagen({
-    required Database db,
-    required NetworkService network,
-    required TypeRegistry registry,
-    required OutboxQueue outbox,
-    required SyncEngine engine,
-    required ConnectivityService connectivity,
-  }) {
-    final store = ImagenLocalStore(db);
-    final adapter = ImagenRemoteAdapter(network);
-    registry.register<ImagenSegmentoEntity>(
-      TypeRegistration<ImagenSegmentoEntity>(
-        entityType: 'imagen',
-        adapter: adapter,
-        conflictResolver: const ServerWinsResolver<ImagenSegmentoEntity>(),
-        fromJson: ImagenSegmentoEntity.fromMap,
-        localStore: store,
-      ),
+  static Future<void> _registerEntities(Database db) async {
+    final network = Get.find<NetworkService>();
+
+    final segmentoStore = SegmentoLocalStore(db);
+    Get.put<SegmentoLocalStore>(segmentoStore, permanent: true);
+    await OfflineModule.registerEntity<SegmentoEntity>(
+      entityType: 'segmento',
+      store: segmentoStore,
+      adapter: SegmentoRemoteAdapter(network),
+      fetcher: SegmentoRemoteFetcher(network),
+      conflictResolver: const InteractiveConflictResolver<SegmentoEntity>(),
+      fromJson: SegmentoEntity.fromJson,
+      formatForDisplay: _formatSegmentoForDisplay,
     );
-    Get.put<OfflineRepository<ImagenSegmentoEntity>>(
-      OfflineRepository<ImagenSegmentoEntity>(
-        entityType: 'imagen',
-        db: db,
-        store: store,
-        outbox: outbox,
-        engine: engine,
-        isOnline: () => connectivity.isConnected,
-      ),
-      permanent: true,
+
+    final imagenStore = ImagenLocalStore(db);
+    Get.put<ImagenLocalStore>(imagenStore, permanent: true);
+    await OfflineModule.registerEntity<ImagenSegmentoEntity>(
+      entityType: 'imagen',
+      store: imagenStore,
+      adapter: ImagenRemoteAdapter(network),
+      conflictResolver: const ServerWinsResolver<ImagenSegmentoEntity>(),
+      fromJson: ImagenSegmentoEntity.fromJson,
     );
+
+    final mensajeStore = MensajeLocalStore(db);
+    Get.put<MensajeLocalStore>(mensajeStore, permanent: true);
+    await OfflineModule.registerEntity<MensajeSegmentoEntity>(
+      entityType: 'mensaje',
+      store: mensajeStore,
+      adapter: MensajeRemoteAdapter(network),
+      conflictResolver: const ServerWinsResolver<MensajeSegmentoEntity>(),
+      fromJson: MensajeSegmentoEntity.fromJson,
+    );
+
+    final positionStore = PositionLocalStore(db);
+    Get.put<PositionLocalStore>(positionStore, permanent: true);
+    await OfflineModule.registerEntity<PositionBatchEntity>(
+      entityType: 'position_batch',
+      store: positionStore,
+      adapter: PositionBatchRemoteAdapter(network),
+      conflictResolver: const ServerWinsResolver<PositionBatchEntity>(),
+      fromJson: PositionBatchEntity.fromJson,
+    );
+
+    Get.put<GpsBackgroundService>(GpsBackgroundService(), permanent: true);
   }
+
+  static Map<String, String> _formatSegmentoForDisplay(SegmentoEntity s) => {
+        'CT': s.ctId.toString(),
+        'Nombre': s.nombre ?? '—',
+        'Traza': s.traza ?? '—',
+        'Estado': s.estado.etiqueta,
+        'Tipo': s.tipoActividad.etiqueta,
+        'PK Inicio': s.pkInicio?.toStringAsFixed(3) ?? '—',
+        'PK Fin': s.pkFin?.toStringAsFixed(3) ?? '—',
+        'Longitud': '${s.longitudKm.toStringAsFixed(2)} km',
+      };
 }

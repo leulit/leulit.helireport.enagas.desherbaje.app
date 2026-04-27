@@ -8,18 +8,60 @@ import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../model/mensaje_entity.dart';
 
-/// SQLite-backed [LocalStore] for [SegmentoEntity].
-///
-/// Writes against the `segmentos` table defined in `LocalDatabase` (schema
-/// v5). Every [upsert] flags the row as pending sync (`needs_sync = 1`);
-/// [markSynced] is the only path that clears the flag.
+/// SQLite-backed [LocalStore] for [SegmentoEntity]. Owns the `segmentos`
+/// table schema (PK = `client_id` UUID).
 class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   static const String _table = 'segmentos';
-  static const String _clientIdPrefix = 'seg-';
 
   final Database _db;
 
   SegmentoLocalStore(this._db);
+
+  @override
+  String get entityType => 'segmento';
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> migrate(Database db, int from, int to) async {
+    if (from == 0 && to == 1) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_table (
+          client_id         TEXT PRIMARY KEY,
+          id                INTEGER,
+          ct_id             INTEGER NOT NULL DEFAULT 0,
+          nombre            TEXT,
+          descripcion       TEXT NOT NULL DEFAULT '',
+          traza             TEXT,
+          tipo_instalacion  TEXT NOT NULL DEFAULT 'lineal',
+          pk_inicio         REAL,
+          pk_fin            REAL,
+          lat_inicio        REAL,
+          lng_inicio        REAL,
+          lat_fin           REAL,
+          lng_fin           REAL,
+          ubicacion_gis     TEXT,
+          tipo_actividad    TEXT NOT NULL DEFAULT 'deshierbe_selectivo',
+          estado            TEXT NOT NULL DEFAULT 'propuesta',
+          imagenes_json     TEXT,
+          mensajes_json     TEXT,
+          created_at        TEXT,
+          fecha_inicio      TEXT,
+          fecha_fin         TEXT,
+          updated_at        TEXT NOT NULL,
+          synced_at         TEXT
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_ct ON $_table(ct_id)',
+      );
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
+        'ON $_table(id) WHERE id IS NOT NULL',
+      );
+    }
+  }
 
   @override
   Future<void> upsert(SegmentoEntity entity, {DatabaseExecutor? txn}) async {
@@ -33,35 +75,30 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
 
   @override
   Future<void> delete(String clientId, {DatabaseExecutor? txn}) async {
-    final id = _parseClientId(clientId);
     final executor = txn ?? _db;
     await executor.delete(
       _table,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'client_id = ?',
+      whereArgs: [clientId],
     );
   }
 
   @override
   Future<SegmentoEntity?> findByClientId(String clientId) async {
-    final id = _parseClientId(clientId);
     final rows = await _db.query(
       _table,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'client_id = ?',
+      whereArgs: [clientId],
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return rowToEntity(rows.first);
+    return _rowToEntity(rows.first);
   }
 
   @override
   Future<List<SegmentoEntity>> findAll() async {
-    // SQLite doesn't support `NULLS LAST`; plain DESC puts NULLs first on
-    // ASC and last on DESC — which matches what we want for recently-finished
-    // segments first.
     final rows = await _db.query(_table, orderBy: 'fecha_fin DESC');
-    return rows.map(rowToEntity).toList(growable: false);
+    return rows.map(_rowToEntity).toList(growable: false);
   }
 
   @override
@@ -70,57 +107,50 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
     String? remoteId,
     DatabaseExecutor? txn,
   }) async {
-    final id = _parseClientId(clientId);
     final executor = txn ?? _db;
+    final updates = <String, Object?>{
+      'synced_at': DateTime.now().toIso8601String(),
+    };
+    if (remoteId != null) {
+      final asInt = int.tryParse(remoteId);
+      if (asInt != null) updates['id'] = asInt;
+    }
     await executor.update(
       _table,
-      {
-        'synced_at': DateTime.now().toIso8601String(),
-        'needs_sync': 0,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
+      updates,
+      where: 'client_id = ?',
+      whereArgs: [clientId],
     );
   }
 
-  /// Public so the offline data provider can reuse the same row → entity
-  /// mapping without duplicating code.
-  static SegmentoEntity rowToEntity(Map<String, Object?> row) =>
-      _SegmentoRowMapper.toEntity(row);
-
-  /// Public so the offline data provider can reuse the same entity → row
-  /// mapping.
-  static Map<String, Object?> entityToRow(SegmentoEntity entity) =>
-      _SegmentoRowMapper.toRow(entity);
-
-  Map<String, Object?> _entityToRow(SegmentoEntity entity) =>
-      _SegmentoRowMapper.toRow(entity);
-
-  int _parseClientId(String clientId) {
-    if (!clientId.startsWith(_clientIdPrefix)) {
-      throw ArgumentError.value(
-        clientId,
-        'clientId',
-        'Expected prefix "$_clientIdPrefix"',
-      );
-    }
-    final raw = clientId.substring(_clientIdPrefix.length);
-    final parsed = int.tryParse(raw);
-    if (parsed == null) {
-      throw ArgumentError.value(
-        clientId,
-        'clientId',
-        'Suffix "$raw" is not a valid integer id',
-      );
-    }
-    return parsed;
+  /// Looks up a segmento by its (legacy / numeric) backend id. Returns null
+  /// if the row hasn't been pulled yet.
+  Future<SegmentoEntity?> findByRemoteId(int remoteId) async {
+    final rows = await _db.query(
+      _table,
+      where: 'id = ?',
+      whereArgs: [remoteId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _rowToEntity(rows.first);
   }
-}
 
-/// Centralises the row ↔ entity mapping so both [SegmentoLocalStore] and
-/// `SegmentoDataProviderOffline` read/write rows the same way.
-class _SegmentoRowMapper {
-  static Map<String, Object?> toRow(SegmentoEntity e) => {
+  /// Returns segmentos belonging to any of the given CTs.
+  Future<List<SegmentoEntity>> findByCts(List<int> cts) async {
+    if (cts.isEmpty) return const [];
+    final placeholders = List.filled(cts.length, '?').join(',');
+    final rows = await _db.query(
+      _table,
+      where: 'ct_id IN ($placeholders)',
+      whereArgs: cts,
+      orderBy: 'fecha_fin DESC',
+    );
+    return rows.map(_rowToEntity).toList(growable: false);
+  }
+
+  Map<String, Object?> _entityToRow(SegmentoEntity e) => {
+        'client_id': e.clientId,
         'id': e.id,
         'ct_id': e.ctId,
         'nombre': e.nombre,
@@ -136,17 +166,15 @@ class _SegmentoRowMapper {
         'ubicacion_gis': jsonEncode(e.ubicacionGisAsGeoJSON),
         'tipo_actividad': e.tipoActividad.descripcion,
         'estado': e.estado.descripcion,
-        'imagenes_json':
-            jsonEncode(e.imagenes.map((i) => i.toJson()).toList()),
-        'mensajes_json':
-            jsonEncode(e.mensajes.map((m) => m.toJson()).toList()),
+        'imagenes_json': jsonEncode(e.imagenes.map((i) => i.toJson()).toList()),
+        'mensajes_json': jsonEncode(e.mensajes.map((m) => m.toJson()).toList()),
         'created_at': e.createdAt?.toIso8601String(),
         'fecha_inicio': e.fechaInicio?.toIso8601String(),
         'fecha_fin': e.fechaFin?.toIso8601String(),
-        'needs_sync': 1,
+        'updated_at': e.updatedAt.toIso8601String(),
       };
 
-  static SegmentoEntity toEntity(Map<String, Object?> row) {
+  SegmentoEntity _rowToEntity(Map<String, Object?> row) {
     final ubicacion = _parseUbicacion(row['ubicacion_gis'] as String?);
 
     final entity = SegmentoEntity(
@@ -154,6 +182,7 @@ class _SegmentoRowMapper {
       (row['ct_id'] as int?) ?? 0,
       TipoInstalacion.fromString(row['tipo_instalacion'] as String?),
       ubicacion,
+      clientId: row['client_id'] as String,
     );
 
     entity.nombre = row['nombre'] as String?;

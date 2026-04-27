@@ -65,6 +65,12 @@ class ApiEndpoints {
   /// Subida multipart de imágenes (legacy: `/operador/additem`).
   static String get imagenAdd => '$baseUrl/operador/additem';
 
+  // ──────────────────────────── Posiciones GPS ────────────────────────────
+
+  /// Subida en lote de puntos GPS. Idempotente por `batch_client_id`.
+  /// Documentado en `docs/BACKEND_SYNC_CONTRACT.md` §8.
+  static String get positionsBatch => '$baseUrl/positions/batch';
+
   /// Thumbnail de incidencia (mock data en `captura_fotos_controller`).
   static String incidenciaThumb(int id, int width, int height) =>
       '$baseUrl/incidencias/thumbdb/$id/$width/$height';

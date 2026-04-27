@@ -5,15 +5,60 @@ import '../../domain/entities/imagen_segmento_entity.dart';
 
 /// SQLite-backed [LocalStore] for [ImagenSegmentoEntity].
 ///
-/// Persists in `imagenes_segmento` (schema v6). The entity's `clientId` is a
-/// UUID generated at construction time and stored in the `client_id` column,
-/// so the outbox is idempotent before the backend assigns a remote `id`.
+/// Persists in `imagenes_segmento`. The entity's `clientId` is a UUID
+/// generated at construction time and stored in the `client_id` column, so
+/// the outbox is idempotent before the backend assigns a remote `id`.
 class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
   static const String _table = 'imagenes_segmento';
 
   final Database _db;
 
   ImagenLocalStore(this._db);
+
+  @override
+  String get entityType => 'imagen';
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> migrate(Database db, int from, int to) async {
+    if (from == 0 && to == 1) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_table (
+          client_id        TEXT PRIMARY KEY,
+          id               INTEGER,
+          actividad_id     INTEGER NOT NULL DEFAULT 0,
+          segmento_id      INTEGER NOT NULL,
+          tipo_foto        TEXT NOT NULL,
+          filename         TEXT NOT NULL,
+          ruta             TEXT NOT NULL,
+          url              TEXT,
+          mime_type        TEXT NOT NULL DEFAULT 'image/jpeg',
+          tamanyo_bytes    INTEGER,
+          latitud          REAL,
+          longitud         REAL,
+          fixed_latitud    REAL,
+          fixed_longitud   REAL,
+          capturada_at     TEXT NOT NULL,
+          subida_at        TEXT,
+          subida_por       INTEGER,
+          created_at       TEXT,
+          updated_at       TEXT,
+          synced_at        TEXT,
+          needs_sync       INTEGER NOT NULL DEFAULT 1
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_seg '
+        'ON $_table(segmento_id)',
+      );
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
+        'ON $_table(id) WHERE id IS NOT NULL',
+      );
+    }
+  }
 
   @override
   Future<void> upsert(

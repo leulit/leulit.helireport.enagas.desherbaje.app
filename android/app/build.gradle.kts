@@ -28,7 +28,9 @@ android {
 
     defaultConfig {
         applicationId = "com.leulit.enagas.helireport_desherbaje"
-        minSdk = flutter.minSdkVersion
+        // Decision P12: minSdk = Android 14 (API 34). FOREGROUND_SERVICE_LOCATION
+        // requires it, so fixing minSdk here keeps the manifest contract honest.
+        minSdk = 34
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

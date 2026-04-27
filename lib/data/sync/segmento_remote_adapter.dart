@@ -10,19 +10,11 @@ import '../network/sync_outcome_from_network_error.dart';
 
 /// [RemoteAdapter] for [SegmentoEntity].
 ///
-/// The backend owns creation; the app only pushes `update`. `create`/`delete`
-/// are explicitly rejected as unrecoverable.
+/// Backend currently only supports `update`. `create` and `delete` come back
+/// as [SyncUnrecoverable] until the backend exposes those operations.
 ///
-/// El endpoint es `POST /segmentos/update/{id}`. El body incluye siempre el
-/// `estado`, y opcionalmente las coordenadas de los extremos
-/// (`lat_inicio`/`lng_inicio`/`lat_fin`/`lng_fin`) y la polilínea
-/// `ubicacion_gis` en formato GeoJSON LineString — todos los campos
-/// editables desde la UI viajan en la misma request.
-///
-/// Conflicts (`NetworkErrorCategory.conflict`) are currently reported as
-/// [SyncUnrecoverable] because the backend response body for this endpoint
-/// has no known shape to rebuild the server version from. Replace with a
-/// proper parser + [SyncConflict] once that contract is defined.
+/// The endpoint is `POST /segmentos/update/{id}` with the editable fields in
+/// the body. 401 surfaces as [AuthExpiredException] via the helper.
 class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
   final NetworkService _network;
   final FlutterSecureStorage _storage;
@@ -39,12 +31,23 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
   }) async {
     if (operation != SyncOperation.update) {
       return SyncUnrecoverable<SegmentoEntity>(
-        'Operation not supported for SegmentoEntity: ${operation.name}',
+        'Operation ${operation.name} not supported for segmento yet',
+        errorMessageEs:
+            'El servidor todavía no acepta esta operación para segmentos.',
+      );
+    }
+    final remoteId = entity.id;
+    if (remoteId == null) {
+      return SyncUnrecoverable<SegmentoEntity>(
+        'Segmento sin id remoto: no puede actualizarse',
+        errorMessageEs:
+            'El segmento aún no existe en el servidor; no se puede actualizar.',
       );
     }
 
     try {
       final body = <String, dynamic>{
+        'client_id': entity.clientId,
         'estado': entity.estado.descripcion,
         if (entity.latInicio != null) 'lat_inicio': entity.latInicio,
         if (entity.lngInicio != null) 'lng_inicio': entity.lngInicio,
@@ -55,25 +58,19 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
       };
 
       final response = await _network.post(
-        ApiEndpoints.segmentoUpd(entity.id!),
+        ApiEndpoints.segmentoUpd(remoteId),
         body: body,
         headers: await _authHeader(),
       );
 
       if (response.isSuccess) {
-        return SyncSuccess<SegmentoEntity>(remoteId: entity.id.toString());
+        return SyncSuccess<SegmentoEntity>(remoteId: remoteId.toString());
       }
       return SyncUnrecoverable<SegmentoEntity>(
         'HTTP ${response.statusCode}',
         statusCode: response.statusCode,
       );
     } on NetworkError catch (err) {
-      if (err.category == NetworkErrorCategory.conflict) {
-        return SyncUnrecoverable<SegmentoEntity>(
-          'Conflict on segmento update (no server version parsing implemented)',
-          statusCode: err.statusCode,
-        );
-      }
       return syncOutcomeFromNetworkError<SegmentoEntity>(err);
     }
   }

@@ -95,82 +95,133 @@ lib/
 ├── main_app.dart                                  # GetMaterialApp config, tema, rutas
 ├── core/
 │   ├── app_config.dart                            # baseUrl, hmacSecret
-│   ├── app_di.dart                                # Dependency injection global
+│   ├── app_di.dart                                # DI global. Registry → DB → engine → entities
 │   ├── app_router.dart                            # AppRoutes + AppPages + AuthMiddleware
 │   ├── app_theme.dart                             # Colores, TextStyles, espaciado
-│   └── services/
-│       ├── api_security_service.dart              # Generación headers HMAC
-│       ├── connectivity_service.dart              # GetxService: monitoriza red
-│       └── gps_service.dart                       # GetxService: permisos de ubicación
+│   ├── app_typed_actions.dart                     # TypedActions globales del proyecto
+│   ├── api_endpoints.dart                         # URLs externas y endpoints del backend
+│   ├── my_getx_controller.dart                    # Base controller con TypedAction lifecycle
+│   ├── result/data_result.dart                    # Either<Failure, T> del proyecto
+│   ├── services/
+│   │   ├── api_security_service.dart              # Generación headers HMAC
+│   │   ├── auth_expiration_handler.dart           # Listener global de SyncActions.authExpired
+│   │   ├── connectivity_service.dart              # GetxService: monitoriza red
+│   │   ├── gasoductos_service.dart                # Master data legacy (no integrado al motor)
+│   │   ├── gps_background_service.dart            # GPS background con buffer 500/30s
+│   │   ├── gps_service.dart                       # Permisos de ubicación
+│   │   └── pks_service.dart                       # Master data PK legacy
+│   └── sync/                                      # Motor offline-first (extraíble a paquete)
+│       ├── sync.dart                              # Barrel export público
+│       ├── sync_actions.dart                      # TypedActions del motor
+│       ├── type_registry.dart                     # TypeRegistration<T> + TypeRegistry
+│       ├── offline_module.dart                    # registerEntity<T>() — extension point
+│       ├── contracts/
+│       │   ├── syncable.dart                      # clientId/remoteId/updatedAt/toJson
+│       │   ├── local_store.dart                   # entityType + schemaVersion + migrate + CRUD
+│       │   ├── remote_adapter.dart                # push() + SyncOutcome variants
+│       │   ├── remote_fetcher.dart                # pullAll() (opcional por entidad)
+│       │   ├── conflict_resolver.dart             # 4 presets: ServerWins/LocalWins/LWW/Interactive
+│       │   ├── sync_job.dart                      # SyncOperation + SyncStatus + SyncJob row
+│       │   └── auth_expired_exception.dart        # Excepción 401 que aborta drain
+│       ├── database/
+│       │   └── offline_database.dart              # WAL + tablas infra + migrateEntity
+│       ├── outbox/
+│       │   └── outbox_queue.dart                  # CRUD sync_queue (sin retry, sin backoff)
+│       ├── engine/
+│       │   ├── sync_engine.dart                   # drain() con TaskPipeline por job
+│       │   ├── sync_job_context.dart
+│       │   └── tasks/
+│       │       ├── load_entity_task.dart
+│       │       ├── invoke_remote_adapter_task.dart
+│       │       ├── interpret_outcome_task.dart
+│       │       ├── update_local_state_task.dart
+│       │       └── dispatch_action_task.dart
+│       ├── pull/
+│       │   ├── cancel_token.dart                  # Cancelación cooperativa
+│       │   ├── pull_context.dart
+│       │   ├── pull_coordinator.dart              # pullNow() con TaskPipeline
+│       │   └── tasks/
+│       │       ├── invoke_remote_fetcher_task.dart
+│       │       ├── detect_conflicts_task.dart
+│       │       ├── upsert_non_conflicting_task.dart
+│       │       ├── enqueue_conflicts_task.dart
+│       │       ├── update_pull_state_task.dart
+│       │       └── dispatch_pull_completed_task.dart
+│       └── repository/
+│           └── offline_repository.dart            # CRUD genérico local + outbox enqueue
 ├── domain/
 │   ├── entities/
-│   │   ├── actividad_entity.dart
-│   │   ├── segmento_entity.dart
-│   │   ├── imagen_actividad_entity.dart
+│   │   ├── segmento_entity.dart                   # Implementa Syncable
+│   │   ├── imagen_segmento_entity.dart            # Implementa Syncable
+│   │   ├── position_batch_entity.dart             # Lote GPS — implementa Syncable
+│   │   ├── ct_info_entity.dart
+│   │   ├── gasoducto_entity.dart
 │   │   └── user_entity.dart
 │   ├── repository/
-│   │   ├── actividad_repository.dart              # Interface
+│   │   ├── segmento_repository.dart               # Interface
 │   │   └── auth_repository.dart                   # Interface
 │   └── usecases/
-│       ├── get_actividades_usecase.dart
-│       ├── update_actividad_usecase.dart
-│       └── upload_image_usecase.dart
+│       ├── get_segmentos_usecase.dart
+│       └── update_segmento_estado_usecase.dart
 ├── data/
 │   ├── local/
-│   │   └── local_database.dart                    # SQLite via sqflite
+│   │   └── local_database.dart                    # Wrapper sobre OfflineDatabase + tablas master
 │   ├── network/
-│   │   └── network_service.dart                   # Dio + interceptor HMAC
+│   │   ├── network_service.dart                   # Dio + interceptor HMAC + retry transporte
+│   │   ├── network_error.dart                     # NetworkErrorCategory + NetworkError
+│   │   └── sync_outcome_from_network_error.dart   # Mapper + 401 → AuthExpiredException
+│   ├── model/
+│   │   ├── mensaje_entity.dart                    # MensajeSegmentoEntity (Syncable)
+│   │   └── ...
 │   ├── providers/
-│   │   ├── actividad_data_provider.dart           # Interface
-│   │   ├── actividad_data_provider_factory.dart   # Factory online/offline
-│   │   ├── actividad_data_provider_online.dart
-│   │   ├── actividad_data_provider_offline.dart
-│   │   ├── auth_data_provider.dart
-│   │   └── image_upload_provider.dart
-│   └── repository/
-│       ├── actividad_repository_impl.dart
-│       ├── auth_repository_impl.dart
-│       └── imagen_repository_impl.dart
+│   │   └── auth_data_provider.dart                # Solo auth queda como provider standalone
+│   ├── repository/
+│   │   ├── auth_repository_impl.dart
+│   │   ├── segmento_repository_impl.dart          # Usa OfflineRepository<SegmentoEntity>
+│   │   ├── imagen_repository_impl.dart            # Usa OfflineRepository<ImagenSegmentoEntity>
+│   │   └── mensaje_segmento_repository.dart       # Push via motor + lectura online (TODO §12.1)
+│   └── sync/                                      # Adapters/stores específicos por entidad
+│       ├── segmento_local_store.dart
+│       ├── segmento_remote_adapter.dart
+│       ├── segmento_remote_fetcher.dart
+│       ├── imagen_local_store.dart
+│       ├── imagen_remote_adapter.dart
+│       ├── mensaje_local_store.dart
+│       ├── mensaje_remote_adapter.dart
+│       ├── position_local_store.dart
+│       └── position_batch_remote_adapter.dart
 └── presentation/
     ├── auth/
     │   ├── login_page.dart
     │   ├── login_page_binding.dart
     │   └── login_page_controller.dart
-    ├── actividades/
-    │   ├── actividades_list_page.dart
-    │   ├── actividades_list_binding.dart
-    │   └── actividades_list_controller.dart
-    ├── detalle/
-    │   ├── actividad_detalle_page.dart
-    │   ├── actividad_detalle_binding.dart
-    │   └── actividad_detalle_controller.dart
-    ├── fotos/
-    │   ├── captura_fotos_page.dart
-    │   ├── captura_fotos_binding.dart
-    │   └── captura_fotos_controller.dart
-    ├── sincronizacion/
+    ├── segmentos/                                 # Listado de segmentos
+    │   ├── segmentos_list_page.dart
+    │   ├── segmentos_list_binding.dart
+    │   └── segmentos_list_controller.dart
+    ├── detalle/                                   # Detalle de segmento + edición
+    │   ├── segmento_detalle_page.dart
+    │   ├── segmento_detalle_binding.dart
+    │   ├── segmento_detalle_controller.dart
+    │   └── edit_extremos/
+    ├── camera/                                    # Captura de fotos
+    │   └── camera_capture_page.dart
+    ├── forzar_envio/                              # Atajo "subir todo lo de esta entidad"
+    │   ├── forzar_envio_page.dart
+    │   ├── forzar_envio_binding.dart
+    │   └── forzar_envio_controller.dart
+    ├── sincronizacion/                            # Sync page con 3 secciones + Preparar campo
     │   ├── sincronizacion_page.dart
     │   ├── sincronizacion_binding.dart
-    │   └── sincronizacion_controller.dart          # Métodos iniciar/cancelar/reintentar stub
-    ├── mapa/
-    │   ├── mapa_global_page.dart
-    │   ├── mapa_global_binding.dart
-    │   ├── mapa_global_controller.dart             # Registra LinesCutController en onInit
-    │   ├── lines_cut/                              # Feature "Líneas de corte" (portada del web)
-    │   │   ├── lines_cut_math.dart                 # Orientación, intersección, sideOfLine
-    │   │   ├── lines_cut_engine.dart               # extractSegmentsBetweenCutLines
-    │   │   ├── lines_cut_controller.dart           # GetxController: line1/line2, canCut, apply
-    │   │   ├── lines_cut_ui.dart                   # Map layers + botón modo + panel control
-    │   │   ├── lines_cut_dialog.dart               # Captura descripción/tipo/estado
-    │   │   ├── polyline_segment.dart               # Modelo de salida con extractores
-    │   │   └── polyline_hit_data.dart              # `GasoductoHitData` (hitValue)
-    │   └── legacy/
-    │       └── add_segmento_longpress_legacy.dart  # Flujo antiguo long-press (archivado)
-    └── widgets/
-        ├── actividad_card_widget.dart
-        ├── estado_badge_widget.dart
-        ├── segmento_card_widget.dart
-        └── upload_progress_widget.dart
+    │   ├── sincronizacion_controller.dart
+    │   ├── sync_models.dart                       # DTOs UI: PendingByEntity, ConflictRow, ...
+    │   └── field_work_tasks.dart                  # PipelineTasks de "Preparar trabajo de campo"
+    └── mapa/
+        ├── mapa_global_page.dart
+        ├── mapa_global_binding.dart
+        ├── mapa_global_controller.dart            # Arranca/para GpsBackgroundService
+        ├── lines_cut/
+        └── legacy/
 ```
 
 ---
@@ -180,65 +231,80 @@ lib/
 | Constante | Path | Página | Protegida |
 |---|---|---|---|
 | `AppRoutes.login` | `/login` | `LoginPage` | No |
-| `AppRoutes.actividades` | `/actividades` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
-| `AppRoutes.detalle` | `/actividades/detalle` | `SegmentoDetallePage` | Sí |
-| `AppRoutes.fotos` | `/actividades/fotos` | `CapturaFotosPage` | Sí |
+| `AppRoutes.segmentos` | `/segmentos` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
+| `AppRoutes.detalle` | `/segmentos/detalle` | `SegmentoDetallePage` | Sí |
+| `AppRoutes.camera` | `/camera` | `CameraCapturePage` | Sí |
+| `AppRoutes.mapa` | `/mapa` | `MapaGlobalPage` | Sí |
 | `AppRoutes.sincronizacion` | `/sincronizacion` | `SincronizacionPage` | Sí (`AuthMiddleware`) |
+| `AppRoutes.forzarEnvio` | `/forzar-envio` | `ForzarEnvioPage` | Sí (`AuthMiddleware`) |
 
 ---
 
 ## Entidades de Dominio
 
-### `ActividadEntity`
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id` | `int` | ID remoto |
-| `posicionId` | `int` | Referencia a posición/instalación |
-| `tipoActividad` | `TipoActividad` | desherbajeSelectivo, desbroceManual, desbroceMecanico, desratizacion |
-| `estado` | `EstadoActividad` | propuesta, validada, ejecucion, finalizada, cerrada |
-| `descripcion` | `String` | Texto libre |
-| `superficieM2` | `double?` | Superficie en m² |
-| `costeEstimado` | `double?` | Coste en € |
-| `fechaProgramada` | `DateTime?` | |
-| `fechaInicio` / `fechaFin` | `DateTime?` | |
-| `segmentos` | `List<SegmentoEntity>` | |
-| `longitudTotal` | getter `double` | Suma longitudes de segmentos |
+Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 inmutable, `remoteId?` asignado por backend, `updatedAt`). El concepto de `ActividadEntity` ya no existe: sus campos viven dentro de `SegmentoEntity` (estado, fechas, tipoActividad).
 
-### `SegmentoEntity`
+### `SegmentoEntity` — `Syncable`, push + pull
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `id` | `int` | |
-| `ctId` | `String` | Código CT Enagas |
-| `nombre` | `String` | |
+| `clientId` | `String` | UUID v4 inmutable (PK lógica del dominio) |
+| `id` | `int?` | ID remoto del backend (nullable hasta primer sync) |
+| `ctId` | `int` | Código CT Enagas (entero) |
+| `nombre` | `String?` | |
+| `descripcion` | `String` | |
 | `traza` | `String?` | |
 | `tipoInstalacion` | `TipoInstalacion` | concentrada, lineal |
 | `pkInicio/Fin` | `double?` | PK kilométrico |
 | `lat/lngInicio`, `lat/lngFin` | `double?` | |
 | `ubicacionGis` | `List<LatLng>` | Polilínea parseada de GeoJSON |
+| `tipoActividad` | `TipoActividad` | deshierbeSelectivo, desbroceManual… |
+| `estado` | `EstadoActividad` | propuesta, validada, ejecución, finalizada, cerrada |
+| `imagenes` | `List<ImagenSegmentoEntity>` | |
+| `mensajes` | `List<MensajeSegmentoEntity>` | |
+| `createdAt`, `fechaInicio`, `fechaFin` | `DateTime?` | |
+| `updatedAt` | `DateTime` | escrito por `touchUpdated()` en cada cambio |
 | `longitud` / `longitudKm` | getters | Haversine sobre `ubicacionGis` |
-| `ubicacionGisAsGeoJSON` | getter `String` | Serializa a GeoJSON para API |
 
-### `ImagenSegmentoEntity`
+### `ImagenSegmentoEntity` — `Syncable`, push only
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `localId` | `int?` | ID SQLite local |
-| `remoteId` | `int?` | ID tras subida exitosa |
-| `actividadId` | `int` | |
-| `segmentoId` | `int?` | |
-| `localPath` | `String` | Ruta en dispositivo |
-| `remoteUrl` | `String?` | URL tras subida |
+| `clientId` | `String` | UUID v4 |
+| `id` | `int?` | ID remoto tras upload |
+| `actividadId`, `segmentoId` | `int` | |
 | `tipoFoto` | `TipoFoto` | antes, despues |
-| `capturedAt` | `DateTime` | |
-| `latitude/longitude` | `double?` | GPS en captura |
-| `syncStatus` | `SyncStatus` | pending, uploading, uploaded, error |
+| `filename`, `ruta`, `url` | `String` | local/remote |
+| `mimeType`, `tamanyoBytes` | | |
+| `latitud`, `longitud`, `fixedLatitud`, `fixedLongitud` | `double?` | |
+| `capturadaAt`, `subidaAt`, `createdAt`, `updatedAtRemote` | `DateTime?` | |
+| `subidaPor` | `int?` | |
+
+### `MensajeSegmentoEntity` — `Syncable`, push only (lectura online por ahora)
+| Campo | Tipo |
+|---|---|
+| `clientId` | `String` UUID |
+| `id` | `int?` |
+| `segmentoId` | `int` |
+| `mensaje` | `String` |
+| `enviadoPor` | `int?` |
+| `createdAt`, `updatedAt` | `DateTime` |
+
+### `PositionBatchEntity` — `Syncable`, push only (GPS)
+Lote de hasta ~500 puntos GPS. La unidad de sincronización del tracking.
+| Campo | Tipo |
+|---|---|
+| `clientId` (= `batch_client_id`) | `String` UUID |
+| `id` | `int?` (remote_id) |
+| `operadorId` | `int` |
+| `points` | `List<PositionPoint>` |
+| `startedAt`, `endedAt` | `DateTime` |
 
 ### `UserEntity`
+NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | Campo | Tipo |
 |---|---|
 | `id` | `int` |
-| `usuario` | `String` |
-| `nombre` | `String` |
-| `cts` | `List<String>` |
+| `usuario`, `nombre` | `String` |
+| `cts` | `List<CtInfo>` |
 | `token` | `String` |
 
 ---
@@ -248,17 +314,32 @@ lib/
 | Controlador | Archivo | Responsabilidad clave |
 |---|---|---|
 | `LoginPageController` | `presentation/auth/` | Login, toggle password, último usuario, parse errores |
-| `SegmentosListController` | `presentation/actividades/` | Carga lista, filtra por `EstadoActividad`, navega a detalle |
-| `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado de actividad, navega a fotos |
-| `CapturaFotosController` | `presentation/fotos/` | Captura (cámara/galería), gestiona `SyncStatus`, sube pendientes, borra |
+| `SegmentosListController` | `presentation/segmentos/` | Lee local de segmentos, filtra por estado, navega a detalle |
+| `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado, edita descripción, gestiona mensajes |
+| `EditExtremosController` | `presentation/detalle/edit_extremos/` | Edición de extremos del segmento sobre el mapa |
+| `CameraCaptureController` | `presentation/camera/` | Captura cámara → enqueue al outbox vía `OfflineRepository` |
+| `MapaGlobalController` | `presentation/mapa/` | Mapa global; arranca/para `GpsBackgroundService` en su ciclo |
+| `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
+| `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo" |
+| `ForzarEnvioController` | `presentation/forzar_envio/` | Atajo "subir todo lo de esta entidad" |
 
-### GetxServices (globales, no se destruyen)
+### GetxServices (globales, permanent: true)
 
 | Servicio | Responsabilidad |
 |---|---|
-| `ConnectivityService` | Monitoriza red; dispara auto-sync cuando vuelve conectividad |
-| `GpsService` | Gestiona permisos de ubicación |
-| `NetworkService` | Cliente Dio singleton con interceptor HMAC |
+| `ConnectivityService` | Monitoriza red; dispatcha `SyncActions.connectionRestored/Lost` (informativo, NO dispara drain) |
+| `NetworkService` | Cliente Dio singleton con interceptor HMAC + retry de transporte |
+| `GpsService` | Permisos de ubicación |
+| `GpsBackgroundService` | Tracking GPS con buffer 500/30s; lifecycle atado al mapa |
+| `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
+| `GasoductosService` | Master data legacy de trazas (no integrado al motor — ver §12.2 doc backend) |
+| `PksService` | Master data legacy de puntos kilométricos |
+| `AuthExpirationHandler` | Listener global de `SyncActions.authExpired` → logout + nav login |
+| `TypeRegistry` | Registro de tipos del motor (poblado por `OfflineModule.registerEntity`) |
+| `OutboxQueue` | Cola persistente de operaciones pendientes |
+| `SyncEngine` | Motor de drain del outbox (manual, sin retry/backoff) |
+| `OfflineRepository<T>` | Por entidad con adapter — registrado por `OfflineModule` |
+| `PullCoordinator<T>` | Por entidad con fetcher — registrado por `OfflineModule` |
 
 ---
 
@@ -266,23 +347,92 @@ lib/
 
 | Caso de Uso | Firma | Descripción |
 |---|---|---|
-| `GetSegmentosUseCase` | `execute() → Future<List<ActividadEntity>>` | Obtiene lista desde provider (online/offline) |
-| `UpdateActividadUseCase` | `execute(int id, EstadoActividad) → Future<bool>` | Actualiza estado en backend |
-| `UploadImageUseCase` | `uploadPending(int actividadId) → Future<void>` | Sube imágenes con `SyncStatus.pending` |
+| `GetSegmentosUseCase` | `execute(int operadorId, List<int> cts) → Future<DataResult<List<SegmentoEntity>>>` | Lee segmentos del store local (offline-first) |
+| `UpdateSegmentoEstadoUseCase` | `execute(int id, EstadoActividad) → Future<DataResult<bool>>` | Actualiza estado vía `OfflineRepository` (local + outbox) |
 
 ---
 
-## Offline-First (Factory Pattern)
+## Motor offline-first (Outbox + Pipeline)
 
-```dart
-// Cada dominio tiene: interface + factory + online + offline
-final provider = SegmentoDataProviderFactory.create(); // auto-switch según conectividad
-// ConnectivityService determina qué implementación se devuelve
+> **Filosofía:** la UI siempre lee de SQLite local. La sincronización es **manual** y la dispara el usuario. Cuando hay red disponible, los cambios pendientes en el `OutboxQueue` se drenan al backend en cuanto el usuario lo pide. No hay timers ni reintentos automáticos.
+
+### Componentes principales
+
+```
+TypeRegistry ←─ OfflineModule.registerEntity<T>(...) ←─ app_di.dart
+       │
+       ▼
+LocalStore<T> ──┐
+RemoteAdapter<T>?│        OfflineDatabase.open(path)
+RemoteFetcher<T>?├─→ OutboxQueue ──→ SyncEngine.drain()       (push manual)
+ConflictResolver<T>│                  PullCoordinator<T>.pullNow() (pull manual)
+formatForDisplay? │
+                └─→ OfflineRepository<T> ─→ create/update/delete (local + outbox)
 ```
 
-- **Online:** llama a la API REST con Dio + HMAC
-- **Offline:** lee/escribe en SQLite local (`local_database.dart`)
-- **Sync:** `ConnectivityService` detecta reconexión → `UploadImageUseCase.uploadPending()`
+### Flujo de escritura (push)
+
+1. Controller de UI llama a `OfflineRepository<T>.update(entity)`.
+2. Repo persiste en `LocalStore<T>` (transacción) **y** encola en `OutboxQueue`.
+3. Repo dispatcha `SyncActions.entityQueued`. La UI escucha y refresca sus listas.
+4. **Cuando el usuario pulsa "Subir"** (sync page o pantalla de entidad), `SyncEngine.drain()` recorre el outbox con un `TaskPipeline` por job: load entity → invoke adapter → interpret outcome → update local state → dispatch action.
+5. Resumen final (`DrainSummary`): succeeded / retryable / rejected / conflicts.
+
+### Flujo de lectura (pull)
+
+1. Solo entidades con `RemoteFetcher` registrado son pulleables.
+2. **Cuando el usuario pulsa "Descargar"** (o "Preparar trabajo de campo"), `PullCoordinator<T>.pullNow()` ejecuta un `TaskPipeline`: invoke fetcher → detect conflicts → upsert non-conflicting → enqueue conflicts → update pull_state → dispatch.
+3. Conflicto = `localUpdatedAt > remoteUpdatedAt` OR outbox pendiente para ese `clientId`.
+4. Cancelable cooperativamente vía `CancelToken`.
+
+### Auth durante sync
+
+`NetworkService` detecta 401 → `AuthExpiredException` → motor aborta drain/pull → dispatcha `SyncActions.authExpired` → `AuthExpirationHandler` limpia token y navega a login.
+
+### Identidad universal
+
+| Campo | Tipo | Regla |
+|---|---|---|
+| `clientId` | `String` (UUID v4) | Generado por el cliente al crear. **Inmutable**. PK lógica del dominio. |
+| `remoteId` | `String?` | Asignado por el backend al primer sync. Nullable hasta entonces. |
+| `updatedAt` | `DateTime` | Última edición local; conflict resolution. |
+
+**Las FKs entre entidades en el dominio cliente viajan por `clientId`**, nunca por `remoteId`. El `RemoteAdapter` traduce a/de el formato del backend.
+
+### Schema modular
+
+Cada `LocalStore<T>` declara `entityType`, `schemaVersion`, y `migrate(db, from, to)`. La tabla `_entity_schema_version` mantiene la versión por entidad (versionado independiente entre entidades, sin colisiones entre PRs).
+
+### Test de extensibilidad — añadir entidad nueva
+
+```dart
+// 1. La entidad implementa Syncable
+class FooEntity implements Syncable { ... }
+
+// 2. Local store con schema modular
+class FooLocalStore extends LocalStore<FooEntity> {
+  @override String get entityType => 'foo';
+  @override int get schemaVersion => 1;
+  @override Future<void> migrate(db, from, to) async {
+    if (from == 0) await db.execute('CREATE TABLE foo (...)');
+  }
+  // ... CRUD ...
+}
+
+// 3. Adapter (push) y/o fetcher (pull)
+class FooRemoteAdapter extends RemoteAdapter<FooEntity> { ... }
+
+// 4. UNA llamada en app_di.dart
+await OfflineModule.registerEntity<FooEntity>(
+  entityType: 'foo',
+  store: FooLocalStore(db),
+  adapter: FooRemoteAdapter(network),
+  conflictResolver: const ServerWinsResolver<FooEntity>(),
+  fromJson: FooEntity.fromJson,
+);
+```
+
+Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de extensibilidad.
 
 ---
 
@@ -298,25 +448,29 @@ final provider = SegmentoDataProviderFactory.create(); // auto-switch según con
 
 | Paquete | Versión | Uso |
 |---|---|---|
-| `get` | `^4.7.2` | State management, navegación, DI |
-| `dio` | `^5.7.0` | HTTP client |
-| `flutter_map` | `^8.2.2` | Mapas |
+| `get` | `^4.7.3` | State management, navegación, DI |
+| `dio` | `^5.9.2` | HTTP client |
+| `flutter_map` | `^8.3.0` | Mapas |
 | `flutter_map_cancellable_tile_provider` | `^3.1.1` | Tiles cancelables |
 | `latlong2` | `^0.9.1` | Coordenadas |
-| `sqflite` | `^2.3.3+2` | SQLite local |
-| `image_picker` | `^1.1.2` | Galería |
+| `sqflite` | `^2.4.2` | SQLite local |
+| `image_picker` | `^1.2.1` | Galería |
 | `camera` | `^0.12.0+1` | Cámara |
 | `photo_view` | `^0.15.0` | Zoom de fotos |
 | `cached_network_image` | `^3.4.1` | Cache de imágenes |
-| `connectivity_plus` | `^7.0.0` | Estado de red |
+| `connectivity_plus` | `^7.1.1` | Estado de red |
 | `flutter_secure_storage` | `^10.0.0` | Token seguro |
-| `shared_preferences` | `^2.3.3` | Preferencias ligeras |
-| `crypto` | `^3.0.3` | HMAC |
-| `uuid` | `^4.5.1` | IDs únicos locales |
-| `logger` | `^2.4.0` | Logging con niveles |
+| `shared_preferences` | `^2.5.5` | Preferencias ligeras |
+| `crypto` | `^3.0.7` | HMAC |
+| `uuid` | `^4.5.3` | IDs únicos locales |
+| `logger` | `^2.7.0` | Logging con niveles |
 | `permission_handler` | `^12.0.1` | Permisos runtime |
 | `intl` | `^0.20.2` | Fechas/i18n |
-| `mocktail` | `^1.0.4` | Tests (dev) |
+| `geolocator` | `^14.0.2` | GPS stream (foreground + iOS background) |
+| `flutter_foreground_task` | `^9.2.2` | Foreground service Android para GPS |
+| `leulit_flutter_actionmanager` | `^5.6.0` | TypedAction bus entre capas |
+| `leulit_pipeline_pattern` | path | TaskPipeline para flujos secuenciales async |
+| `mocktail` | `^1.0.5` (dev) | Tests |
 
 ---
 
@@ -339,9 +493,12 @@ final provider = SegmentoDataProviderFactory.create(); // auto-switch según con
 - **SOLID** con énfasis en SRP y DIP
 - **KISS/DRY/YAGNI**: Soluciones simples, sin features especulativas
 - **Performance**: Lazy loading, clustering de marcadores, Isolates para GIS pesado
-- **Offline-first**: DataProviderFactory, SQLite local, sync automático al reconectar
+- **Offline-first**: la UI siempre lee de SQLite local. Sync solo a petición del usuario (sync page o botones contextuales). Nunca timers ni reintentos automáticos.
+- **Comunicación entre capas**: `TypedAction` (leulit_flutter_actionmanager). `.obs` solo widget↔controller.
+- **Flujos secuenciales async**: `TaskPipeline<T>` (leulit_pipeline_pattern), nunca cadenas ad-hoc de awaits.
 - **UX**: Minimizar clicks, feedback instantáneo, jerarquía visual clara
 - **Platform-aware**: Comportamiento específico web/iOS/Android en marcadores, polilíneas, tooltips
+- **Test de extensibilidad**: cada decisión arquitectónica debe permitir añadir una entidad nueva de forma mecánica sin tocar código existente.
 
 ---
 
@@ -353,7 +510,23 @@ final provider = SegmentoDataProviderFactory.create(); // auto-switch según con
 
 ## Pendiente / TODO
 
-- Filtro de solapamientos del corte contra segmentos ya existentes
-  (ver `docs/LINES_CUT_MOBILE_INTEGRATION.md` §8)
-- Barrel exports (`export_*.dart`) — aún no creados
-- `AppConfig.hmacSecret` hardcodeado — migrar a variable de entorno o secret en CI/CD
+### Backend (entregable en `docs/BACKEND_SYNC_CONTRACT.md`)
+- Idempotencia por `client_id` en TODOS los endpoints sincronizables.
+- FKs entre entidades por `client_id` (no `remote_id`).
+- `error_message` legible en español en respuestas 4xx (especialmente 422).
+- `GET /mensajes?operador=X` para pull global de mensajes (§12.1) — hasta entonces lectura online + merge con pendientes locales.
+- `GET /api/gasoductos` y `GET /api/pks` REST únicos para integrar master data al motor (§12.2) — hasta entonces flujo legacy multi-archivo GeoJSON.
+- `POST /positions/batch` idempotente por `batch_client_id` (§8) para subida GPS.
+- `updated_at` ISO8601 UTC en TODAS las entidades sincronizables.
+
+### Plataforma — al publicar (config nativa ya cableada en repo)
+- Android: minSdk **34**, manifest declara `FOREGROUND_SERVICE_LOCATION` y el `<service>` del plugin con `foregroundServiceType="location"`.
+- iOS: deployment target **13.0**, `Info.plist` lleva `UIBackgroundModes=[location, fetch, processing]` + las tres descripciones `NSLocation…UsageDescription`.
+- Justificaciones Play Console / App Store para `FOREGROUND_SERVICE_LOCATION` y modos de fondo iOS al primer release (trámite estándar para tracking apps).
+
+### Cliente
+- Reescribir `GasoductosService` y `PksService` al motor cuando backend tenga endpoints REST (ver §12.2 doc backend).
+- Migrar lectura de `MensajeSegmento` al motor cuando backend exponga endpoint de pull global (§12.1).
+- Filtro de solapamientos del corte contra segmentos existentes (`docs/LINES_CUT_MOBILE_INTEGRATION.md` §8).
+- `AppConfig.hmacSecret` hardcodeado — migrar a variable de entorno / secret CI/CD.
+- Extraer `lib/core/sync/` a paquete `leulit_offline_sync` cuando madure.

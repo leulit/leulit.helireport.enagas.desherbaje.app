@@ -71,9 +71,14 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Necesario para seleccionar fotos de los trabajos</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Necesario para geolocalizar las fotos de los trabajos</string>
+	<string>Necesario para geolocalizar las fotos y registrar la ruta durante la jornada de campo.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Necesario para que la app siga registrando la ruta cuando el móvil pasa a segundo plano (pantalla bloqueada o en el bolsillo) durante la jornada de campo.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Necesario para que la app siga registrando la ruta cuando el móvil pasa a segundo plano durante la jornada de campo.</string>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>location</string>
 		<string>fetch</string>
 		<string>processing</string>
 	</array>
