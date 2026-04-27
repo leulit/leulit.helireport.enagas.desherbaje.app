@@ -51,7 +51,7 @@ abstract class OfflineDatabase {
     // PRAGMA journal_mode returns a row with the applied mode; sqflite on
     // iOS surfaces that as an error when called via `execute`. Use rawQuery.
     await db.rawQuery('PRAGMA journal_mode = WAL');
-    await db.execute('PRAGMA foreign_keys = ON');
+    await db.rawQuery('PRAGMA foreign_keys = ON');
   }
 
   static Future<void> _ensureInfraTables(Database db) async {

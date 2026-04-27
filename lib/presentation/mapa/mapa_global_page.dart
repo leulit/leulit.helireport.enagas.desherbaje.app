@@ -12,6 +12,7 @@ import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/pks_service.dart';
+import '../../core/widgets/my_current_location_layer.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'lines_cut/lines_cut_ui.dart';
 import 'mapa_global_controller.dart';
@@ -197,6 +198,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   }).toList(),
                 );
               }),
+              MyCurrentLocationLayer(),
               // Capas de "Líneas de corte" (polylines + drag markers +
               // warning). Internamente filtran por cutStateOn && zoomOk.
               ...buildLinesCutMapLayers(controller.linesCut),

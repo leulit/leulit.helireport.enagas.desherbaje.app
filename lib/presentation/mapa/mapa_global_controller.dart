@@ -146,9 +146,16 @@ class MapaGlobalController extends GetxController {
       ctsProvider: () => _userCts,
     );
     Get.put<LinesCutController>(linesCut);
+    // Captura el estado actual de los servicios antes de enganchar `ever()`:
+    // si los datos ya estaban cargados (p. ej. tras un `reload()` desde la
+    // sync page) el listener no recibirá ninguna emisión y la primera
+    // asignación se perdería.
+    gasoductosPolylines.assignAll(_gasoductosService.polylines);
+    pks.assignAll(_pksService.pks);
     ever(_gasoductosService.polylines,
-        (lines) => gasoductosPolylines.assignAll(lines));
-    ever(_pksService.pks, (entities) => pks.assignAll(entities));
+        (List<Polyline> lines) => gasoductosPolylines.assignAll(lines));
+    ever(_pksService.pks,
+        (List<PkEntity> entities) => pks.assignAll(entities));
     _loadUserCts();
     _loadSavedView();
     loadAll();

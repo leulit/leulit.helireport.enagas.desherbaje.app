@@ -5,4 +5,12 @@ abstract class AuthRepository {
   Future<void> logout();
   Future<UserModel?> getCurrentUser();
   Future<bool> isAuthenticated();
+
+  /// Refresca los datos del usuario actualmente autenticado descargando de
+  /// nuevo la lista de CTs y volviendo a persistir el `UserModel` completo en
+  /// `SharedPreferences`. Permite que el operador reciba cambios de perfil/CTs
+  /// hechos en el backend sin necesidad de cerrar sesión.
+  ///
+  /// Lanza si no hay sesión activa o el backend devuelve error.
+  Future<UserModel> refreshUserData();
 }

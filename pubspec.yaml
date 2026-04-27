@@ -20,6 +20,7 @@ dependencies:
   flutter_map: ^8.3.0
   flutter_map_cancellable_tile_provider: ^3.1.1
   flutter_map_compass: ^1.1.1
+  flutter_map_location_marker: ^10.2.0
   flutter_secure_storage: ^10.0.0  
   get: ^4.7.3
   image_picker: ^1.2.1

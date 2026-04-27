@@ -71,4 +71,20 @@ class AuthRepositoryImpl implements AuthRepository {
     final token = await _storage.read(key: _tokenKey);
     return token != null && token.isNotEmpty;
   }
+
+  @override
+  Future<UserModel> refreshUserData() async {
+    final current = await getCurrentUser();
+    if (current == null) {
+      throw StateError('No hay sesión activa para refrescar.');
+    }
+    current.cts = await _provider.getCts(current.id);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userNameKey, current.nombre);
+    await prefs.setString(_userUsuarioKey, current.usuario);
+    await prefs.setString(_userJsonKey, jsonEncode(current.toJson()));
+    await prefs.setString(_userCtsKey, jsonEncode(current.ctsId()));
+    return current;
+  }
 }

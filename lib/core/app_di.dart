@@ -27,10 +27,7 @@ import 'sync/sync.dart';
 
 class AppDI {
   static Future<void> init() async {
-    // Order matters: registry must exist before LocalDatabase opens, because
-    // OfflineDatabase.open iterates the registry to migrate each entity.
     Get.put<TypeRegistry>(TypeRegistry(), permanent: true);
-
     await Get.putAsync<ConnectivityService>(
       () async => ConnectivityService(),
       permanent: true,
@@ -44,10 +41,14 @@ class AppDI {
     Get.put<GasoductosService>(GasoductosService(), permanent: true);
     Get.put<PksService>(PksService(), permanent: true);
     Get.put<AuthExpirationHandler>(AuthExpirationHandler(), permanent: true);
-
-    final db = await LocalDatabase.instance.database;
+    // Le ponemos un timeout de 15 segundos. Si en 15s no abre, lanzará un error y sabremos que es aquí.
+    final db = await LocalDatabase.instance.database.timeout(
+      const Duration(seconds: 15),
+      onTimeout: () {
+        throw Exception("La base de datos SQLite no responde tras 15 segundos.");
+      },
+    );
     Get.put<Database>(db, permanent: true);
-
     final outbox = OutboxQueue(db);
     Get.put<OutboxQueue>(outbox, permanent: true);
     Get.put<SyncEngine>(
@@ -58,7 +59,6 @@ class AppDI {
       ),
       permanent: true,
     );
-
     await _registerEntities(db);
   }
 

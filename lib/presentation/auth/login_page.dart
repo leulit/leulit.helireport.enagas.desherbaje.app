@@ -10,14 +10,33 @@ class LoginPage extends GetView<LoginPageController> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F8E9),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Form(
-              key: controller.formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+        child: Stack(
+          children: [
+            _LoginBody(controller: controller),
+            Obx(() => controller.isSyncing.value
+                ? const _SyncingOverlay()
+                : const SizedBox.shrink()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginBody extends StatelessWidget {
+  final LoginPageController controller;
+  const _LoginBody({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Form(
+          key: controller.formKey,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
                   // Logo placeholder
                   Container(
                     height: 80,
@@ -180,9 +199,45 @@ class LoginPage extends GetView<LoginPageController> {
                       ),
                     );
                   }),
-                ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncingOverlay extends StatelessWidget {
+  const _SyncingOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black54,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 4,
+                ),
               ),
-            ),
+              SizedBox(height: 20),
+              Text(
+                'Preparando sincronización…',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),

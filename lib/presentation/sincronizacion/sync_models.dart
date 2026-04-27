@@ -1,94 +1,93 @@
-import '../../core/sync/sync.dart';
-
-/// Aggregated outbox state for a single entity type, used by the sync page
-/// "Pendientes de subir" section.
-class PendingByEntity {
-  final String entityType;
-  final int pending;
-  final int rejected;
-
-  const PendingByEntity({
-    required this.entityType,
-    required this.pending,
-    required this.rejected,
-  });
-
-  bool get hasAnything => pending > 0 || rejected > 0;
+/// Identificador estable de cada fila de "datos maestros" en la página de
+/// sincronización. Solo se descargan; nunca se suben.
+enum MasterDataKind {
+  user,
+  gasoductos,
+  pks,
+  segmentos,
+  posicionesFijas,
 }
 
-/// Snapshot of the pull state for a single pulleable entity type, used by
-/// the sync page "Datos descargables" section.
-class DownloadableEntity {
-  final String entityType;
-  final DateTime? lastPulledAt;
-  final String? lastStatus;
-  final String? lastError;
+extension MasterDataKindLabel on MasterDataKind {
+  String get title {
+    switch (this) {
+      case MasterDataKind.user:
+        return 'Datos de usuario';
+      case MasterDataKind.gasoductos:
+        return 'Trazas de gasoductos';
+      case MasterDataKind.pks:
+        return 'Puntos kilométricos';
+      case MasterDataKind.segmentos:
+        return 'Segmentos';
+      case MasterDataKind.posicionesFijas:
+        return 'Posiciones fijas';
+    }
+  }
 
-  const DownloadableEntity({
-    required this.entityType,
-    this.lastPulledAt,
-    this.lastStatus,
-    this.lastError,
-  });
+  String get description {
+    switch (this) {
+      case MasterDataKind.user:
+        return 'Perfil del operador y CTs asignados.';
+      case MasterDataKind.gasoductos:
+        return 'Geometría de las trazas de gasoductos para uso en mapa.';
+      case MasterDataKind.pks:
+        return 'Puntos kilométricos asociados a cada CT.';
+      case MasterDataKind.segmentos:
+        return 'Lista de segmentos asignados al operador.';
+      case MasterDataKind.posicionesFijas:
+        return 'Pendiente de backend.';
+    }
+  }
 }
 
-/// A row in the `sync_conflicts` table, ready to be rendered as a diff in
-/// the "Conflictos de descarga" section.
-class ConflictRow {
-  final int id;
-  final String entityType;
-  final String clientId;
-  final Map<String, dynamic> localJson;
-  final Map<String, dynamic> remoteJson;
-  final DateTime detectedAt;
+/// Estado por fila de master data en la UI.
+enum MasterDataStatus { idle, downloading, success, error, unavailable }
 
-  const ConflictRow({
-    required this.id,
-    required this.entityType,
-    required this.clientId,
-    required this.localJson,
-    required this.remoteJson,
-    required this.detectedAt,
-  });
-}
+/// Modelo de fila de master data expuesto por el controller.
+class MasterDataRow {
+  final MasterDataKind kind;
+  final MasterDataStatus status;
+  final DateTime? lastDownloadAt;
+  final String? errorMessage;
 
-/// Outcome of `prepararTrabajoCampo`: counts and a flag of whether the
-/// operator can safely go to the field.
-class FieldReadinessReport {
-  final int pendingPushed;
-  final int pendingFailed;
-  final int pulledOk;
-  final int conflictsFound;
-  final List<String> errors;
-  final bool cancelled;
-  final bool authExpired;
+  /// Progreso 0.0–1.0 de la descarga en curso. `null` significa indeterminado
+  /// (o no aplica para esta fila).
+  final double? progress;
 
-  const FieldReadinessReport({
-    required this.pendingPushed,
-    required this.pendingFailed,
-    required this.pulledOk,
-    required this.conflictsFound,
-    required this.errors,
-    required this.cancelled,
-    required this.authExpired,
+  /// Etiqueta opcional asociada al progreso, p.ej. `"3 / 12"`.
+  final String? progressLabel;
+
+  const MasterDataRow({
+    required this.kind,
+    this.status = MasterDataStatus.idle,
+    this.lastDownloadAt,
+    this.errorMessage,
+    this.progress,
+    this.progressLabel,
   });
 
-  bool get isReadyForField =>
-      !cancelled && !authExpired && conflictsFound == 0 && pendingFailed == 0;
-}
-
-/// Decision made by the operator when resolving a single conflict.
-enum ConflictResolutionChoice { keepLocal, keepServer }
-
-/// Internal pipeline context for "Preparar trabajo de campo".
-class FieldWorkContext {
-  final List<String> errors = [];
-  int pendingPushed = 0;
-  int pendingFailed = 0;
-  int pulledOk = 0;
-  int conflictsFound = 0;
-  bool cancelled = false;
-  bool authExpired = false;
-
-  CancelToken? cancelToken;
+  MasterDataRow copyWith({
+    MasterDataStatus? status,
+    DateTime? lastDownloadAt,
+    String? errorMessage,
+    double? progress,
+    String? progressLabel,
+    bool clearError = false,
+    bool clearLastDownloadAt = false,
+    bool clearProgress = false,
+    bool clearProgressLabel = false,
+  }) {
+    return MasterDataRow(
+      kind: kind,
+      status: status ?? this.status,
+      lastDownloadAt: clearLastDownloadAt
+          ? null
+          : (lastDownloadAt ?? this.lastDownloadAt),
+      errorMessage:
+          clearError ? null : (errorMessage ?? this.errorMessage),
+      progress: clearProgress ? null : (progress ?? this.progress),
+      progressLabel:
+          clearProgressLabel ? null : (progressLabel ?? this.progressLabel),
+    );
+  }
 }

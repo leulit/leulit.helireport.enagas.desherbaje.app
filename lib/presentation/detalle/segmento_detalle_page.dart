@@ -12,6 +12,7 @@ import '../../core/api_endpoints.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
+import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
@@ -838,6 +839,7 @@ class _MapaSegmento extends StatelessWidget {
             Obx(() => PolylineLayer(
                   polylines: [controller.highlightedSegment.value],
                 )),
+            MyCurrentLocationLayer(),
           ],
         ),
         Positioned(
