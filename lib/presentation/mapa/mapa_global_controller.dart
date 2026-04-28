@@ -7,108 +7,40 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
 import '../../core/services/pks_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
-import '../../domain/entities/pk_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../domain/usecases/get_segmentos_usecase.dart';
+import 'layers/segmentos_map_controller.dart';
 import 'lines_cut/lines_cut_controller.dart';
 import 'lines_cut/lines_cut_dialog.dart';
-
-class SegmentoMapInfo {
-  final SegmentoEntity segmento;
-  final List<LatLng> points;
-  final Color color;
-  final LatLng centroid;
-
-  const SegmentoMapInfo({
-    required this.segmento,
-    required this.points,
-    required this.color,
-    required this.centroid,
-  });
-}
 
 class MapaGlobalController extends GetxController {
   final mapController = MapController();
 
-  /// Controller de la feature "Líneas de corte" (ver
-  /// `presentation/mapa/lines_cut/`). Se instancia aquí en lugar de en el
-  /// Binding porque necesita cerrar sobre `visiblePolylinesProvider`.
   late final LinesCutController linesCut;
 
-  /// Notifier usado por el `PolylineLayer` de segmentos para hit-testing.
-  /// Cuando el usuario toca una polyline, su `hitValue` (la `SegmentoEntity`
-  /// asociada) queda disponible en `segmentosHitNotifier.value.hitValues`.
-  final segmentosHitNotifier = LayerHitNotifier<SegmentoEntity>(null);
-
   final gasoductosPolylines = <Polyline>[].obs;
-  final segmentos = <SegmentoMapInfo>[].obs;
-  final pks = <PkEntity>[].obs;
   final isLoadingGasoductos = false.obs;
-  final isLoadingSegmentos = false.obs;
   final isLoadingPks = false.obs;
   final errorGasoductos = Rx<String?>(null);
-  final errorSegmentos = Rx<String?>(null);
   final errorPks = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
-  // ──────────────────────────── Filtros ────────────────────────────
-  final rxEstado = Rx<EstadoActividad?>(null);
-  final rxTipo = Rx<TipoActividad?>(null);
+  GasoductosService get _gasoductosService => Get.find<GasoductosService>();
+  PksService get _pksService => Get.find<PksService>();
+  SegmentosMapController get _segmentos => Get.find<SegmentosMapController>();
 
-  void setEstado(EstadoActividad? value) => rxEstado.value = value;
-  void setTipo(TipoActividad? value) => rxTipo.value = value;
+  final _segmentoRepo = SegmentoRepositoryImpl();
 
-  /// Subconjunto de [segmentos] tras aplicar los filtros activos. Se usa
-  /// tanto para pintar las polylines como para los marcadores con etiqueta.
-  List<SegmentoMapInfo> get filteredSegmentos {
-    final estado = rxEstado.value;
-    final tipo = rxTipo.value;
-    if (estado == null && tipo == null) return segmentos.toList();
-    return segmentos.where((info) {
-      if (estado != null && info.segmento.estado != estado) return false;
-      if (tipo != null && info.segmento.tipoActividad != tipo) return false;
-      return true;
-    }).toList();
-  }
+  bool get isLoading =>
+      isLoadingGasoductos.value ||
+      isLoadingPks.value ||
+      _segmentos.isLoading.value;
 
-  void onMapEvent(MapEvent event) {
-    // Sync con cualquier evento de cámara — pinch, doble-tap, fling y
-    // movimientos programáticos también deben refrescar el zoom para que las
-    // capas dependientes (PKs, labels) reaccionen.
-    final z = mapController.camera.zoom;
-    if (currentZoom.value != z) currentZoom.value = z;
-    linesCut.updateZoom(z);
-    _persistViewDebounced();
-  }
-
-  /// Ruta del `onTap` del mapa. Si la feature de corte está en modo dibujo,
-  /// cada tap añade un punto a la línea activa.
-  void onMapTap(TapPosition tapPosition, LatLng point) {
-    if (linesCut.canCut.value) {
-      linesCut.addPoint(point);
-    }
-  }
-
-  /// Filtra las polylines de gasoducto por el viewport actual para acotar
-  /// el O(N·M) del motor de corte al área visible.
-  List<Polyline> visibleGasoductoPolylines() {
-    final bounds = mapController.camera.visibleBounds;
-    return gasoductosPolylines
-        .where((p) =>
-            p.points.any((pt) => bounds.contains(pt)))
-        .toList(growable: false);
-  }
-
-  /// Cache en memoria de los CTs del usuario logueado. Se rellena en
-  /// [onInit] tras leer `user_json` de prefs. El [LinesCutController] lo
-  /// lee por referencia de forma síncrona al resolver ctId.
   List<({String ct, int ctid})> _userCts = const [];
 
   Future<void> _loadUserCts() async {
@@ -119,55 +51,33 @@ class MapaGlobalController extends GetxController {
         _userCts = const [];
         return;
       }
-      final user =
-          UserModel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      final user = UserModel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
       _userCts = user.cts.map((c) => (ct: c.ct, ctid: c.ctid)).toList();
     } catch (_) {
       _userCts = const [];
     }
   }
 
-  late final GetSegmentosUseCase _segmentosUseCase;
-  final _segmentoRepo = SegmentoRepositoryImpl();
-  GasoductosService get _gasoductosService => Get.find<GasoductosService>();
-  PksService get _pksService => Get.find<PksService>();
-
-  bool get isLoading =>
-      isLoadingGasoductos.value ||
-      isLoadingSegmentos.value ||
-      isLoadingPks.value;
-
   @override
   void onInit() {
     super.onInit();
-    _segmentosUseCase = GetSegmentosUseCase(SegmentoRepositoryImpl());
     linesCut = LinesCutController(
       visiblePolylinesProvider: visibleGasoductoPolylines,
       ctsProvider: () => _userCts,
     );
     Get.put<LinesCutController>(linesCut);
-    // Captura el estado actual de los servicios antes de enganchar `ever()`:
-    // si los datos ya estaban cargados (p. ej. tras un `reload()` desde la
-    // sync page) el listener no recibirá ninguna emisión y la primera
-    // asignación se perdería.
     gasoductosPolylines.assignAll(_gasoductosService.polylines);
-    pks.assignAll(_pksService.pks);
     ever(_gasoductosService.polylines,
         (List<Polyline> lines) => gasoductosPolylines.assignAll(lines));
-    ever(_pksService.pks,
-        (List<PkEntity> entities) => pks.assignAll(entities));
     _loadUserCts();
     _loadSavedView();
     loadAll();
-    // GPS tracking lifecycle is bound to this screen (decision P15+P16):
-    // start when entering the map, stop on close.
     unawaited(Get.find<GpsBackgroundService>().start());
   }
 
   @override
   void onClose() {
     _saveDebounce?.cancel();
-    segmentosHitNotifier.dispose();
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
@@ -176,8 +86,7 @@ class MapaGlobalController extends GetxController {
   }
 
   // ─────────────────── Persistencia de la vista del mapa ───────────────────
-  // Guardamos center + zoom en SharedPreferences para que al volver a la
-  // página el usuario aterrice en el mismo viewport que dejó.
+
   static const _kMapLastLat = 'mapa_global_last_lat';
   static const _kMapLastLng = 'mapa_global_last_lng';
   static const _kMapLastZoom = 'mapa_global_last_zoom';
@@ -197,7 +106,6 @@ class MapaGlobalController extends GetxController {
       if (lat != null && lng != null && zoom != null) {
         _savedCenter = LatLng(lat, lng);
         _savedZoom = zoom;
-        // Si el mapa ya estaba listo (carrera prefs/build), aplicamos ya.
         if (_mapReady) _restoreSavedView();
       }
     } catch (_) {}
@@ -213,8 +121,6 @@ class MapaGlobalController extends GetxController {
     } catch (_) {}
   }
 
-  /// Llamado desde `MapOptions.onMapReady` en la página. A partir de aquí el
-  /// `MapController` ya tiene cámara válida y se puede mover.
   void onMapReady() {
     _mapReady = true;
     if (_savedCenter != null && _savedZoom != null) _restoreSavedView();
@@ -233,33 +139,55 @@ class MapaGlobalController extends GetxController {
     });
   }
 
-  /// Invocado desde el `GestureDetector` que envuelve el `PolylineLayer` de
-  /// segmentos. Si el tap impactó en alguna polyline, navega al detalle del
-  /// primer segmento bajo el dedo (mismo flujo que el tap en el label).
-  void onSegmentoPolylineTap() {
-    final hit = segmentosHitNotifier.value;
-    if (hit == null || hit.hitValues.isEmpty) return;
-    navigateToSegmento(hit.hitValues.first);
+  // ─────────────────── Eventos del mapa ────────────────────────────────────
+
+  void onMapEvent(MapEvent event) {
+    final z = mapController.camera.zoom;
+    if (currentZoom.value != z) currentZoom.value = z;
+    linesCut.updateZoom(z);
+    _persistViewDebounced();
   }
 
+  void onMapTap(TapPosition tapPosition, LatLng point) {
+    if (linesCut.canCut.value) linesCut.addPoint(point);
+  }
+
+  List<Polyline> visibleGasoductoPolylines() {
+    final bounds = mapController.camera.visibleBounds;
+    return gasoductosPolylines
+        .where((p) => p.points.any((pt) => bounds.contains(pt)))
+        .toList(growable: false);
+  }
+
+  // ─────────────────── Zoom ────────────────────────────────────────────────
+
+  void zoomIn() {
+    final cam = mapController.camera;
+    final z = (cam.zoom + 0.25).clamp(5.0, 20.0);
+    mapController.move(cam.center, z);
+    currentZoom.value = z;
+  }
+
+  void zoomOut() {
+    final cam = mapController.camera;
+    final z = (cam.zoom - 0.25).clamp(5.0, 20.0);
+    mapController.move(cam.center, z);
+    currentZoom.value = z;
+  }
+
+  // ─────────────────── Carga de datos ──────────────────────────────────────
+
   Future<void> loadAll() async {
-    // Secuencial: el `JsonLoaderService` serializa internamente, pero los
-    // eventos completed son broadcast — encadenar evita ambigüedad.
     await loadGasoductos();
     await loadPks();
-    await loadSegmentos();
+    await _segmentos.load();
     _fitAllBounds();
   }
 
   Future<void> reloadAll() async {
     await loadGasoductos(forceRefresh: true);
     await loadPks(forceRefresh: true);
-    await loadSegmentos();
-    _fitAllBounds();
-  }
-
-  Future<void> reloadSegmentos() async {
-    await loadSegmentos();
+    await _segmentos.load();
     _fitAllBounds();
   }
 
@@ -290,7 +218,6 @@ class MapaGlobalController extends GetxController {
       } else {
         await _pksService.ensureLoaded();
       }
-      pks.assignAll(_pksService.pks);
     } catch (e) {
       errorPks.value = 'Error cargando PKs';
       debugPrint('MapaGlobal PKs: $e');
@@ -299,57 +226,8 @@ class MapaGlobalController extends GetxController {
     }
   }
 
-  Future<void> loadSegmentos() async {
-    isLoadingSegmentos.value = true;
-    errorSegmentos.value = null;
-    try {
-      final result = await _segmentosUseCase.execute();
-      if (result.isFailure) {
-        errorSegmentos.value = 'Error cargando Segmentos';
-        return;
-      }
-      final fetched = result.dataOrNull ?? <SegmentoEntity>[];
-      final mapped = <SegmentoMapInfo>[];
-      for (final segmento in fetched) {
-        if (segmento.ubicacionGis.isEmpty) continue;
-        mapped.add(SegmentoMapInfo(
-          segmento: segmento,
-          points: segmento.ubicacionGis,
-          color: AppColors.accentForEstado(segmento.estado),
-          centroid: _computeCentroid(segmento.ubicacionGis),
-        ));
-      }
-      segmentos.assignAll(mapped);
-    } catch (e) {
-      errorSegmentos.value = 'Error cargando Segmentos';
-      debugPrint('MapaGlobal Segmentos: $e');
-    } finally {
-      isLoadingSegmentos.value = false;
-    }
-  }
+  // ─────────────────── Líneas de corte ─────────────────────────────────────
 
-  void zoomIn() {
-    final cam = mapController.camera;
-    final z = (cam.zoom + 0.25).clamp(5.0, 20.0);
-    mapController.move(cam.center, z);
-    currentZoom.value = z;
-  }
-
-  void zoomOut() {
-    final cam = mapController.camera;
-    final z = (cam.zoom - 0.25).clamp(5.0, 20.0);
-    mapController.move(cam.center, z);
-    currentZoom.value = z;
-  }
-
-  void navigateToSegmento(SegmentoEntity segmento) {
-    Get.offAndToNamed(AppRoutes.detalle, arguments: segmento);
-  }
-
-  /// Aplica el corte actual: ejecuta el motor, abre el diálogo de captura
-  /// y, si se confirma, navega al detalle del primer segmento resultante
-  /// (mismo patrón que [navigateToSegmento]). Al terminar limpia líneas;
-  /// si el usuario cancela las deja intactas para reintentar.
   Future<void> applyLinesCut() async {
     final raw = linesCut.applyCut();
     if (raw.isEmpty) {
@@ -362,8 +240,7 @@ class MapaGlobalController extends GetxController {
       return;
     }
 
-    final totalMeters =
-        raw.fold<double>(0, (s, seg) => s + seg.lengthInMeters);
+    final totalMeters = raw.fold<double>(0, (s, seg) => s + seg.lengthInMeters);
     final first = raw.first;
 
     final dlg = await showLinesCutCaptureDialog(
@@ -373,7 +250,7 @@ class MapaGlobalController extends GetxController {
       totalSquareMeters: totalMeters * 4,
     );
 
-    if (dlg == null) return; // usuario canceló — líneas se conservan
+    if (dlg == null) return;
 
     linesCut.applyDialogToExtracted(
       descripcion: dlg.descripcion,
@@ -381,10 +258,6 @@ class MapaGlobalController extends GetxController {
       estado: dlg.estado,
     );
 
-    // Cada segmento extraído se persiste en SQLite como "local-only"
-    // (id negativo, needs_sync=1) para que sobreviva a la navegación y
-    // aparezca también en el listado agrupado por CT. Paralelamente lo
-    // añadimos en memoria al mapa para feedback inmediato sin recargar.
     final nuevos = <SegmentoMapInfo>[];
     for (final seg in raw) {
       final entity = SegmentoEntity.empty()
@@ -403,10 +276,10 @@ class MapaGlobalController extends GetxController {
         segmento: persisted,
         points: persisted.ubicacionGis,
         color: AppColors.accentForEstado(persisted.estado),
-        centroid: _computeCentroid(persisted.ubicacionGis),
+        centroid: _segmentos.centroid(persisted.ubicacionGis),
       ));
     }
-    segmentos.addAll(nuevos);
+    _segmentos.segmentos.addAll(nuevos);
 
     linesCut.clearAll();
     linesCut.clearExtracted();
@@ -414,14 +287,14 @@ class MapaGlobalController extends GetxController {
     linesCut.cutStateOn.value = false;
   }
 
+  // ─────────────────── Helpers ──────────────────────────────────────────────
+
   void _fitAllBounds() {
-    // Si ya restauramos la vista guardada del usuario, no pisamos su
-    // posición/zoom con el fit automático de los datos.
     if (_viewRestored) return;
 
     final allPoints = <LatLng>[
       ...gasoductosPolylines.expand((p) => p.points),
-      ...segmentos.expand((s) => s.points),
+      ..._segmentos.segmentos.expand((s) => s.points),
     ];
     if (allPoints.isEmpty) return;
 
@@ -448,10 +321,5 @@ class MapaGlobalController extends GetxController {
         ),
       );
     } catch (_) {}
-  }
-
-  LatLng _computeCentroid(List<LatLng> points) {
-    if (points.isEmpty) return const LatLng(40.4168, -3.7038);
-    return points[points.length ~/ 2];
   }
 }

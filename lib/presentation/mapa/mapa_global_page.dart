@@ -1,12 +1,11 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:flutter_map_compass/flutter_map_compass.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:leulit_flutter_fullresponsive/leulit_flutter_fullreponsive.dart';
+
 import '../../core/api_endpoints.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
@@ -14,6 +13,10 @@ import '../../core/services/gasoductos_service.dart';
 import '../../core/services/pks_service.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../domain/entities/segmento_entity.dart';
+import 'layers/gasoductos_map_layer.dart';
+import 'layers/pks_map_layer.dart';
+import 'layers/segmentos_map_controller.dart';
+import 'layers/segmentos_map_layer.dart';
 import 'lines_cut/lines_cut_ui.dart';
 import 'mapa_global_controller.dart';
 
@@ -117,7 +120,6 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               ),
             ),
             children: [
-              // Capa base PNOA IGN
               TileLayer(
                 urlTemplate: ApiEndpoints.pnoaWmts,
                 tileProvider: CancellableNetworkTileProvider(),
@@ -127,107 +129,34 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                   'User-Agent': 'helireport-desherbaje',
                 },
               ),
-              // Gasoductos layer
-              Obx(() => PolylineLayer(
-                    polylines: controller.gasoductosPolylines.toList(),
-                  )),
-              // Actividades layer — polylines coloreadas por estado.
-              // Envuelta en GestureDetector para permitir tap-to-edit: el
-              // hit-test del PolylineLayer solo dispara onTap si el tap cae
-              // sobre una línea, por lo que fuera de ellas el gesto pasa al
-              // mapa.
-              Obx(() {
-                // Re-leemos los Rx de filtros para que el Obx se suscriba.
-                controller.rxEstado.value;
-                controller.rxTipo.value;
-                return GestureDetector(
-                  onTap: controller.onSegmentoPolylineTap,
-                  child: PolylineLayer<SegmentoEntity>(
-                    hitNotifier: controller.segmentosHitNotifier,
-                    polylines: controller.filteredSegmentos
-                        .map((s) => Polyline<SegmentoEntity>(
-                              points: s.points,
-                              color: s.color,
-                              strokeWidth: 5.0,
-                              borderColor: Colors.white,
-                              borderStrokeWidth: 1.0,
-                              hitValue: s.segmento,
-                            ))
-                        .toList(),
-                  ),
-                );
-              }),
-              // Actividades layer — labels en el centroide de cada segmento (zoom > 14)
-              Obx(() {
-                if (controller.currentZoom.value <= 12) {
-                  return const SizedBox.shrink();
-                }
-                controller.rxEstado.value;
-                controller.rxTipo.value;
-                return MarkerLayer(
-                  markers: controller.filteredSegmentos
-                      .map((s) => Marker(
-                            point: s.centroid,
-                            width: 0.2.w,
-                            height: 32,
-                            child: _SegmentoLabel(
-                              segmentoInfo: s,
-                              onTap: () =>
-                                  controller.navigateToSegmento(s.segmento),
-                            ),
-                          ))
-                      .toList(),
-                );
-              }),
-              // PKs layer — solo visibles a partir de zoom > 12 para evitar
-              // sobrecargar el mapa.
-              Obx(() {
-                if (controller.currentZoom.value <= 14) {
-                  return const SizedBox.shrink();
-                }
-                return MarkerLayer(
-                  markers: controller.pks.map((p) {
-                    final w = (p.label.length * 7.0 + 24).clamp(56.0, 140.0);
-                    return Marker(
-                      point: p.point,
-                      width: w,
-                      height: 30,
-                      alignment: Alignment.bottomCenter,
-                      child: _PkMarker(label: p.label),
-                    );
-                  }).toList(),
-                );
-              }),
-              MyCurrentLocationLayer(),
-              // Capas de "Líneas de corte" (polylines + drag markers +
-              // warning). Internamente filtran por cutStateOn && zoomOk.
+              const GasoductosMapLayer(),
+              SegmentosMapLayer(currentZoom: controller.currentZoom),
+              PksMapLayer(currentZoom: controller.currentZoom),
+              MyCurrentLocationLayer(
+                alignDirectionOnUpdate: AlignOnUpdate.always,
+                alignPositionOnUpdate: AlignOnUpdate.always,
+              ),
               ...buildLinesCutMapLayers(controller.linesCut),
-              // Brújula estilo cupertino (bottom-right, encima del indicador de zoom)
               const MapCompass.cupertino(
                 rotationDuration: Duration(milliseconds: 300),
                 hideIfRotatedNorth: false,
                 alignment: Alignment.bottomRight,
                 padding: EdgeInsets.only(bottom: 48, right: 10),
               ),
-              // Indicador de zoom (bottom-right, esquina inferior)
               const _ZoomDisplay(),
             ],
           ),
-          // Filtros (Estado / Tipo) en la parte superior, sobre el mapa.
           Positioned(
             top: 8,
             left: 8,
             right: 8,
-            child: _FiltrosBar(controller: controller),
+            child: _FiltrosBar(),
           ),
-          // Botones de zoom (bottom-right, a la izquierda del compass)
           Positioned(
             bottom: 40,
             right: 58,
             child: _ZoomControls(controller: controller),
           ),
-          // Botón principal "Líneas de corte" (bottom-left). Cambia a
-          // "Aplicar corte" cuando las dos líneas están listas.
           Positioned(
             bottom: 40,
             left: 10,
@@ -236,70 +165,23 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               onApplyCut: controller.applyLinesCut,
             ),
           ),
-          // Panel de control de la feature (arriba-izquierda, bajo filtros).
           Positioned(
             top: 56,
             left: 8,
             right: 8,
             child: LinesCutControlPanel(controller: controller.linesCut),
           ),
-          // Status de la carga de PKs (bottom-right, encima del compass)
           const Positioned(
             bottom: 96,
             right: 10,
             child: _PksLoadStatus(),
           ),
-          // Banner de error no-bloqueante
-          Obx(() {
-            final errG = controller.errorGasoductos.value;
-            final errA = controller.errorSegmentos.value;
-            if (errG == null && errA == null) return const SizedBox.shrink();
-            return Positioned(
-              top: 64,
-              left: 16,
-              right: 16,
-              child: Material(
-                borderRadius: BorderRadius.circular(8),
-                elevation: 2,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber,
-                          color: Colors.orange.shade700, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          [if (errG != null) errG, if (errA != null) errA]
-                              .join(' · '),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.orange.shade800),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: controller.loadAll,
-                        style: TextButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: const Size(0, 0),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text('Reintentar',
-                            style: TextStyle(fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-          // Indicador de carga en la parte inferior con progreso por etapa
+          const Positioned(
+            top: 64,
+            left: 16,
+            right: 16,
+            child: _ErrorBanner(),
+          ),
           const Positioned(
             bottom: 16,
             left: 16,
@@ -312,86 +194,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
   }
 }
 
-/// Marcador estilo pin para un PK: label en una píldora con cola triangular
-/// apuntando hacia la coordenada exacta. La punta del triángulo coincide con
-/// el geo-point gracias a `Marker.alignment = Alignment.bottomCenter`.
-class _PkMarker extends StatelessWidget {
-  final String label;
-  const _PkMarker({required this.label});
-
-  static const _fill = Color(0xFFFFC107); // amber 500
-  static const _border = Color(0xFF263238); // blue grey 900
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: _fill,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: _border, width: 1),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black38,
-                blurRadius: 2,
-                offset: Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.visible,
-            softWrap: false,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: Colors.black,
-              height: 1.1,
-            ),
-          ),
-        ),
-        CustomPaint(
-          size: const Size(10, 7),
-          painter: _PkTrianglePainter(fill: _fill, border: _border),
-        ),
-      ],
-    );
-  }
-}
-
-class _PkTrianglePainter extends CustomPainter {
-  final Color fill;
-  final Color border;
-  const _PkTrianglePainter({required this.fill, required this.border});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = ui.Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..close();
-    canvas.drawPath(path, Paint()..color = fill);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = border
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PkTrianglePainter old) =>
-      old.fill != fill || old.border != border;
-}
-
-// ─── Barra de filtros (Estado / Tipo) ────────────────────────────────────────
+// ─── Barra de filtros ─────────────────────────────────────────────────────────
 
 const Map<EstadoActividad, Color> _estadoFilterColors = {
   EstadoActividad.propuesta: Color(0xFF78909C),
@@ -412,9 +215,8 @@ const Map<TipoActividad, Color> _tipoFilterColors = {
   TipoActividad.talaArboles: Color(0xFF4E342E),
 };
 
-class _FiltrosBar extends StatelessWidget {
-  final MapaGlobalController controller;
-  const _FiltrosBar({required this.controller});
+class _FiltrosBar extends GetView<SegmentosMapController> {
+  const _FiltrosBar();
 
   @override
   Widget build(BuildContext context) {
@@ -583,7 +385,8 @@ class _FilterDropdown<T> extends StatelessWidget {
   }
 }
 
-/// Botones + / - para controlar el zoom del mapa.
+// ─── Zoom controls ────────────────────────────────────────────────────────────
+
 class _ZoomControls extends StatelessWidget {
   final MapaGlobalController controller;
 
@@ -602,17 +405,10 @@ class _ZoomControls extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _ZoomButton(
-            icon: Icons.add,
-            onTap: controller.zoomIn,
-            isTop: true,
-          ),
+          _ZoomButton(icon: Icons.add, onTap: controller.zoomIn, isTop: true),
           Container(height: 1, color: Colors.grey.shade200),
           _ZoomButton(
-            icon: Icons.remove,
-            onTap: controller.zoomOut,
-            isTop: false,
-          ),
+              icon: Icons.remove, onTap: controller.zoomOut, isTop: false),
         ],
       ),
     );
@@ -654,51 +450,8 @@ class _ZoomButton extends StatelessWidget {
   }
 }
 
-/// Label clickeable sobre el centroide de cada segmento de actividad.
-class _SegmentoLabel extends StatelessWidget {
-  final SegmentoMapInfo segmentoInfo;
-  final VoidCallback onTap;
+// ─── Zoom display ─────────────────────────────────────────────────────────────
 
-  const _SegmentoLabel({required this.segmentoInfo, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = segmentoInfo.color;
-    final longKm = segmentoInfo.segmento.longitudKm;
-    final label = longKm >= 1
-        ? '${longKm.toStringAsFixed(2)} km'
-        : '${(longKm * 1000).toStringAsFixed(0)} m';
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white, width: 1),
-          boxShadow: const [
-            BoxShadow(
-                color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
-          ],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              color: Colors.black87,
-            ),
-          ),                
-        ),
-      ),
-    );
-  }
-}
-
-/// Indicador del nivel de zoom actual. Usa MapCamera.of(context) para
-/// actualizarse automáticamente con cada movimiento del mapa.
 class _ZoomDisplay extends StatelessWidget {
   const _ZoomDisplay();
 
@@ -726,7 +479,8 @@ class _ZoomDisplay extends StatelessWidget {
   }
 }
 
-/// Botón de leyenda en la AppBar.
+// ─── Leyenda ─────────────────────────────────────────────────────────────────
+
 class _LeyendaButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -746,8 +500,7 @@ class _LeyendaButton extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Leyenda',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             const _LeyendaItem(
                 color: Color(0xFF1565C0), label: 'Gasoductos (CTs)'),
@@ -768,9 +521,36 @@ class _LeyendaButton extends StatelessWidget {
   }
 }
 
-/// Indicador de progreso del pipeline de descarga de PKs. Se muestra solo
-/// mientras `PksService.isLoading` es true y, si hay total conocido, pinta
-/// el contador `procesados/total` de ficheros JSON.
+class _LeyendaItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LeyendaItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 4,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Banners de estado ────────────────────────────────────────────────────────
+
 class _PksLoadStatus extends StatelessWidget {
   const _PksLoadStatus();
 
@@ -819,24 +599,71 @@ class _PksLoadStatus extends StatelessWidget {
   }
 }
 
-/// Banner inferior con el progreso global de carga del mapa. Lee de forma
-/// reactiva los contadores de `GasoductosService` y `PksService`, y el flag
-/// `isLoadingSegmentos` del controlador. Muestra la etapa activa (etiqueta +
-/// contador `X/Y`) y una barra de progreso determinista cuando el total es
-/// conocido; si no, cae a un indicador indeterminado.
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final mapCtrl = Get.find<MapaGlobalController>();
+    final segCtrl = Get.find<SegmentosMapController>();
+    return Obx(() {
+      final errG = mapCtrl.errorGasoductos.value;
+      final errA = segCtrl.error.value;
+      if (errG == null && errA == null) return const SizedBox.shrink();
+      return Material(
+        borderRadius: BorderRadius.circular(8),
+        elevation: 2,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber,
+                  color: Colors.orange.shade700, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  [if (errG != null) errG, if (errA != null) errA].join(' · '),
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                ),
+              ),
+              TextButton(
+                onPressed: mapCtrl.loadAll,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child:
+                    const Text('Reintentar', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+}
+
 class _MapLoadBanner extends StatelessWidget {
   const _MapLoadBanner();
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<MapaGlobalController>();
+    final mapCtrl = Get.find<MapaGlobalController>();
+    final segCtrl = Get.find<SegmentosMapController>();
     final gasoductos = Get.find<GasoductosService>();
     final pks = Get.find<PksService>();
 
     return Obx(() {
-      final isGas = controller.isLoadingGasoductos.value;
-      final isPks = controller.isLoadingPks.value;
-      final isSeg = controller.isLoadingSegmentos.value;
+      final isGas = mapCtrl.isLoadingGasoductos.value;
+      final isPks = mapCtrl.isLoadingPks.value;
+      final isSeg = segCtrl.isLoading.value;
       if (!isGas && !isPks && !isSeg) return const SizedBox.shrink();
 
       final String stageLabel;
@@ -905,33 +732,5 @@ class _MapLoadBanner extends StatelessWidget {
         ),
       );
     });
-  }
-}
-
-class _LeyendaItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LeyendaItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 4,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(label, style: const TextStyle(fontSize: 13)),
-        ],
-      ),
-    );
   }
 }

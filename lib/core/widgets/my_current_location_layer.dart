@@ -2,7 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 
 class MyCurrentLocationLayer extends StatelessWidget {
-  const MyCurrentLocationLayer({super.key});
+
+  final AlignOnUpdate alignPositionOnUpdate;
+  final AlignOnUpdate alignDirectionOnUpdate;  
+
+
+  const MyCurrentLocationLayer({
+    super.key,
+    // Asignamos AlignOnUpdate.never como valor por defecto
+    this.alignPositionOnUpdate = AlignOnUpdate.never,
+    this.alignDirectionOnUpdate = AlignOnUpdate.never,
+  });
 
   @override
   Widget build(BuildContext context) {
