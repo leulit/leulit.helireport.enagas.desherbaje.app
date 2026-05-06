@@ -37,21 +37,8 @@ class LocalDatabase {
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final fullPath = path.join(dbPath, 'helireport_desherbaje.db');
-    // USAMOS openDatabase directamente para tener control total de los callbacks
-    final db = await openDatabase(
-      fullPath,
-      version: 1, // Asegúrate de que coincida con tu versión actual
-      onConfigure: (db) async {
-        // Esto es mucho más seguro que ejecutarlo manualmente después
-        await db.rawQuery('PRAGMA journal_mode = WAL');
-        await db.rawQuery('PRAGMA foreign_keys = ON');
-      },
-      onCreate: (db, version) async {
-        // Aquí puedes llamar a tu lógica de creación si OfflineDatabase no lo hace
-      },
-    );
+    final db = await OfflineDatabase.open(fullPath);
     await _createMasterDataTables(db);
-    
     return db;
   }
 

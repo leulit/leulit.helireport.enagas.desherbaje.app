@@ -32,7 +32,8 @@
       "Bash(chmod +x /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build_android.sh /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build_ios.sh)",
       "Bash(chmod +x /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build.sh)",
       "Bash(dart analyze *)",
-      "Bash(git -C /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/.claude/worktrees/agent-ae8a147c2a078381c branch --show-current)"
+      "Bash(git -C /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/.claude/worktrees/agent-ae8a147c2a078381c branch --show-current)",
+      "Bash(python3 *)"
     ]
   },
   "enabledPlugins": {}

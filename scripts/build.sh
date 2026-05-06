@@ -102,12 +102,23 @@ build_android() {
   fi
 }
 
+sync_ios_version() {
+  local pbxproj="ios/Runner.xcodeproj/project.pbxproj"
+  # Runner target uses $(FLUTTER_BUILD_NUMBER) / $(FLUTTER_BUILD_NAME) — injected by flutter build.
+  # RunnerTests configs have hardcoded values; keep them in sync so Xcode doesn't show stale numbers.
+  sed -i '' "s/MARKETING_VERSION = .*;/MARKETING_VERSION = ${VERSION_NAME};/g" "$pbxproj"
+  sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9][0-9]*;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$pbxproj"
+  info "[iOS] project.pbxproj actualizado → ${VERSION_NAME}+${BUILD_NUMBER}"
+}
+
 build_ios() {
   [[ "$(uname)" == "Darwin" ]] || error "Build iOS solo funciona en macOS"
   command -v xcodebuild >/dev/null || error "xcodebuild no está en PATH (instala Xcode)"
 
   local dist_dir="dist/ios"
   mkdir -p "$dist_dir"
+
+  sync_ios_version
 
   log "[iOS] pod install"
   (cd ios && pod install --repo-update >/dev/null)
