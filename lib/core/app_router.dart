@@ -13,8 +13,11 @@ import '../presentation/sincronizacion/sincronizacion_page.dart';
 import '../presentation/sincronizacion/sincronizacion_binding.dart';
 import '../presentation/forzar_envio/forzar_envio_page.dart';
 import '../presentation/forzar_envio/forzar_envio_binding.dart';
+import '../presentation/splash/splash_page.dart';
+import '../presentation/splash/splash_binding.dart';
 
 class AppRoutes {
+  static const splash = '/splash';
   static const login = '/login';
   static const segmentos = '/segmentos';
   static const detalle = '/segmentos/detalle';
@@ -26,6 +29,11 @@ class AppRoutes {
 
 class AppPages {
   static final pages = [
+    GetPage(
+      name: AppRoutes.splash,
+      page: () => const SplashPage(),
+      binding: SplashBinding(),
+    ),
     GetPage(
       name: AppRoutes.login,
       page: () => const LoginPage(),

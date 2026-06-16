@@ -26,7 +26,21 @@ import 'services/pks_service.dart';
 import 'sync/sync.dart';
 
 class AppDI {
-  static Future<void> init() async {
+  /// Completer compartido: la 2ª llamada concurrent o secuencial reutiliza el
+  /// mismo Future. Llamar [resetForTest] antes de un re-init (solo en tests /
+  /// flujo retry del splash: el splash llama resetForTest() → init() de nuevo).
+  static Future<void>? _initFuture;
+
+  static Future<void> init() => _initFuture ??= _init();
+
+  /// Limpia el completer para que la siguiente llamada a [init] vuelva a
+  /// ejecutar [_init] desde cero. Usado en tests y en el flujo de reintento
+  /// del splash cuando un bootstrap anterior terminó en error.
+  // ignore: invalid_use_of_visible_for_testing_member — llamado legítimamente
+  // por SplashController.retry() en producción.
+  static void resetForTest() => _initFuture = null;
+
+  static Future<void> _init() async {
     Get.put<TypeRegistry>(TypeRegistry(), permanent: true);
     await Get.putAsync<ConnectivityService>(
       () async => ConnectivityService(),

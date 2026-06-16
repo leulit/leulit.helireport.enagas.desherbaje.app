@@ -14,7 +14,7 @@ class MainApp extends StatelessWidget {
         title: 'Helireport Desherbaje',
         theme: AppTheme.theme,
         debugShowCheckedModeBanner: false,
-        initialRoute: AppRoutes.login,
+        initialRoute: AppRoutes.splash,
         getPages: AppPages.pages,
       )
     );
