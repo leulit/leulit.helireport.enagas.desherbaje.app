@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
+import 'services/session_state.dart';
 import '../presentation/auth/login_page.dart';
 import '../presentation/auth/login_page_binding.dart';
 import '../presentation/segmentos/segmentos_list_page.dart';
@@ -80,8 +81,12 @@ class AppPages {
 class AuthMiddleware extends GetMiddleware {
   @override
   RouteSettings? redirect(String? route) {
-    // La verificación real se hace de forma asíncrona en el controller
-    // Este middleware solo hace redirect si sabemos que no hay token en memoria
-    return null;
+    // /login and /splash are always allowed — returning null here prevents the
+    // redirect loop that would occur if the middleware ran on the login page.
+    if (route == AppRoutes.login || route == AppRoutes.splash) return null;
+
+    final ok = Get.isRegistered<SessionState>() &&
+        Get.find<SessionState>().hasSession;
+    return ok ? null : const RouteSettings(name: AppRoutes.login);
   }
 }

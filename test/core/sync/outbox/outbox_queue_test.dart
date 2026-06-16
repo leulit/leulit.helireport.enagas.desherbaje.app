@@ -78,17 +78,75 @@ void main() {
       expect(syncing!.status, equals(SyncStatus.syncing));
       expect(syncing.attempts, equals(1));
 
-      // Re-enqueue same (entity_type, client_id, operation) triple
-      await queue.enqueue(
+      // Re-enqueue same (entity_type, client_id, operation) triple.
+      // UPSERT preserves the row id, so byId(id1) still resolves.
+      final id2 = await queue.enqueue(
         entityType: 'segmento',
         clientId: 'uuid-1',
         operation: SyncOperation.update,
       );
+      // Same row: id must be unchanged (UPSERT, not DELETE+INSERT).
+      expect(id2, equals(id1));
 
-      // Old row is replaced: attempts reset to 0, status back to pending
       final reset = await queue.byId(id1);
-      expect(reset?.status ?? SyncStatus.pending, equals(SyncStatus.pending));
-      expect(reset?.attempts ?? 0, equals(0));
+      expect(reset!.status, equals(SyncStatus.pending));
+      expect(reset.attempts, equals(0));
+    });
+
+    // NF-21 — re-enqueue of an already-synced op preserves remote_id/synced_at
+    test('NF-21: re-enqueue of synced row preserves remote_id and synced_at',
+        () async {
+      final id = await queue.enqueue(
+        entityType: 'segmento',
+        clientId: 'uuid-sync',
+        operation: SyncOperation.create,
+      );
+      await queue.markSyncing(id);
+      await queue.markSynced(id, remoteId: 'server-99');
+
+      final synced = await queue.byId(id);
+      expect(synced!.remoteId, equals('server-99'));
+      expect(synced.syncedAt, isNotNull);
+
+      // User edits the entity again → re-enqueue
+      final id2 = await queue.enqueue(
+        entityType: 'segmento',
+        clientId: 'uuid-sync',
+        operation: SyncOperation.create,
+      );
+      expect(id2, equals(id)); // UPSERT, not replace
+
+      final requeued = await queue.byId(id);
+      expect(requeued!.status, equals(SyncStatus.pending));
+      expect(requeued.attempts, equals(0));
+      expect(requeued.lastError, isNull);
+      // remote_id and synced_at are preserved
+      expect(requeued.remoteId, equals('server-99'));
+      expect(requeued.syncedAt, isNotNull);
+    });
+
+    // NF-21 — re-enqueue preserves created_at
+    test('NF-21: re-enqueue preserves created_at', () async {
+      final id = await queue.enqueue(
+        entityType: 'segmento',
+        clientId: 'uuid-ts',
+        operation: SyncOperation.update,
+      );
+      final original = await queue.byId(id);
+      final originalCreatedAt = original!.createdAt;
+
+      // Small delay to ensure time has advanced
+      await Future.delayed(const Duration(milliseconds: 5));
+
+      final id2 = await queue.enqueue(
+        entityType: 'segmento',
+        clientId: 'uuid-ts',
+        operation: SyncOperation.update,
+      );
+      expect(id2, equals(id));
+
+      final requeued = await queue.byId(id);
+      expect(requeued!.createdAt, equals(originalCreatedAt));
     });
 
     test('different operations for same entity coexist', () async {

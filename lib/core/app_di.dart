@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../data/local/local_database.dart';
 import '../data/network/network_service.dart';
+import '../data/repository/auth_repository_impl.dart';
 import '../data/services/json_loader_service.dart';
 import '../data/model/mensaje_entity.dart';
 import '../data/sync/imagen_local_store.dart';
@@ -23,6 +24,7 @@ import 'services/gasoductos_service.dart';
 import 'services/gps_background_service.dart';
 import 'services/gps_service.dart';
 import 'services/pks_service.dart';
+import 'services/session_state.dart';
 import 'sync/sync.dart';
 
 class AppDI {
@@ -41,6 +43,18 @@ class AppDI {
   static void resetForTest() => _initFuture = null;
 
   static Future<void> _init() async {
+    // SessionState must be available before any route is resolved so that
+    // AuthMiddleware.redirect (synchronous) can read hasSession.
+    final sessionState = Get.put<SessionState>(SessionState(), permanent: true);
+    try {
+      final isAuth = await AuthRepositoryImpl().isAuthenticated();
+      sessionState.set(isAuth);
+    } catch (_) {
+      // secure_storage unavailable (e.g. first install or permission error) →
+      // treat as unauthenticated; do not block startup.
+      sessionState.set(false);
+    }
+
     Get.put<TypeRegistry>(TypeRegistry(), permanent: true);
     await Get.putAsync<ConnectivityService>(
       () async => ConnectivityService(),

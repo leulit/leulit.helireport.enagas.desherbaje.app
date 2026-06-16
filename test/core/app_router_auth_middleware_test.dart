@@ -1,0 +1,57 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+
+import 'package:helireport_desherbaje/core/app_router.dart';
+import 'package:helireport_desherbaje/core/services/session_state.dart';
+
+void main() {
+  setUp(() => Get.reset());
+  tearDown(() => Get.reset());
+
+  group('AuthMiddleware.redirect', () {
+    test('(a) without session → redirects to /login', () {
+      final session = Get.put<SessionState>(SessionState(), permanent: true);
+      session.set(false);
+
+      final result = AuthMiddleware().redirect(AppRoutes.segmentos);
+
+      expect(result, isNotNull);
+      expect(result!.name, equals(AppRoutes.login));
+    });
+
+    test('(b) with session → returns null (no redirect)', () {
+      final session = Get.put<SessionState>(SessionState(), permanent: true);
+      session.set(true);
+
+      final result = AuthMiddleware().redirect(AppRoutes.segmentos);
+
+      expect(result, isNull);
+    });
+
+    test('(c) /login route always returns null — no redirect loop', () {
+      // Even without SessionState registered the login page must never redirect.
+      final result = AuthMiddleware().redirect(AppRoutes.login);
+      expect(result, isNull);
+    });
+
+    test('(c) /splash route always returns null — no redirect loop', () {
+      final result = AuthMiddleware().redirect(AppRoutes.splash);
+      expect(result, isNull);
+    });
+
+    test('(d) SessionState not registered → redirects to /login without throwing',
+        () {
+      // SessionState deliberately not registered.
+      expect(Get.isRegistered<SessionState>(), isFalse);
+
+      RouteSettings? result;
+      expect(
+        () => result = AuthMiddleware().redirect(AppRoutes.segmentos),
+        returnsNormally,
+      );
+      expect(result, isNotNull);
+      expect(result!.name, equals(AppRoutes.login));
+    });
+  });
+}

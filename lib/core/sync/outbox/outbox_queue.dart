@@ -17,8 +17,12 @@ class OutboxQueue {
   OutboxQueue(this._db);
 
   /// Enqueues an operation. Idempotent on the unique
-  /// `(entity_type, client_id, operation)` triple — replacing a row resets
-  /// `attempts`, `status`, and `last_error`.
+  /// `(entity_type, client_id, operation)` triple.
+  ///
+  /// On conflict (re-enqueue of the same triple) the row is updated in-place:
+  /// `status → pending`, `attempts → 0`, `last_error/status_code → NULL`.
+  /// Crucially, `remote_id`, `synced_at`, and `created_at` are **preserved**
+  /// so that a re-edit of an already-synced entity does not lose its server id.
   Future<int> enqueue({
     required String entityType,
     required String clientId,
@@ -26,20 +30,25 @@ class OutboxQueue {
     DatabaseExecutor? txn,
   }) async {
     final executor = txn ?? _db;
-    final id = await executor.insert(
-      _table,
-      {
-        'entity_type': entityType,
-        'client_id': clientId,
-        'operation': operation.wireName,
-        'status': SyncStatus.pending.wireName,
-        'attempts': 0,
-        'last_error': null,
-        'status_code': null,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await executor.rawInsert('''
+      INSERT INTO $_table
+        (entity_type, client_id, operation, status, attempts,
+         last_error, status_code, created_at)
+      VALUES (?, ?, ?, ?, 0, NULL, NULL, ?)
+      ON CONFLICT(entity_type, client_id, operation) DO UPDATE SET
+        status      = 'pending',
+        attempts    = 0,
+        last_error  = NULL,
+        status_code = NULL
+    ''', [entityType, clientId, operation.wireName, SyncStatus.pending.wireName, now]);
+
+    final rows = await executor.rawQuery(
+      'SELECT id FROM $_table WHERE entity_type=? AND client_id=? AND operation=?',
+      [entityType, clientId, operation.wireName],
     );
+    final id = rows.first['id'] as int;
+
     SyncActions.entityQueued.dispatch(
       data: EntityQueuedEvent(
         entityType: entityType,

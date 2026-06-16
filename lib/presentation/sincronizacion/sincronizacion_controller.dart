@@ -6,6 +6,7 @@ import '../../core/my_getx_controller.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/pks_service.dart';
+import '../../core/services/session_state.dart';
 import '../../core/sync/sync.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../domain/repository/auth_repository.dart';
@@ -128,6 +129,9 @@ class SincronizacionController extends MyGetxController {
   /// inicio no deja nada en el stack, así que `Get.back()` no funciona aquí.
   void volver() {
     if (isWorking.value) return;
+    if (Get.isRegistered<SessionState>()) {
+      Get.find<SessionState>().set(false);
+    }
     Get.offAllNamed(AppRoutes.login);
   }
 
