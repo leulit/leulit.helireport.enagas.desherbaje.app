@@ -50,6 +50,9 @@ class OfflineRepository<T extends Syncable> {
 
   Future<List<T>> findAll() => _store.findAll();
 
+  Future<List<T>> findWhere(String column, Object? value) =>
+      _store.findWhere(column, value);
+
   Future<void> _persistAndEnqueue(T entity, SyncOperation op) async {
     await _db.transaction((txn) async {
       await _store.upsert(entity, txn: txn);

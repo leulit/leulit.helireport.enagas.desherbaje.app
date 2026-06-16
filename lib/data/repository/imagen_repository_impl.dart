@@ -29,26 +29,13 @@ class ImagenRepositoryImpl {
   Future<void> delete(ImagenSegmentoEntity imagen) =>
       _offline.delete(imagen);
 
-  Future<List<ImagenSegmentoEntity>> getAllBySegmento(int segmentoId) async {
-    final all = await _offline.findAll();
-    return all.where((i) => i.segmentoId == segmentoId).toList();
-  }
+  Future<List<ImagenSegmentoEntity>> getAllBySegmento(int segmentoId) =>
+      _offline.findWhere('segmento_id', segmentoId);
 
-  Future<List<ImagenSegmentoEntity>> getPendingBySegmento(int segmentoId) async {
-    final all = await _offline.findAll();
-    return all
-        .where((i) => i.segmentoId == segmentoId && i.subidaAt == null)
-        .toList();
-  }
-
-  /// Pushes all pending images by routing through the generic engine.
-  /// Note: drains every pending image, not just those of [segmentoId] —
-  /// the engine doesn't filter by domain attributes. Kept signature for
-  /// backwards compatibility with the existing controllers; will be
-  /// replaced by a global sync page entry point.
+  /// Drains ALL pending images through the generic sync engine.
   ///
   /// Returns an empty [DrainSummary] immediately when offline.
-  Future<DrainSummary> uploadPending(int segmentoId) async {
+  Future<DrainSummary> uploadAllPending() async {
     if (!_connectivity.isConnected) return const DrainSummary();
     return _engine.drain(entityType: 'imagen');
   }

@@ -80,6 +80,20 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
     return rows.map(_rowToEntity).toList(growable: false);
   }
 
+  @override
+  Future<List<MensajeSegmentoEntity>> findWhere(
+    String column,
+    Object? value,
+  ) async {
+    final rows = await _db.query(
+      _table,
+      where: '$column = ?',
+      whereArgs: [value],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(_rowToEntity).toList(growable: false);
+  }
+
   /// Push-only store — mensajes are never pulled individually, so there is
   /// no remote-id lookup path. Always returns `null`.
   @override
@@ -109,15 +123,8 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
 
   /// Returns local mensajes for a given segmento (used as a fallback when
   /// the network call to fetch fresh data fails offline).
-  Future<List<MensajeSegmentoEntity>> findBySegmento(int segmentoId) async {
-    final rows = await _db.query(
-      _table,
-      where: 'segmento_id = ?',
-      whereArgs: [segmentoId],
-      orderBy: 'created_at DESC',
-    );
-    return rows.map(_rowToEntity).toList(growable: false);
-  }
+  Future<List<MensajeSegmentoEntity>> findBySegmento(int segmentoId) =>
+      findWhere('segmento_id', segmentoId);
 
   Map<String, Object?> _entityToRow(MensajeSegmentoEntity e) => {
         'client_id': e.clientId,

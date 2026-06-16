@@ -7,13 +7,12 @@ class _FakeEntity implements Syncable {
   @override
   final String clientId;
   @override
-  final String? remoteId;
+  final String? remoteId = null;
   @override
   final DateTime updatedAt;
 
   const _FakeEntity({
     required this.clientId,
-    this.remoteId,
     required this.updatedAt,
   });
 

@@ -93,6 +93,10 @@ abstract class _NopLocalStore extends LocalStore<_NopSyncable> {
   Future<List<_NopSyncable>> findAll() async => const [];
 
   @override
+  Future<List<_NopSyncable>> findWhere(String column, Object? value) async =>
+      const [];
+
+  @override
   Future<void> markSynced({
     required String clientId,
     String? remoteId,

@@ -46,6 +46,15 @@ abstract class LocalStore<T extends Syncable> {
 
   Future<List<T>> findAll();
 
+  /// Returns all entities where [column] equals [value].
+  ///
+  /// **[column] MUST be a code literal, never user input** — the value is
+  /// interpolated directly into the SQL WHERE clause. Callers that pass a
+  /// user-controlled string open an SQL-injection surface.
+  ///
+  /// Implementations SHOULD apply the same `orderBy` as their [findAll].
+  Future<List<T>> findWhere(String column, Object? value);
+
   Future<void> markSynced({
     required String clientId,
     String? remoteId,

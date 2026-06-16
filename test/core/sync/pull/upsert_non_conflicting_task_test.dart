@@ -6,7 +6,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:helireport_desherbaje/core/sync/contracts/conflict_resolver.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/local_store.dart';
-import 'package:helireport_desherbaje/core/sync/contracts/syncable.dart';
 import 'package:helireport_desherbaje/core/sync/pull/pull_context.dart';
 import 'package:helireport_desherbaje/core/sync/pull/tasks/upsert_non_conflicting_task.dart';
 import 'package:helireport_desherbaje/core/sync/type_registry.dart';
@@ -65,7 +64,7 @@ void main() {
         )).thenAnswer((_) async {});
   });
 
-  PullContext<SegmentoEntity> _ctx(List<ResolvedPullItem<SegmentoEntity>> items) {
+  PullContext<SegmentoEntity> buildCtx(List<ResolvedPullItem<SegmentoEntity>> items) {
     final ctx = PullContext<SegmentoEntity>(
       registration: _registration(mockStore),
     );
@@ -73,7 +72,7 @@ void main() {
     return ctx;
   }
 
-  Future<PullContext<SegmentoEntity>> _run(
+  Future<PullContext<SegmentoEntity>> runTask(
       PullContext<SegmentoEntity> ctx) async {
     final result = await task.execute(DataPipeline.of(ctx));
     return result.output;
@@ -88,7 +87,7 @@ void main() {
 
         // Resolved item: remote payload + local clientId
         final item = (remote: remote, clientId: 'local-cid', local: local);
-        final ctx = await _run(_ctx([item]));
+        final ctx = await runTask(buildCtx([item]));
 
         // Capture argument passed to upsert
         final captured = verify(() => mockStore.upsert(captureAny())).captured;
@@ -111,7 +110,7 @@ void main() {
         final remote = _seg(clientId: 'fresh-uuid', id: 7);
         final item = (remote: remote, clientId: 'stable-local-cid', local: null);
 
-        await _run(_ctx([item]));
+        await runTask(buildCtx([item]));
 
         verify(() => mockStore.markSynced(
               clientId: 'stable-local-cid',
@@ -141,7 +140,7 @@ void main() {
           ),
         ];
 
-        final ctx = await _run(_ctx(items));
+        final ctx = await runTask(buildCtx(items));
 
         verify(() => mockStore.upsert(any())).called(3);
         verify(() => mockStore.markSynced(
@@ -159,7 +158,7 @@ void main() {
         // No local found: clientId == remote.clientId
         final item = (remote: remote, clientId: 'totally-new-uuid', local: null);
 
-        await _run(_ctx([item]));
+        await runTask(buildCtx([item]));
 
         final captured = verify(() => mockStore.upsert(captureAny())).captured;
         final upserted = captured.first as SegmentoEntity;
@@ -171,7 +170,7 @@ void main() {
     test(
       '(e) empty safeToUpsert list — no store calls, upserted counter stays 0',
       () async {
-        final ctx = await _run(_ctx([]));
+        final ctx = await runTask(buildCtx([]));
 
         verifyNever(() => mockStore.upsert(any()));
         verifyNever(() => mockStore.markSynced(

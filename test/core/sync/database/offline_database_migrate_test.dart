@@ -69,6 +69,9 @@ class _FakeStore implements LocalStore<_FakeEntity> {
   Future<List<_FakeEntity>> findAll() async => [];
 
   @override
+  Future<List<_FakeEntity>> findWhere(String column, Object? value) async => [];
+
+  @override
   Future<void> markSynced({
     required String clientId,
     String? remoteId,

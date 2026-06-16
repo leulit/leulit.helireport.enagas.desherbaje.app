@@ -7,6 +7,7 @@ import '../../domain/entities/position_batch_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
 import '../network/sync_outcome_from_network_error.dart';
+import 'adapter_support.dart';
 
 /// Push-only adapter for [PositionBatchEntity]. Sends an entire batch in a
 /// single `POST /positions/batch` request, idempotent by
@@ -40,7 +41,7 @@ class PositionBatchRemoteAdapter extends RemoteAdapter<PositionBatchEntity> {
       final response = await _network.post(
         ApiEndpoints.positionsBatch,
         body: entity.toJson(),
-        headers: await _authHeader(),
+        headers: await bearerAuthHeader(_storage),
       );
       if (!response.isSuccess) {
         return SyncUnrecoverable<PositionBatchEntity>(
@@ -50,20 +51,15 @@ class PositionBatchRemoteAdapter extends RemoteAdapter<PositionBatchEntity> {
       }
       String? remoteId;
       final data = response.data;
-      if (data is Map<String, dynamic>) {
-        final raw = data['remote_id'] ?? data['id'];
-        if (raw is int) remoteId = raw.toString();
-        if (raw is String) remoteId = raw;
+      if (data is Map) {
+        final payload = data is Map<String, dynamic>
+            ? data
+            : data.cast<String, dynamic>();
+        remoteId = extractRemoteIntId(payload)?.toString();
       }
       return SyncSuccess<PositionBatchEntity>(remoteId: remoteId);
     } on NetworkError catch (e) {
       return syncOutcomeFromNetworkError<PositionBatchEntity>(e);
     }
-  }
-
-  Future<Map<String, String>?> _authHeader() async {
-    final token = await _storage.read(key: 'auth_token');
-    if (token == null) return null;
-    return {'Authorization': 'Bearer $token'};
   }
 }

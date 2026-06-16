@@ -7,6 +7,7 @@ import '../../domain/entities/segmento_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
 import '../network/sync_outcome_from_network_error.dart';
+import 'adapter_support.dart';
 
 /// [RemoteAdapter] for [SegmentoEntity].
 ///
@@ -60,7 +61,7 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
       final response = await _network.post(
         ApiEndpoints.segmentoUpd(remoteId),
         body: body,
-        headers: await _authHeader(),
+        headers: await bearerAuthHeader(_storage),
       );
 
       if (response.isSuccess) {
@@ -78,9 +79,4 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
     }
   }
 
-  Future<Map<String, String>?> _authHeader() async {
-    final token = await _storage.read(key: 'auth_token');
-    if (token == null) return null;
-    return {'Authorization': 'Bearer $token'};
-  }
 }

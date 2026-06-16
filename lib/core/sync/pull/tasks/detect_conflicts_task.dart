@@ -65,10 +65,8 @@ class DetectConflictsTask<T extends Syncable>
       }
 
       // Fall back to clientId lookup if remoteId gave no match.
-      if (local == null) {
-        local = await ctx.registration.store.findByClientId(remote.clientId);
-        // resolvedClientId stays remote.clientId (new entity or clientId echo).
-      }
+      // resolvedClientId stays remote.clientId (new entity or clientId echo).
+      local ??= await ctx.registration.store.findByClientId(remote.clientId);
 
       // Step 2 — classify.
       if (local == null) {

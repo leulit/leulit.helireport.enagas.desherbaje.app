@@ -7,6 +7,7 @@ import '../model/mensaje_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
 import '../network/sync_outcome_from_network_error.dart';
+import 'adapter_support.dart';
 
 /// Push-only adapter for [MensajeSegmentoEntity]. Updates / deletes of
 /// existing mensajes are not yet supported by the backend.
@@ -42,7 +43,7 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
       final response = await _network.post(
         ApiEndpoints.mensajeAdd(entity.segmentoId),
         body: body,
-        headers: await _authHeader(),
+        headers: await bearerAuthHeader(_storage),
       );
       if (!response.isSuccess) {
         return SyncUnrecoverable<MensajeSegmentoEntity>(
@@ -53,15 +54,13 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
       final data = response.data;
       String? remoteId;
       MensajeSegmentoEntity? serverVersion;
-      if (data is Map<String, dynamic>) {
-        final raw = data['id'] ?? data['remote_id'];
-        if (raw is int) {
-          remoteId = raw.toString();
-        } else if (raw is String) {
-          remoteId = raw;
-        }
+      if (data is Map) {
+        final payload = data is Map<String, dynamic>
+            ? data
+            : data.cast<String, dynamic>();
+        remoteId = extractRemoteIntId(payload)?.toString();
         try {
-          serverVersion = MensajeSegmentoEntity.fromJson(data);
+          serverVersion = MensajeSegmentoEntity.fromJson(payload);
         } catch (_) {
           serverVersion = null;
         }
@@ -73,11 +72,5 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
     } on NetworkError catch (e) {
       return syncOutcomeFromNetworkError<MensajeSegmentoEntity>(e);
     }
-  }
-
-  Future<Map<String, String>?> _authHeader() async {
-    final token = await _storage.read(key: 'auth_token');
-    if (token == null) return null;
-    return {'Authorization': 'Bearer $token'};
   }
 }

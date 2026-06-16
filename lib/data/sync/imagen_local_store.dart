@@ -101,6 +101,20 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
     return rows.map(ImagenSegmentoEntity.fromMap).toList(growable: false);
   }
 
+  @override
+  Future<List<ImagenSegmentoEntity>> findWhere(
+    String column,
+    Object? value,
+  ) async {
+    final rows = await _db.query(
+      _table,
+      where: '$column = ?',
+      whereArgs: [value],
+      orderBy: 'capturada_at DESC',
+    );
+    return rows.map(ImagenSegmentoEntity.fromMap).toList(growable: false);
+  }
+
   /// Push-only store — images are never pulled from the backend, so there is
   /// no remote-id lookup path. Always returns `null`.
   @override

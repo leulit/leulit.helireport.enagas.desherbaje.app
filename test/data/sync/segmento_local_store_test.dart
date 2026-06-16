@@ -21,7 +21,6 @@ Future<Database> _openDb() async {
 SegmentoEntity _seg({
   required String clientId,
   int? id,
-  EstadoActividad estado = EstadoActividad.propuesta,
   DateTime? updatedAt,
 }) {
   final e = SegmentoEntity(id, 1, TipoInstalacion.lineal, [], clientId: clientId);
@@ -152,6 +151,35 @@ void main() {
       // Should return null without throwing; the warning is logged internally.
       final found = await store.findByRemoteId('not-a-number');
       expect(found, isNull);
+    });
+  });
+
+  // ─── findWhere ────────────────────────────────────────────────────────────
+
+  group('findWhere', () {
+    test('returns rows matching column value + correct order', () async {
+      final ct1a = _seg(clientId: 'ct1-a');
+      final ct1b = _seg(clientId: 'ct1-b');
+      final ct2 = _seg(clientId: 'ct2-a');
+      // Give each a different ct_id value by updating the row directly
+      await store.upsert(ct1a);
+      await store.upsert(ct1b);
+      await store.upsert(ct2);
+      await db.rawUpdate(
+          "UPDATE segmentos SET ct_id = 1 WHERE client_id IN ('ct1-a','ct1-b')");
+      await db.rawUpdate(
+          "UPDATE segmentos SET ct_id = 2 WHERE client_id = 'ct2-a'");
+
+      final result = await store.findWhere('ct_id', 1);
+      expect(result.length, equals(2));
+      final ids = result.map((s) => s.clientId).toSet();
+      expect(ids, containsAll(['ct1-a', 'ct1-b']));
+    });
+
+    test('returns empty list when no rows match', () async {
+      await store.upsert(_seg(clientId: 'some-seg'));
+      final result = await store.findWhere('ct_id', 999);
+      expect(result, isEmpty);
     });
   });
 

@@ -5,7 +5,6 @@
 // RemoteFetcher and LocalStore are mocked via mocktail to control outcomes.
 // DetectConflictsTask needs a real OutboxQueue (uses DB) — provided, clean.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

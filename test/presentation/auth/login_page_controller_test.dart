@@ -7,7 +7,10 @@ import 'package:helireport_desherbaje/presentation/auth/login_page_controller.da
 
 class _FakeNetworkService extends NetworkService {
   @override
-  void onInit() {}
+  // ignore: must_call_super
+  void onInit() {
+    // Intentionally skips NetworkService.onInit (Dio setup) in unit tests.
+  }
 }
 
 // LoginPageController hardcodea AuthRepositoryImpl, por lo que solo podemos

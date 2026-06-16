@@ -7,7 +7,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/conflict_resolver.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/local_store.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/sync_job.dart';
-import 'package:helireport_desherbaje/core/sync/contracts/syncable.dart';
 import 'package:helireport_desherbaje/core/sync/outbox/outbox_queue.dart';
 import 'package:helireport_desherbaje/core/sync/pull/pull_context.dart';
 import 'package:helireport_desherbaje/core/sync/pull/tasks/detect_conflicts_task.dart';
@@ -39,7 +38,6 @@ SegmentoEntity _seg({
   required String clientId,
   int? id,
   DateTime? updatedAt,
-  EstadoActividad estado = EstadoActividad.propuesta,
 }) {
   final ts = (updatedAt ?? DateTime(2025)).toIso8601String();
   return SegmentoEntity.fromJson({
@@ -95,7 +93,7 @@ void main() {
         .thenAnswer((_) async => []);
   });
 
-  PullContext<SegmentoEntity> _ctx(List<SegmentoEntity> remoteItems) {
+  PullContext<SegmentoEntity> buildCtx(List<SegmentoEntity> remoteItems) {
     final ctx = PullContext<SegmentoEntity>(
       registration: _registration(mockStore),
     );
@@ -103,7 +101,7 @@ void main() {
     return ctx;
   }
 
-  Future<PullContext<SegmentoEntity>> _run(
+  Future<PullContext<SegmentoEntity>> runTask(
       PullContext<SegmentoEntity> ctx) async {
     final result =
         await task.execute(DataPipeline.of(ctx));
@@ -137,7 +135,7 @@ void main() {
         when(() => mockStore.findByClientId(any()))
             .thenAnswer((_) async => null);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.safeToUpsert, hasLength(1));
         expect(ctx.conflicts, isEmpty);
@@ -172,7 +170,7 @@ void main() {
         when(() => mockStore.findByClientId(any()))
             .thenAnswer((_) async => null);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.conflicts, hasLength(1));
         expect(ctx.safeToUpsert, isEmpty);
@@ -208,7 +206,7 @@ void main() {
             .thenAnswer((_) async =>
                 [_fakeJob(clientId: 'local-cid', status: SyncStatus.pending)]);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.conflicts, hasLength(1));
         expect(ctx.safeToUpsert, isEmpty);
@@ -242,7 +240,7 @@ void main() {
             .thenAnswer((_) async =>
                 [_fakeJob(clientId: 'local-cid', status: SyncStatus.syncing)]);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.conflicts, hasLength(1),
             reason: 'NF-4: syncing clientIds must be treated as conflicting');
@@ -264,7 +262,7 @@ void main() {
         when(() => mockStore.findByClientId(any()))
             .thenAnswer((_) async => null);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.safeToUpsert, hasLength(1));
         expect(ctx.conflicts, isEmpty);
@@ -292,7 +290,7 @@ void main() {
         when(() => mockStore.findByClientId(any()))
             .thenAnswer((_) async => null);
 
-        final ctx = await _run(_ctx([remote]));
+        final ctx = await runTask(buildCtx([remote]));
 
         expect(ctx.safeToUpsert, hasLength(1));
         final item = ctx.safeToUpsert.first;

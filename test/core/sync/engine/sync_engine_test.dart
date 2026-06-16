@@ -85,6 +85,10 @@ class _FakeStore extends LocalStore<_TestEntity> {
   Future<List<_TestEntity>> findAll() async => _data.values.toList();
 
   @override
+  Future<List<_TestEntity>> findWhere(String column, Object? value) async =>
+      _data.values.where((e) => e.toJson()[column] == value).toList();
+
+  @override
   Future<void> markSynced({
     required String clientId,
     String? remoteId,

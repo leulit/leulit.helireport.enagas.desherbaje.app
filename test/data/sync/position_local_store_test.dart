@@ -160,6 +160,50 @@ void main() {
     });
   });
 
+  // ─── findWhere ────────────────────────────────────────────────────────────
+
+  group('findWhere', () {
+    test('finds batches by operador_id', () async {
+      final base = DateTime.utc(2025, 7, 1, 8, 0);
+      final b1 = _makeBatch(
+          clientId: 'fw-1',
+          operadorId: 10,
+          startedAt: base,
+          endedAt: base.add(const Duration(minutes: 1)));
+      final b2 = _makeBatch(
+          clientId: 'fw-2',
+          operadorId: 20,
+          startedAt: base,
+          endedAt: base.add(const Duration(minutes: 2)));
+      final b3 = _makeBatch(
+          clientId: 'fw-3',
+          operadorId: 10,
+          startedAt: base.add(const Duration(hours: 1)),
+          endedAt: base.add(const Duration(hours: 1, minutes: 1)));
+
+      await store.upsert(b1);
+      await store.upsert(b2);
+      await store.upsert(b3);
+
+      final result = await store.findWhere('operador_id', 10);
+      expect(result.length, equals(2));
+      final ids = result.map((b) => b.clientId).toSet();
+      expect(ids, containsAll(['fw-1', 'fw-3']));
+    });
+
+    test('returns empty list when column value matches nothing', () async {
+      final base = DateTime.utc(2025, 7, 1);
+      await store.upsert(_makeBatch(
+          clientId: 'no-match',
+          operadorId: 5,
+          startedAt: base,
+          endedAt: base.add(const Duration(minutes: 1))));
+
+      final result = await store.findWhere('operador_id', 999);
+      expect(result, isEmpty);
+    });
+  });
+
   // ─── Roundtrip ─────────────────────────────────────────────────────────────
 
   group('roundtrip', () {

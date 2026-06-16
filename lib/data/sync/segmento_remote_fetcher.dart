@@ -9,6 +9,7 @@ import '../../core/sync/contracts/remote_fetcher.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
+import 'adapter_support.dart';
 
 /// [RemoteFetcher] for [SegmentoEntity]. Pulls the full set of segmentos
 /// assigned to the authenticated operator's CTs from the backend.
@@ -35,7 +36,7 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
     try {
       final response = await _network.get(
         ApiEndpoints.segmentosByCt(cts.join(',')),
-        headers: await _authHeader(),
+        headers: await bearerAuthHeader(_storage),
       );
       final raw = response.data as List? ?? const [];
       return raw
@@ -63,9 +64,4 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
     return const [];
   }
 
-  Future<Map<String, String>?> _authHeader() async {
-    final token = await _storage.read(key: 'auth_token');
-    if (token == null) return null;
-    return {'Authorization': 'Bearer $token'};
-  }
 }

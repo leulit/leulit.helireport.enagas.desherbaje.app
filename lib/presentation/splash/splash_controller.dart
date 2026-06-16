@@ -28,10 +28,8 @@ class SplashController extends GetxController {
   }
 
   /// Reinicia el completer y vuelve a intentar el bootstrap.
-  /// Debe llamar [AppDI.resetForTest] primero para que [AppDI.init]
-  /// vuelva a ejecutar [_init] desde cero.
   void retry() {
-    AppDI.resetForTest();
+    AppDI.reset();
     _bootstrap();
   }
 }

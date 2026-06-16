@@ -18,7 +18,7 @@ class _MockOfflineRepository extends Mock
     implements OfflineRepository<ImagenSegmentoEntity> {}
 
 // ---------------------------------------------------------------------------
-// H: offline guard — uploadPending returns empty DrainSummary, engine skipped
+// H: offline guard — uploadAllPending returns empty DrainSummary, engine skipped
 // ---------------------------------------------------------------------------
 
 void main() {
@@ -39,11 +39,11 @@ void main() {
     );
   });
 
-  test('H – offline: uploadPending returns empty DrainSummary, '
+  test('H – offline: uploadAllPending returns empty DrainSummary, '
       'engine.drain never called', () async {
     when(() => connectivity.isConnected).thenReturn(false);
 
-    final result = await repo.uploadPending(42);
+    final result = await repo.uploadAllPending();
 
     expect(result.succeeded, equals(0));
     expect(result.retryable, equals(0));
@@ -54,13 +54,13 @@ void main() {
     verifyNever(() => engine.drain(entityType: any(named: 'entityType')));
   });
 
-  test('H-online – online: uploadPending delegates to engine.drain', () async {
+  test('H-online – online: uploadAllPending delegates to engine.drain', () async {
     when(() => connectivity.isConnected).thenReturn(true);
     when(() => engine.drain(entityType: 'imagen')).thenAnswer(
       (_) async => const DrainSummary(succeeded: 3),
     );
 
-    final result = await repo.uploadPending(42);
+    final result = await repo.uploadAllPending();
 
     expect(result.succeeded, equals(3));
     verify(() => engine.drain(entityType: 'imagen')).called(1);

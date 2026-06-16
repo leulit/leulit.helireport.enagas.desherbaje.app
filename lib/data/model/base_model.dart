@@ -30,7 +30,8 @@ mixin BaseModelMixin {
   void setValueInMap(Map<String, dynamic> mapa, String propiedad, dynamic valor) {
     try {
       mapa[propiedad] = valor;
-    } catch (e) {
+    } catch (_) {
+      // Ignore assignment errors — field may not exist in map.
     }
   }
 }

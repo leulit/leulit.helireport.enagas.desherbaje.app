@@ -116,6 +116,17 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   }
 
   @override
+  Future<List<SegmentoEntity>> findWhere(String column, Object? value) async {
+    final rows = await _db.query(
+      _table,
+      where: '$column = ?',
+      whereArgs: [value],
+      orderBy: 'fecha_fin DESC',
+    );
+    return rows.map(_rowToEntity).toList(growable: false);
+  }
+
+  @override
   Future<void> markSynced({
     required String clientId,
     String? remoteId,

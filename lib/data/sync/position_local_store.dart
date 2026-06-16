@@ -151,6 +151,44 @@ class PositionLocalStore implements LocalStore<PositionBatchEntity> {
     return _toEntity(batchRow, pointsRows);
   }
 
+  @override
+  Future<List<PositionBatchEntity>> findWhere(
+    String column,
+    Object? value,
+  ) async {
+    final batchRows = await _db.query(
+      _tableBatches,
+      where: '$column = ?',
+      whereArgs: [value],
+      orderBy: 'started_at DESC',
+    );
+    if (batchRows.isEmpty) return const [];
+
+    final clientIds = batchRows
+        .map((r) => r['batch_client_id']! as String)
+        .toList();
+    final placeholders = List.filled(clientIds.length, '?').join(',');
+    final allPointRows = await _db.query(
+      _tablePoints,
+      where: 'batch_client_id IN ($placeholders)',
+      whereArgs: clientIds,
+      orderBy: 'captured_at ASC',
+    );
+
+    final pointsByBatch = <String, List<Map<String, Object?>>>{};
+    for (final row in allPointRows) {
+      final key = row['batch_client_id']! as String;
+      (pointsByBatch[key] ??= []).add(row);
+    }
+
+    return batchRows
+        .map((row) {
+          final clientId = row['batch_client_id']! as String;
+          return _toEntity(row, pointsByBatch[clientId] ?? const []);
+        })
+        .toList();
+  }
+
   /// NF-23: 2 queries instead of N+1.
   /// One query for all batches (DESC by started_at) + one for all points
   /// (ASC by captured_at) + group in memory by batch_client_id.
