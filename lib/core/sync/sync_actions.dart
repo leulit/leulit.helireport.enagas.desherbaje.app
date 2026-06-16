@@ -1,6 +1,7 @@
 import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
 
 import 'contracts/sync_job.dart';
+import 'pull/pull_outcome.dart';
 
 class EntityQueuedEvent {
   final String entityType;
@@ -59,12 +60,16 @@ class CloudPullCompletedEvent {
   final int upserted;
   final int conflicts;
   final bool cancelled;
+  final PullOutcome outcome;
+  final String? errorMessage;
 
   const CloudPullCompletedEvent({
     required this.entityType,
     required this.upserted,
     required this.conflicts,
     required this.cancelled,
+    required this.outcome,
+    this.errorMessage,
   });
 }
 

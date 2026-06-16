@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -40,6 +41,25 @@ abstract class OfflineModule {
 
   /// Returns the entity types that have a `RemoteFetcher` registered.
   static Iterable<String> get pulleableEntityTypes => _pullRunners.keys;
+
+  /// FOR TESTS ONLY — registers a custom pull runner without requiring a full
+  /// entity registration. Lets unit tests control the [PullSummary] returned
+  /// by [runPull] without spinning up a real [PullCoordinator].
+  ///
+  /// Call [resetPullRunners] in `tearDown` to clean up.
+  @visibleForTesting
+  static void registerPullRunnerForTest(
+    String entityType,
+    Future<PullSummary> Function({CancelToken? token}) runner,
+  ) {
+    _pullRunners[entityType] = runner;
+  }
+
+  /// FOR TESTS ONLY — removes all registered pull runners.
+  @visibleForTesting
+  static void resetPullRunners() {
+    _pullRunners.clear();
+  }
 
   /// Registers [T] in the [TypeRegistry], runs its schema migration, and
   /// binds the matching helpers into GetX:

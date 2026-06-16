@@ -23,6 +23,8 @@ class DispatchPullCompletedTask<T extends Syncable>
         upserted: ctx.upserted,
         conflicts: ctx.conflicts.length,
         cancelled: ctx.cancelled,
+        outcome: ctx.outcome,
+        errorMessage: ctx.errorMessage,
       ),
     );
     return DataPipeline.success(input: ctx, output: ctx);

@@ -1,0 +1,191 @@
+// Tests for SincronizacionController — STEP 8 of WS4.
+//
+// Focus: `isDegraded` branch in _runOne for MasterDataKind.segmentos.
+// - When summary.isDegraded → row becomes error with errorMessage,
+//   _persistLastDownload is NOT called.
+// - Partial outcome shows a user-friendly fallback message when
+//   summary.errorMessage is null.
+//
+// Strategy: inject fake GasoductosService, PksService, ConnectivityService,
+// and seed OfflineModule with a test pull runner so we can return arbitrary
+// PullSummary values. OutboxQueue is mocked to return 0 pending (no guard).
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
+import 'package:helireport_desherbaje/core/services/gasoductos_service.dart';
+import 'package:helireport_desherbaje/core/services/pks_service.dart';
+import 'package:helireport_desherbaje/core/sync/offline_module.dart';
+import 'package:helireport_desherbaje/core/sync/outbox/outbox_queue.dart';
+import 'package:helireport_desherbaje/core/sync/pull/cancel_token.dart';
+import 'package:helireport_desherbaje/core/sync/pull/pull_coordinator.dart';
+import 'package:helireport_desherbaje/core/sync/pull/pull_outcome.dart';
+import 'package:helireport_desherbaje/domain/repository/auth_repository.dart';
+import 'package:helireport_desherbaje/presentation/sincronizacion/sincronizacion_controller.dart';
+import 'package:helireport_desherbaje/presentation/sincronizacion/sync_models.dart';
+
+// ─── Mocks ───────────────────────────────────────────────────────────────────
+
+class MockConnectivityService extends Mock implements ConnectivityService {}
+
+class MockGasoductosService extends Mock implements GasoductosService {}
+
+class MockPksService extends Mock implements PksService {}
+
+class MockOutboxQueue extends Mock implements OutboxQueue {}
+
+class MockAuthRepository extends Mock implements AuthRepository {}
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
+
+PullSummary _summary({
+  required PullOutcome outcome,
+  String? errorMessage,
+  int upserted = 0,
+}) =>
+    PullSummary(
+      total: 0,
+      upserted: upserted,
+      conflicts: 0,
+      cancelled: false,
+      authExpired: outcome == PullOutcome.authExpired,
+      outcome: outcome,
+      errorMessage: errorMessage,
+    );
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+void main() {
+  late MockConnectivityService mockConnectivity;
+  late MockGasoductosService mockGasoductos;
+  late MockPksService mockPks;
+  late MockOutboxQueue mockOutbox;
+  late MockAuthRepository mockAuth;
+  late SincronizacionController controller;
+
+  setUp(() async {
+    Get.reset();
+    SharedPreferences.setMockInitialValues({});
+
+    mockConnectivity = MockConnectivityService();
+    mockGasoductos = MockGasoductosService();
+    mockPks = MockPksService();
+    mockOutbox = MockOutboxQueue();
+    mockAuth = MockAuthRepository();
+
+    when(() => mockConnectivity.isConnected).thenReturn(true);
+    when(() => mockOutbox.countPending(entityType: any(named: 'entityType')))
+        .thenAnswer((_) async => 0);
+
+    // Register OutboxQueue as plain object (not GetxService) so GetX does not
+    // invoke the service lifecycle on a mock.
+    Get.put<OutboxQueue>(mockOutbox);
+
+    OfflineModule.resetPullRunners();
+
+    controller = SincronizacionController(
+      authRepository: mockAuth,
+      gasoductosService: mockGasoductos,
+      pksService: mockPks,
+      connectivity: mockConnectivity,
+    );
+    Get.put(controller);
+
+    // Wait for _initRows to complete.
+    await Future.delayed(Duration.zero);
+  });
+
+  tearDown(() {
+    OfflineModule.resetPullRunners();
+    Get.reset();
+  });
+
+  group('_runOne segmentos — isDegraded branch', () {
+    test(
+      'error outcome → row has error status and errorMessage, lastDownloadAt unchanged',
+      () async {
+        final errorMsg = 'Exception: network timeout';
+        OfflineModule.registerPullRunnerForTest(
+          'segmento',
+          ({CancelToken? token}) async =>
+              _summary(outcome: PullOutcome.error, errorMessage: errorMsg),
+        );
+
+        final initialLastDownload = controller
+            .rows
+            .firstWhere((r) => r.kind == MasterDataKind.segmentos)
+            .lastDownloadAt;
+
+        await controller.descargar(MasterDataKind.segmentos);
+
+        final row =
+            controller.rows.firstWhere((r) => r.kind == MasterDataKind.segmentos);
+        expect(row.status, equals(MasterDataStatus.error));
+        expect(row.errorMessage, contains('network timeout'));
+        // lastDownloadAt must NOT have advanced.
+        expect(row.lastDownloadAt, equals(initialLastDownload));
+      },
+    );
+
+    test(
+      'partial outcome → row has error status with partial message',
+      () async {
+        OfflineModule.registerPullRunnerForTest(
+          'segmento',
+          ({CancelToken? token}) async => _summary(
+            outcome: PullOutcome.partial,
+            errorMessage: null, // null → controller uses fallback message
+          ),
+        );
+
+        await controller.descargar(MasterDataKind.segmentos);
+
+        final row =
+            controller.rows.firstWhere((r) => r.kind == MasterDataKind.segmentos);
+        expect(row.status, equals(MasterDataStatus.error));
+        expect(row.errorMessage, isNotNull);
+        expect(row.errorMessage, isNotEmpty);
+      },
+    );
+
+    test(
+      'isDegraded → SharedPreferences lastDownload key NOT written',
+      () async {
+        OfflineModule.registerPullRunnerForTest(
+          'segmento',
+          ({CancelToken? token}) async => _summary(
+            outcome: PullOutcome.error,
+            errorMessage: 'boom',
+          ),
+        );
+
+        await controller.descargar(MasterDataKind.segmentos);
+
+        final prefs = await SharedPreferences.getInstance();
+        final key = 'sync_master_last_download_segmentos';
+        expect(prefs.containsKey(key), isFalse);
+      },
+    );
+
+    test(
+      'ok outcome (control) → row becomes success, lastDownloadAt IS set',
+      () async {
+        OfflineModule.registerPullRunnerForTest(
+          'segmento',
+          ({CancelToken? token}) async => _summary(outcome: PullOutcome.ok),
+        );
+
+        await controller.descargar(MasterDataKind.segmentos);
+
+        final row =
+            controller.rows.firstWhere((r) => r.kind == MasterDataKind.segmentos);
+        expect(row.status, equals(MasterDataStatus.success));
+        expect(row.lastDownloadAt, isNotNull);
+      },
+    );
+  });
+}

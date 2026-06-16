@@ -14,6 +14,10 @@ import '../pull_context.dart';
 ///
 /// Consumes [ResolvedPullItem] so the local copy is already in hand —
 /// no extra DB lookup per item (avoids the previous N+1).
+///
+/// Per-item failures are non-fatal: on DB error the item is skipped and a
+/// [PullTaskError] is added to [PullContext.partialErrors], but the remaining
+/// conflicts continue to be enqueued.
 class EnqueueConflictsTask<T extends Syncable>
     extends PipelineTask<PullContext<T>> {
   final Database db;
@@ -44,23 +48,28 @@ class EnqueueConflictsTask<T extends Syncable>
       final local = item.local;
       if (local == null) continue;
 
-      await db.insert(
-        OfflineDatabase.syncConflictsTable,
-        {
-          'entity_type': ctx.registration.entityType,
-          'client_id': item.clientId,
-          'local_json': jsonEncode(local.toJson()),
-          'remote_json': jsonEncode(item.remote.toJson()),
-          'detected_at': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      SyncActions.entityConflict.dispatch(
-        data: EntityConflictEvent(
-          entityType: ctx.registration.entityType,
-          clientId: item.clientId,
-        ),
-      );
+      try {
+        await db.insert(
+          OfflineDatabase.syncConflictsTable,
+          {
+            'entity_type': ctx.registration.entityType,
+            'client_id': item.clientId,
+            'local_json': jsonEncode(local.toJson()),
+            'remote_json': jsonEncode(item.remote.toJson()),
+            'detected_at': DateTime.now().millisecondsSinceEpoch,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        SyncActions.entityConflict.dispatch(
+          data: EntityConflictEvent(
+            entityType: ctx.registration.entityType,
+            clientId: item.clientId,
+          ),
+        );
+      } catch (e) {
+        ctx.partialErrors.add(PullTaskError(name, e));
+        continue;
+      }
     }
     return DataPipeline.success(input: ctx, output: ctx);
   }

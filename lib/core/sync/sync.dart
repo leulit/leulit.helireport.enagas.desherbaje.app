@@ -15,6 +15,7 @@ export 'offline_module.dart';
 export 'outbox/outbox_queue.dart';
 export 'pull/cancel_token.dart';
 export 'pull/pull_coordinator.dart';
+export 'pull/pull_outcome.dart';
 export 'repository/offline_repository.dart';
 export 'sync_actions.dart';
 export 'type_registry.dart';

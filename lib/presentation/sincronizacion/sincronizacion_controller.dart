@@ -240,6 +240,25 @@ class SincronizacionController extends MyGetxController {
             );
             return;
           }
+          // NF-1/NF-2/NF-3: degraded pull (blocking error or partial item
+          // failures). Show an error row and skip the success timestamp so a
+          // failed pull is never recorded as a successful one.
+          if (summary.isDegraded) {
+            final msg = summary.errorMessage ??
+                (summary.outcome == PullOutcome.partial
+                    ? 'Descarga parcial: algunos registros no se pudieron guardar.'
+                    : 'Error durante la descarga de segmentos.');
+            _updateRow(
+              kind,
+              _rowFor(kind).copyWith(
+                status: MasterDataStatus.error,
+                errorMessage: msg,
+                clearProgress: true,
+                clearProgressLabel: true,
+              ),
+            );
+            return;
+          }
         case MasterDataKind.posicionesFijas:
           // No disponible aún — protegido más arriba; nunca debería llegar.
           return;
