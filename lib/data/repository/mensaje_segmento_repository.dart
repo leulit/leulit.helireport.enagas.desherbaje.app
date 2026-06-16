@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../../core/app_log.dart';
 import '../../core/api_endpoints.dart';
 import '../../core/result/data_result.dart';
 import '../../core/sync/sync.dart';
@@ -19,6 +20,11 @@ import '../sync/mensaje_local_store.dart';
 /// with locally-pending mensajes (those not yet synced) so the operator
 /// always sees what they just wrote, and falls back to local cache when
 /// offline.
+///
+/// NF-16: any failure (network OR generic) falls back to local cache.
+/// NF-17: empty cache is a valid success (not an error).
+/// NF-18: dedup by cascading key: fast-path on clientId echo, fingerprint
+///        fallback for interoperability before backend implements BE-2.
 ///
 /// TODO(backend): expose `GET /mensajes?operador=X` so this repository can
 /// pull all mensajes through `RemoteFetcher.pullAll()` and the lectura
@@ -44,29 +50,54 @@ class MensajeSegmentoRepository {
       final response = await _network.get(ApiEndpoints.mensajesBySegmento(id));
       final data = response.data;
       if (data is! List) {
-        return DataResult.failure(
-          message: 'Respuesta inesperada al cargar mensajes del segmento $id',
+        // NF-16b: unexpected body format — fall back to cache.
+        // Log via AppLog so contract regressions are visible in release builds.
+        AppLog.w(
+          'mensajesBySegmento($id): respuesta inesperada del backend '
+          '(tipo: ${data.runtimeType}), sirviendo caché local',
+        );
+        return _serveCacheOrFail(
+          id,
+          reason: 'body-no-List',
+          message:
+              'Respuesta inesperada al cargar mensajes del segmento $id',
           statusCode: response.statusCode,
         );
       }
-      final remote = data
-          .whereType<Map>()
-          .map((m) => MensajeSegmentoEntity.fromJson(m.cast<String, dynamic>()))
-          .toList();
+      // NF-16c: individual fromJson failures must not blow up the merge.
+      final remote = <MensajeSegmentoEntity>[];
+      for (final m in data.whereType<Map>()) {
+        try {
+          remote.add(
+            MensajeSegmentoEntity.fromJson(m.cast<String, dynamic>()),
+          );
+        } catch (e, s) {
+          AppLog.w(
+            'mensajesBySegmento($id): fallo parseando un mensaje — se omite',
+            error: e,
+            stackTrace: s,
+          );
+        }
+      }
       final local = await _localStore.findBySegmento(id);
       return DataResult.success(_mergeWithPending(remote, local));
     } on NetworkError catch (e) {
-      // Falló la red: servimos sólo la cache local para que el operador no
-      // se quede sin mensajes en campo.
-      final local = await _localStore.findBySegmento(id);
-      if (local.isNotEmpty) return DataResult.success(local);
-      return DataResult.failure(
+      return _serveCacheOrFail(
+        id,
+        reason: 'red',
         message: 'Error de red cargando mensajes: ${e.message}',
         statusCode: e.statusCode ?? 503,
         cause: e,
       );
-    } catch (e) {
-      return DataResult.failure(
+    } catch (e, s) {
+      AppLog.e(
+        'mensajesBySegmento($id): excepción inesperada',
+        error: e,
+        stackTrace: s,
+      );
+      return _serveCacheOrFail(
+        id,
+        reason: 'inesperado',
         message: 'Excepción consultando mensajes del segmento $id: $e',
         statusCode: 500,
         cause: e,
@@ -95,19 +126,84 @@ class MensajeSegmentoRepository {
     }
   }
 
-  /// Merges the backend list with locally-pending mensajes (those without
-  /// `synced_at`). Pending mensajes are appended at the top so the operator
-  /// always sees what they just wrote.
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /// NF-16 + NF-17: any fetch failure falls back to local cache.
+  /// Empty cache → DataSuccess([]) (a segment with no messages is valid).
+  /// If the store itself throws, that is the only irrecoverable path.
+  Future<DataResult<List<MensajeSegmentoEntity>>> _serveCacheOrFail(
+    int segmentoId, {
+    required String reason,
+    required String message,
+    int statusCode = 503,
+    Object? cause,
+  }) async {
+    try {
+      final local = await _localStore.findBySegmento(segmentoId);
+      // NF-17: empty list is a valid "no messages" state, not an error.
+      return DataResult.success(local);
+    } catch (storeError, storeStack) {
+      AppLog.e(
+        'mensajesBySegmento($segmentoId): '
+        'fallo de red ($reason) y además el store lanzó — path irrecuperable',
+        error: storeError,
+        stackTrace: storeStack,
+      );
+      return DataResult.failure(
+        message: message,
+        statusCode: statusCode,
+        cause: cause ?? storeError,
+      );
+    }
+  }
+
+  /// NF-18: dedup with cascading key.
+  ///
+  /// Fast-path: if the backend echoes `client_id` (BE-2), the
+  /// `remoteClientIds` set deduplicates correctly.
+  ///
+  /// Fallback fingerprint: we build a content fingerprint for every remote
+  /// item (regardless of whether it has an id) and also for every local
+  /// pending item. A local pending message is dropped when:
+  ///   (a) backend echoed our clientId — fast-path, O(1) set lookup, or
+  ///   (b) a remote item shares the same content fingerprint — bridges the
+  ///       interoperability gap before BE-2 lands.
+  ///
+  /// Key scheme — `_dedupKey`:
+  ///   - Entity with a known remote id  → `r:<id>`  (stable remote identity)
+  ///   - Entity with no remote id       → `c:<segmentoId>|<mensaje>|<createdAt UTC ISO8601>`
+  ///
+  /// For the fingerprint comparison we always use the `c:` variant of the
+  /// remote item so that a pending local (`id==null`) with the same content
+  /// matches the remote version (`id!=null`) via `_contentKey`.
   List<MensajeSegmentoEntity> _mergeWithPending(
     List<MensajeSegmentoEntity> remote,
     List<MensajeSegmentoEntity> local,
   ) {
-    final remoteClientIds =
-        remote.map((m) => m.clientId).toSet();
-    final pendingOnly = local
-        .where((m) => m.id == null && !remoteClientIds.contains(m.clientId))
-        .toList();
+    final remoteClientIds = remote.map((m) => m.clientId).toSet();
+    // Content fingerprints of remote items — used to match pending locals
+    // whose clientId wasn't echoed back by the backend.
+    final remoteContentKeys = remote.map(_contentKey).toSet();
+
+    final pendingOnly = local.where((m) {
+      if (m.id != null) return false; // already synced — remote has it
+      // Fast-path: backend echoed our clientId (BE-2)
+      if (remoteClientIds.contains(m.clientId)) return false;
+      // Fingerprint bridge: same content already present in remote
+      if (remoteContentKeys.contains(_contentKey(m))) return false;
+      return true;
+    }).toList();
+
     if (pendingOnly.isEmpty) return remote;
     return [...pendingOnly, ...remote];
   }
+
+  /// Content fingerprint — always the `c:` variant, regardless of remote id.
+  ///
+  /// Allows a local pending item (id==null) to be matched against a remote
+  /// item (id!=null) that shares the same content.
+  String _contentKey(MensajeSegmentoEntity m) =>
+      'c:${m.segmentoId}|${m.mensaje}|${m.createdAt.toUtc().toIso8601String()}';
 }
