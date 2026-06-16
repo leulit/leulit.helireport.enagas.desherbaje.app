@@ -74,6 +74,11 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
     return entity;
   }
 
+  /// Actualiza el estado de un segmento que ya tiene id remoto asignado.
+  ///
+  /// Solo aplica a segmentos con id remoto (`remoteId != null`). Los segmentos
+  /// local-only (id == null) deben persistirse vía [saveLocal], que ramifica
+  /// entre `create` y `update` en función de si el id remoto existe.
   @override
   Future<DataResult<bool>> updateEstado(int id, EstadoActividad estado) async {
     try {

@@ -202,9 +202,7 @@ class EditExtremosController extends GetxController {
         lngFin: fin.value.longitude,
         ubicacionGis: List<LatLng>.from(ubicacionGisDraft),
       );
-      if (updated.id != null) {
-        await _repo.saveLocal(updated);
-      }
+      await _repo.saveLocal(updated);
       Get.back<SegmentoEntity?>(result: updated);
     } catch (e) {
       Get.snackbar(

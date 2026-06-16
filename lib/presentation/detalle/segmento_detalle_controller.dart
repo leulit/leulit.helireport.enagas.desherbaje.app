@@ -19,11 +19,23 @@ import '../../domain/entities/user_entity.dart';
 import 'edit_extremos/edit_extremos_dialog.dart';
 
 class SegmentoDetalleController extends MyGetxController {
-  final _authRepo = AuthRepositoryImpl();
-  final _segmentoRepo = SegmentoRepositoryImpl();
-  final _imagenRepo = ImagenRepositoryImpl();
-  final _mensajeRepo = MensajeSegmentoRepository();
-  final _picker = ImagePicker();
+  SegmentoDetalleController({
+    AuthRepositoryImpl? authRepo,
+    SegmentoRepositoryImpl? segmentoRepo,
+    ImagenRepositoryImpl? imagenRepo,
+    MensajeSegmentoRepository? mensajeRepo,
+    ImagePicker? picker,
+  })  : _authRepo = authRepo ?? AuthRepositoryImpl(),
+        _segmentoRepo = segmentoRepo ?? SegmentoRepositoryImpl(),
+        _imagenRepo = imagenRepo ?? ImagenRepositoryImpl(),
+        _mensajeRepo = mensajeRepo ?? MensajeSegmentoRepository(),
+        _picker = picker ?? ImagePicker();
+
+  final AuthRepositoryImpl _authRepo;
+  final SegmentoRepositoryImpl _segmentoRepo;
+  final ImagenRepositoryImpl _imagenRepo;
+  final MensajeSegmentoRepository _mensajeRepo;
+  final ImagePicker _picker;
 
   late SegmentoEntity segmento;
   final user = Rx<UserModel?>(null);
@@ -257,19 +269,27 @@ class SegmentoDetalleController extends MyGetxController {
   }
 
   Future<void> _addImagen(String localPath, TipoFoto tipo) async {
-    final segId = segmento.id;
-    if (segId == null) return;
     final filename = localPath.split('/').last;
     final imagen = ImagenSegmentoEntity(
       actividadId: 0,
-      segmentoId: segId,
+      // FK por id remoto; A4 migrará a clientId de segmento (fuera de alcance).
+      // local-only: 0 hasta que el segmento sincronice y obtenga id remoto.
+      segmentoId: segmento.id ?? 0,
       tipoFoto: tipo,
       filename: filename,
       ruta: localPath,
       capturadaAt: DateTime.now(),
     );
-    await _imagenRepo.saveLocal(imagen);
-    await _loadImagenes();
+    try {
+      await _imagenRepo.saveLocal(imagen);
+      await _loadImagenes();
+    } catch (e) {
+      _showSnack(
+        title: 'Error',
+        message: 'No se ha podido guardar la foto: $e',
+        isError: true,
+      );
+    }
   }
 
   // ──────────────────────────── Mensajes — fetch / send ────────────────────
@@ -348,10 +368,7 @@ class SegmentoDetalleController extends MyGetxController {
       segmento.estado = estado.value;
       segmento.tipoActividad = tipoActividad.value;
       segmento.descripcion = descripcion.value;
-      if (segmento.id != null) {
-        await _segmentoRepo.saveLocal(segmento);
-        await _segmentoRepo.updateEstado(segmento.id!, estado.value);
-      }
+      await _segmentoRepo.saveLocal(segmento);
       _showSnack(
         title: 'Guardado',
         message: 'Cambios guardados correctamente',
