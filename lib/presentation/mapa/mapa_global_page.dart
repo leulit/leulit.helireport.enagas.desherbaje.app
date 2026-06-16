@@ -44,7 +44,13 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // NF-8: PopScope ensures the final GPS flush completes (awaited) before
+    // the route is popped. onClose() keeps unawaited(stop()) as safety net.
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) await controller.stopTracking();
+      },
+      child: Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.moduleGreenLight,
         elevation: 0,
@@ -190,7 +196,8 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
           ),
         ],
       ),
-    );
+    ), // end Scaffold
+    ); // end PopScope
   }
 }
 

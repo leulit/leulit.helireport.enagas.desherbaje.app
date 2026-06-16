@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/app_log.dart';
 import '../../core/sync/contracts/local_store.dart';
 import '../../domain/entities/position_batch_entity.dart';
 
@@ -149,24 +151,37 @@ class PositionLocalStore implements LocalStore<PositionBatchEntity> {
     return _toEntity(batchRow, pointsRows);
   }
 
+  /// NF-23: 2 queries instead of N+1.
+  /// One query for all batches (DESC by started_at) + one for all points
+  /// (ASC by captured_at) + group in memory by batch_client_id.
   @override
   Future<List<PositionBatchEntity>> findAll() async {
     final batchRows = await _db.query(
       _tableBatches,
       orderBy: 'started_at DESC',
     );
-    final result = <PositionBatchEntity>[];
-    for (final row in batchRows) {
-      final clientId = row['batch_client_id']! as String;
-      final pointsRows = await _db.query(
-        _tablePoints,
-        where: 'batch_client_id = ?',
-        whereArgs: [clientId],
-        orderBy: 'captured_at ASC',
-      );
-      result.add(_toEntity(row, pointsRows));
+    if (batchRows.isEmpty) return const [];
+
+    // Single query for all points across all batches; order ASC is per-batch
+    // because we group them and each batch's slice will already be ordered.
+    final allPointRows = await _db.query(
+      _tablePoints,
+      orderBy: 'captured_at ASC',
+    );
+
+    // Group points by batch_client_id in O(n).
+    final pointsByBatch = <String, List<Map<String, Object?>>>{};
+    for (final row in allPointRows) {
+      final key = row['batch_client_id']! as String;
+      (pointsByBatch[key] ??= []).add(row);
     }
-    return result;
+
+    return batchRows
+        .map((row) {
+          final clientId = row['batch_client_id']! as String;
+          return _toEntity(row, pointsByBatch[clientId] ?? const []);
+        })
+        .toList();
   }
 
   @override
@@ -207,15 +222,33 @@ class PositionLocalStore implements LocalStore<PositionBatchEntity> {
     Map<String, Object?> batchRow,
     List<Map<String, Object?>> pointsRows,
   ) {
+    final endedAt = DateTime.parse(batchRow['ended_at']! as String);
+
+    // NF-24: if updated_at doesn't parse, do NOT fall through to
+    // DateTime.now() (the constructor default). Use a deterministic fallback
+    // (endedAt, already parsed) and log the bad value so it's observable.
+    final rawUpdatedAt = batchRow['updated_at'];
+    DateTime? updatedAt;
+    if (rawUpdatedAt != null) {
+      updatedAt = DateTime.tryParse(rawUpdatedAt as String);
+      if (updatedAt == null) {
+        if (kDebugMode) {
+          AppLog.w(
+            'PositionLocalStore: unparseable updated_at="$rawUpdatedAt" '
+            'for batch ${batchRow['batch_client_id']}; falling back to endedAt.',
+          );
+        }
+        updatedAt = endedAt; // deterministic fallback
+      }
+    }
+
     return PositionBatchEntity(
       clientId: batchRow['batch_client_id']! as String,
       id: batchRow['remote_id'] as int?,
       operadorId: (batchRow['operador_id'] as int?) ?? 0,
       startedAt: DateTime.parse(batchRow['started_at']! as String),
-      endedAt: DateTime.parse(batchRow['ended_at']! as String),
-      updatedAt: batchRow['updated_at'] == null
-          ? null
-          : DateTime.tryParse(batchRow['updated_at'] as String),
+      endedAt: endedAt,
+      updatedAt: updatedAt,
       points: pointsRows
           .map((r) => PositionPoint(
                 capturedAt: DateTime.parse(r['captured_at']! as String),

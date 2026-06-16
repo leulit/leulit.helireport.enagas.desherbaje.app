@@ -75,12 +75,20 @@ class MapaGlobalController extends GetxController {
     unawaited(Get.find<GpsBackgroundService>().start());
   }
 
+  /// NF-8: awaitable stop — call from PopScope/route exit handler so the
+  /// final GPS flush completes before the page is disposed.
+  /// [onClose] also calls stop() unawaited as a safety net.
+  Future<void> stopTracking() =>
+      Get.find<GpsBackgroundService>().stop();
+
   @override
   void onClose() {
     _saveDebounce?.cancel();
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
+    // Safety net: if stopTracking() was not awaited by the PopScope handler,
+    // this ensures the service is stopped (non-awaited, best-effort).
     unawaited(Get.find<GpsBackgroundService>().stop());
     super.onClose();
   }

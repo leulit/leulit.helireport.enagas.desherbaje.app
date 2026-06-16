@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/app_log.dart';
 import '../../core/sync/sync.dart';
 import '../../domain/entities/position_batch_entity.dart';
 
@@ -39,8 +40,10 @@ class GpsBackgroundService extends GetxService {
   StreamSubscription<Position>? _positionSub;
   Timer? _flushTimer;
   final List<PositionPoint> _buffer = [];
-  DateTime? _bufferStartedAt;
-  int _operadorId = 0;
+  // NF-9: nullable — null means "no session yet"; abort start() if null or <= 0.
+  int? _operadorId;
+  // NF-7: mutex — Dart is single-threaded per isolate; no await between check and set.
+  bool _flushing = false;
 
   OfflineRepository<PositionBatchEntity> get _offline =>
       Get.find<OfflineRepository<PositionBatchEntity>>();
@@ -50,17 +53,27 @@ class GpsBackgroundService extends GetxService {
   /// Starts (or resumes from `stopped`) the GPS stream and the periodic
   /// flush timer. Idempotent: a second call while already running is a
   /// no-op.
+  ///
+  /// NF-9: aborts (state stays stopped) if no valid operador in session.
+  /// Callers should check [lastError] after start() returns.
   Future<void> start() async {
     if (state.value == GpsTrackingState.running) return;
     lastError.value = null;
+
+    // NF-9: read operadorId BEFORE starting the foreground service.
+    _operadorId = await _readOperadorId();
+    if (_operadorId == null || _operadorId! <= 0) {
+      lastError.value =
+          'No hay operador en sesión; no se inicia el tracking GPS.';
+      AppLog.w('GpsBackgroundService: start aborted — no valid operadorId');
+      return;
+    }
 
     final granted = await _ensurePermissions();
     if (!granted) {
       lastError.value = 'Permisos de ubicación denegados.';
       return;
     }
-
-    _operadorId = await _readOperadorId();
 
     if (Platform.isAndroid) {
       await _startAndroidForegroundService();
@@ -74,7 +87,6 @@ class GpsBackgroundService extends GetxService {
       unawaited(_flushIfNotEmpty(forceClose: false));
     });
 
-    _bufferStartedAt = DateTime.now();
     state.value = GpsTrackingState.running;
   }
 
@@ -112,8 +124,11 @@ class GpsBackgroundService extends GetxService {
 
   void _onPosition(Position p) {
     if (state.value != GpsTrackingState.running) return;
+    // A6: normalize capturedAt to UTC for coherence across store/JSON/derivation.
+    // Invariant: _buffer grows by appending at the tail (_buffer.add).
+    // removeRange(0, n) relies on this — never insert in the middle.
     _buffer.add(PositionPoint(
-      capturedAt: p.timestamp,
+      capturedAt: p.timestamp.toUtc(),
       lat: p.latitude,
       lng: p.longitude,
       accuracyMeters: p.accuracy,
@@ -132,30 +147,69 @@ class GpsBackgroundService extends GetxService {
     }
   }
 
+  // NF-7: write-then-clear with mutex.
+  // NF-9: _operadorId is guaranteed non-null and > 0 here (abort guard in start()).
   Future<void> _flushIfNotEmpty({required bool forceClose}) async {
+    // [REVIEW G4] Mutex: no await between check and set — Dart single-isolate guarantee.
+    if (_flushing) return;
     if (_buffer.isEmpty) return;
-    final points = List<PositionPoint>.unmodifiable(_buffer);
-    final startedAt = _bufferStartedAt ?? points.first.capturedAt;
-    final endedAt = points.last.capturedAt;
-    _buffer.clear();
-    _bufferStartedAt = forceClose ? null : DateTime.now();
-
-    final batch = PositionBatchEntity(
-      operadorId: _operadorId,
-      points: points,
-      startedAt: startedAt,
-      endedAt: endedAt,
-    );
+    _flushing = true;
     try {
-      await _offline.create(batch);
+      // Snapshot the current buffer length. New points arriving during the
+      // await are appended at the tail and are NOT included in this snapshot.
+      final points = List<PositionPoint>.unmodifiable(_buffer);
+      final (startedAt, endedAt) = _deriveInterval(points); // A6
+      final batch = PositionBatchEntity(
+        operadorId: _operadorId!, // guaranteed by NF-9 guard in start()
+        points: points,
+        startedAt: startedAt,
+        endedAt: endedAt,
+      );
+      await _offline.create(batch); // 1) persist FIRST
+      // 2) Only remove the confirmed points. removeRange(0, n) preserves points
+      //    that arrived during the await (appended after index n).
+      _buffer.removeRange(0, points.length);
       lastFlushAt.value = DateTime.now();
-    } catch (e) {
+      lastError.value = null;
+    } catch (e, s) {
+      // Buffer stays intact = re-enqueue on next flush (create tx is atomic).
       lastError.value = 'Error guardando lote GPS: $e';
-      if (kDebugMode) {
-        debugPrint('GpsBackgroundService flush error: $e');
-      }
+      AppLog.e('GpsBackgroundService flush error', error: e, stackTrace: s);
+    } finally {
+      _flushing = false;
     }
   }
+
+  /// A6: derives [startedAt, endedAt] from the min/max capturedAt (UTC).
+  /// Guarantees end >= start even if points arrive out-of-order.
+  (DateTime, DateTime) _deriveInterval(List<PositionPoint> pts) {
+    var start = pts.first.capturedAt.toUtc();
+    var end = pts.first.capturedAt.toUtc();
+    for (final p in pts) {
+      final c = p.capturedAt.toUtc();
+      if (c.isBefore(start)) start = c;
+      if (c.isAfter(end)) end = c;
+    }
+    if (end.isBefore(start)) end = start;
+    return (start, end);
+  }
+
+  /// Exposes [_flushIfNotEmpty] for testing (flush-then-clear contract).
+  @visibleForTesting
+  Future<void> flushNow() => _flushIfNotEmpty(forceClose: false);
+
+  /// Directly sets the in-memory buffer for test scenarios that need to
+  /// pre-populate points without a real GPS stream.
+  @visibleForTesting
+  void setBufferForTest(List<PositionPoint> points) {
+    _buffer
+      ..clear()
+      ..addAll(points);
+  }
+
+  /// Sets [_operadorId] for tests that bypass [start()].
+  @visibleForTesting
+  void setOperadorIdForTest(int? id) => _operadorId = id;
 
   Future<bool> _ensurePermissions() async {
     final perm = await Geolocator.checkPermission();
@@ -197,9 +251,10 @@ class GpsBackgroundService extends GetxService {
     );
   }
 
-  Future<int> _readOperadorId() async {
+  // NF-9: returns null if the key is absent (no session); no ?? 0 fallback.
+  Future<int?> _readOperadorId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_prefsUserIdKey) ?? 0;
+    return prefs.getInt(_prefsUserIdKey);
   }
 
   Future<void> _startAndroidForegroundService() async {
