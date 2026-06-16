@@ -5,6 +5,7 @@ import '../../core/app_router.dart';
 import '../../core/my_getx_controller.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/gasoductos_service.dart';
+import '../../core/services/master_data_load_result.dart';
 import '../../core/services/pks_service.dart';
 import '../../core/services/session_state.dart';
 import '../../core/sync/sync.dart';
@@ -83,6 +84,8 @@ class SincronizacionController extends MyGetxController {
   /// `unavailable`). Cooperativamente cancelable.
   Future<void> descargarTodo() async {
     if (isWorking.value) return;
+    // NF-15: guard — rows may be empty if _initRows hasn't resolved yet.
+    if (rows.isEmpty) return;
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
       return;
@@ -105,6 +108,8 @@ class SincronizacionController extends MyGetxController {
   /// Descarga una única fila.
   Future<void> descargar(MasterDataKind kind) async {
     if (isWorking.value) return;
+    // NF-15: guard — rows may be empty if _initRows hasn't resolved yet.
+    if (rows.isEmpty) return;
     if (_rowFor(kind).status == MasterDataStatus.unavailable) return;
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
@@ -137,8 +142,9 @@ class SincronizacionController extends MyGetxController {
 
   // ─────────────────────────── Internals ───────────────────────────────
 
+  // NF-15: orElse guard prevents StateError when rows haven't been initialised.
   MasterDataRow _rowFor(MasterDataKind kind) =>
-      rows.firstWhere((r) => r.kind == kind);
+      rows.firstWhere((r) => r.kind == kind, orElse: () => MasterDataRow(kind: kind));
 
   void _updateRow(MasterDataKind kind, MasterDataRow updated) {
     final idx = rows.indexWhere((r) => r.kind == kind);
@@ -174,6 +180,7 @@ class SincronizacionController extends MyGetxController {
         );
         return;
       }
+      MasterDataLoadResult? masterDataResult;
       switch (kind) {
         case MasterDataKind.user:
           await _auth.refreshUserData();
@@ -185,7 +192,8 @@ class SincronizacionController extends MyGetxController {
               processed: _gasoductos.processedFiles,
             ),
           );
-          await _gasoductos.reload();
+          // NF-12: reload now propagates on error; catch at _runOne level handles it.
+          masterDataResult = await _gasoductos.reload(token: sharedToken);
         case MasterDataKind.pks:
           // TODO: Igualar la API de [PksService] con [GasoductosService] si
           // se desea mostrar progreso real distinto al ratio de ficheros.
@@ -196,7 +204,8 @@ class SincronizacionController extends MyGetxController {
               processed: _pks.processedFiles,
             ),
           );
-          await _pks.reload();
+          // NF-12: reload now propagates on error; catch at _runOne level handles it.
+          masterDataResult = await _pks.reload(token: sharedToken);
         case MasterDataKind.segmentos:
           final int pending = await _countPendingForSegmentos();
           if (pending > 0) {
@@ -263,13 +272,21 @@ class SincronizacionController extends MyGetxController {
           // No disponible aún — protegido más arriba; nunca debería llegar.
           return;
       }
+
+      // NF-14: only persist lastDownloadAt when data came from the network.
+      // Cache hits do NOT count as a fresh download.
+      final servedFromCache =
+          masterDataResult?.source == MasterDataSource.cache;
       final now = DateTime.now();
-      await _persistLastDownload(kind, now);
+      if (!servedFromCache) {
+        await _persistLastDownload(kind, now);
+      }
       _updateRow(
         kind,
         _rowFor(kind).copyWith(
           status: MasterDataStatus.success,
-          lastDownloadAt: now,
+          lastDownloadAt: servedFromCache ? null : now,
+          servedFromCache: servedFromCache,
           clearError: true,
           clearProgress: true,
           clearProgressLabel: true,

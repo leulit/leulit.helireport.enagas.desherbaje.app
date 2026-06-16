@@ -14,8 +14,11 @@ import '../../data/services/json_loader_service.dart';
 import '../../domain/entities/ct_info_entity.dart';
 import '../../domain/entities/pk_entity.dart';
 import '../../domain/entities/user_entity.dart';
+import '../app_log.dart';
 import '../app_typed_actions.dart';
+import '../sync/pull/cancel_token.dart';
 import 'connectivity_service.dart';
+import 'master_data_load_result.dart';
 
 /// Group identifier que distingue los ficheros `*-pk.json` del resto de
 /// descargas que pasan por [JsonLoaderService].
@@ -42,8 +45,19 @@ class PksService extends GetxService {
   Completer<void>? _runCompleter;
   final _entitiesBuffer = <PkEntity>[];
 
-  JsonLoaderService get _loader => Get.find<JsonLoaderService>();
-  ConnectivityService get _conn => Get.find<ConnectivityService>();
+  final ConnectivityService? _connArg;
+  final JsonLoaderService? _loaderArg;
+
+  // Resolución perezosa: no se llama a Get.find en construcción, así que
+  // subclases/stubs de test que no usan estas deps no requieren registrarlas.
+  JsonLoaderService get _loader => _loaderArg ?? Get.find<JsonLoaderService>();
+  ConnectivityService get _conn => _connArg ?? Get.find<ConnectivityService>();
+
+  PksService({
+    ConnectivityService? conn,
+    JsonLoaderService? loader,
+  })  : _connArg = conn,
+        _loaderArg = loader;
 
   @override
   void onInit() {
@@ -65,27 +79,40 @@ class PksService extends GetxService {
   }
 
   /// Carga los PKs solo si no se han cargado aún en esta sesión.
+  /// Best-effort: errores se loguean y no propagan (path pasivo/prefetch).
   Future<void> ensureLoaded() async {
     if (_loaded || isLoading.value) return;
-    await _runOnce(forceRefresh: false);
+    try {
+      await _runOnce(forceRefresh: false);
+    } catch (e, st) {
+      AppLog.w('PksService.ensureLoaded: error silenciado', error: e, stackTrace: st);
+    }
   }
 
   /// Fuerza recarga ignorando la caché de sesión (pero usando caché SQLite si
-  /// no hay conexión).
-  Future<void> reload() async {
+  /// no hay conexión). Propaga excepciones — el llamante (usuario) debe
+  /// manejarlas mostrando error en UI.
+  Future<MasterDataLoadResult> reload({CancelToken? token}) async {
     _loaded = false;
-    await _runOnce(forceRefresh: true);
+    return _runOnce(forceRefresh: true, token: token);
   }
 
-  Future<void> _runOnce({required bool forceRefresh}) async {
+  Future<MasterDataLoadResult> _runOnce({
+    required bool forceRefresh,
+    CancelToken? token,
+  }) async {
     isLoading.value = true;
+    int fetchedCount = 0;
+    MasterDataSource resultSource = MasterDataSource.empty;
     try {
       final ctInfos = await _ctInfosFromPrefs();
 
       if (!_conn.isConnected) {
         await _loadFromCache(ctInfos.map((c) => c.id).toList());
         _loaded = true;
-        return;
+        resultSource = MasterDataSource.cache;
+        fetchedCount = pks.length;
+        return MasterDataLoadResult(resultSource, fetchedCount);
       }
 
       if (!forceRefresh) {
@@ -93,7 +120,9 @@ class PksService extends GetxService {
         if (await _hasCache(ctIds)) {
           await _loadFromCache(ctIds);
           _loaded = true;
-          return;
+          resultSource = MasterDataSource.cache;
+          fetchedCount = pks.length;
+          return MasterDataLoadResult(resultSource, fetchedCount);
         }
       }
 
@@ -111,17 +140,27 @@ class PksService extends GetxService {
       totalFiles.value = files.length;
       processedFiles.value = 0;
 
-      await _loader.loadFiles(files);
+      await _loader.loadFiles(files, token: token);
       await _runCompleter?.future
           .timeout(const Duration(seconds: 1), onTimeout: () {});
+
+      // NF-13: re-check cancellation before persisting.
+      if (token?.isCancelled ?? false) {
+        resultSource = MasterDataSource.cache;
+        fetchedCount = 0;
+        return MasterDataLoadResult(resultSource, fetchedCount);
+      }
+
+      // Capture count BEFORE finally clears the buffer.
+      fetchedCount = _entitiesBuffer.length;
+      resultSource = MasterDataSource.network;
 
       pks.assignAll(_entitiesBuffer);
       if (_entitiesBuffer.isNotEmpty) {
         await _cachePks(_entitiesBuffer);
       }
       _loaded = true;
-    } catch (e) {
-      debugPrint('PksService: error cargando PKs — $e');
+      return MasterDataLoadResult(resultSource, fetchedCount);
     } finally {
       _entitiesBuffer.clear();
       _runCompleter = null;

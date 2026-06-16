@@ -3,6 +3,117 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../core/sync/sync.dart';
 
+// A3 ship-blocker-later ──────────────────────────────────────────────────────
+// Shim LocalStore-shaped objects that participate in the versioned migration
+// system for `gasoductos` and `pks`. They do NOT route read/write traffic —
+// GasoductosService and PksService still use raw SQL. The sole purpose is to
+// register the schema in `_entity_schema_version` so future migrations can
+// evolve the table via the standard `OfflineDatabase.migrateEntity` path.
+//
+// TODO A3 ship-blocker-later: replace with full LocalStore<GasoductoEntity>
+//   and LocalStore<PkEntity> when GasoductosService / PksService are migrated
+//   to the offline motor (requires REST endpoints from the backend — §12.2).
+
+class _GasoductoSchemaShim extends _NopLocalStore {
+  @override
+  String get entityType => 'gasoducto';
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> migrate(DatabaseExecutor db, int from, int to) async {
+    if (from == 0) {
+      // CREATE verbatim — includes ct_id INTEGER as established by the 2026
+      // schema migration that converted the legacy ct TEXT column.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS gasoductos (
+          id           TEXT NOT NULL,
+          nombre       TEXT NOT NULL DEFAULT '',
+          ct_id        INTEGER NOT NULL,
+          points_json  TEXT NOT NULL,
+          color_value  INTEGER NOT NULL DEFAULT 4283122624,
+          stroke_width REAL NOT NULL DEFAULT 3.0,
+          synced_at    TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (id, ct_id)
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_gasoductos_ct ON gasoductos(ct_id)',
+      );
+    }
+    // Future schema bumps go here (from == 1 → 2, etc.).
+  }
+}
+
+class _PkSchemaShim extends _NopLocalStore {
+  @override
+  String get entityType => 'pk';
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> migrate(DatabaseExecutor db, int from, int to) async {
+    if (from == 0) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pks (
+          id        TEXT NOT NULL,
+          ct_id     INTEGER NOT NULL,
+          label     TEXT NOT NULL DEFAULT '',
+          lat       REAL NOT NULL,
+          lng       REAL NOT NULL,
+          synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (id, ct_id)
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_pks_ct ON pks(ct_id)',
+      );
+    }
+    // Future schema bumps go here.
+  }
+}
+
+/// Abstract NOP base so the shims only need to override the schema methods.
+abstract class _NopLocalStore extends LocalStore<_NopSyncable> {
+  @override
+  Future<void> upsert(_NopSyncable entity, {DatabaseExecutor? txn}) async {}
+
+  @override
+  Future<void> delete(String clientId, {DatabaseExecutor? txn}) async {}
+
+  @override
+  Future<_NopSyncable?> findByClientId(String clientId) async => null;
+
+  @override
+  Future<_NopSyncable?> findByRemoteId(String remoteId) async => null;
+
+  @override
+  Future<List<_NopSyncable>> findAll() async => const [];
+
+  @override
+  Future<void> markSynced({
+    required String clientId,
+    String? remoteId,
+    DatabaseExecutor? txn,
+  }) async {}
+}
+
+/// Placeholder Syncable used only by the NOP shims above.
+class _NopSyncable implements Syncable {
+  @override
+  String get clientId => '';
+  @override
+  String? get remoteId => null;
+  @override
+  DateTime get updatedAt => DateTime.fromMillisecondsSinceEpoch(0);
+  @override
+  Map<String, dynamic> toJson() => const {};
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Thin wrapper that opens the SQLite database via [OfflineDatabase] and
 /// adds project-specific master-data tables that are not yet modelled as
 /// sync engine entities (`gasoductos`, `pks`). Once those become regular
@@ -24,13 +135,13 @@ class LocalDatabase {
 
     // 3. Si no hay nada, creamos el futuro de inicialización
     _initFuture = _initDb();
-    
+
     try {
       _db = await _initFuture;
       return _db!;
     } finally {
       // Limpiamos el futuro al terminar para permitir reintentos si falló
-      _initFuture = null; 
+      _initFuture = null;
     }
   }
 
@@ -38,7 +149,10 @@ class LocalDatabase {
     final dbPath = await getDatabasesPath();
     final fullPath = path.join(dbPath, 'helireport_desherbaje.db');
     final db = await OfflineDatabase.open(fullPath);
-    await _createMasterDataTables(db);
+    // A3 ship-blocker-later: register gasoductos/pks schema via the versioned
+    // migration system so future schema changes have a safe upgrade path.
+    await OfflineDatabase.migrateEntity(db, _GasoductoSchemaShim());
+    await OfflineDatabase.migrateEntity(db, _PkSchemaShim());
     return db;
   }
 
@@ -63,37 +177,5 @@ class LocalDatabase {
         'CREATE INDEX IF NOT EXISTS idx_gasoductos_ct ON gasoductos(ct_id)',
       );
     });
-  } 
-
-  Future<void> _createMasterDataTables(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS gasoductos (
-        id           TEXT NOT NULL,
-        nombre       TEXT NOT NULL DEFAULT '',
-        ct_id        INTEGER NOT NULL,
-        points_json  TEXT NOT NULL,
-        color_value  INTEGER NOT NULL DEFAULT 4283122624,
-        stroke_width REAL NOT NULL DEFAULT 3.0,
-        synced_at    TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (id, ct_id)
-      )
-    ''');
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_gasoductos_ct ON gasoductos(ct_id)',
-    );
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS pks (
-        id        TEXT NOT NULL,
-        ct_id     INTEGER NOT NULL,
-        label     TEXT NOT NULL DEFAULT '',
-        lat       REAL NOT NULL,
-        lng       REAL NOT NULL,
-        synced_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (id, ct_id)
-      )
-    ''');
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_pks_ct ON pks(ct_id)',
-    );
   }
 }

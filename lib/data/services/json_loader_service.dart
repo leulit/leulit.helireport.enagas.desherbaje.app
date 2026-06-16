@@ -6,6 +6,7 @@ import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
 
 import '../../core/app_typed_actions.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../model/file_data.dart';
 import '../network/network_service.dart';
 
@@ -62,11 +63,15 @@ class JsonLoaderService extends GetxService {
   /// Descarga la lista [files] secuencialmente. Si no hay conexión, dispara
   /// directamente `geoJsonLoadCompleted` y deja que el consumidor caiga al
   /// modo offline (caché local).
-  Future<void> loadFiles(List<FileData> files) async {
+  ///
+  /// Pass an optional [token] to cooperatively cancel the operation. If the
+  /// token is already cancelled when [loadFiles] is called, it short-circuits
+  /// to `geoJsonLoadCompleted` immediately.
+  Future<void> loadFiles(List<FileData> files, {CancelToken? token}) async {
     while (_activeRun != null) {
       await _activeRun;
     }
-    final run = _runFiles(files);
+    final run = _runFiles(files, token: token);
     _activeRun = run;
     try {
       await run;
@@ -75,8 +80,14 @@ class JsonLoaderService extends GetxService {
     }
   }
 
-  Future<void> _runFiles(List<FileData> files) async {
+  Future<void> _runFiles(List<FileData> files, {CancelToken? token}) async {
     if (files.isEmpty) return;
+
+    // NF-13: short-circuit if already cancelled.
+    if (token?.isCancelled ?? false) {
+      AppTypedActions.geoJsonLoadCompleted.dispatch();
+      return;
+    }
 
     _isLoading = true;
     _currentTotalFiles = files.length;

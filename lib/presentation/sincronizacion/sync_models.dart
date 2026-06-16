@@ -57,6 +57,10 @@ class MasterDataRow {
   /// Etiqueta opcional asociada al progreso, p.ej. `"3 / 12"`.
   final String? progressLabel;
 
+  /// NF-14: true cuando la última carga de master-data se sirvió desde la
+  /// caché local en lugar de hacer un fetch de red real.
+  final bool servedFromCache;
+
   const MasterDataRow({
     required this.kind,
     this.status = MasterDataStatus.idle,
@@ -64,6 +68,7 @@ class MasterDataRow {
     this.errorMessage,
     this.progress,
     this.progressLabel,
+    this.servedFromCache = false,
   });
 
   MasterDataRow copyWith({
@@ -72,10 +77,12 @@ class MasterDataRow {
     String? errorMessage,
     double? progress,
     String? progressLabel,
+    bool? servedFromCache,
     bool clearError = false,
     bool clearLastDownloadAt = false,
     bool clearProgress = false,
     bool clearProgressLabel = false,
+    bool clearServedFromCache = false,
   }) {
     return MasterDataRow(
       kind: kind,
@@ -88,6 +95,9 @@ class MasterDataRow {
       progress: clearProgress ? null : (progress ?? this.progress),
       progressLabel:
           clearProgressLabel ? null : (progressLabel ?? this.progressLabel),
+      servedFromCache: clearServedFromCache
+          ? false
+          : (servedFromCache ?? this.servedFromCache),
     );
   }
 }

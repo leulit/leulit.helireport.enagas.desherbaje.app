@@ -16,8 +16,11 @@ import '../../domain/entities/ct_info_entity.dart';
 import '../../domain/entities/gasoducto_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../presentation/mapa/lines_cut/polyline_hit_data.dart';
+import '../app_log.dart';
 import '../app_typed_actions.dart';
+import '../sync/pull/cancel_token.dart';
 import 'connectivity_service.dart';
+import 'master_data_load_result.dart';
 
 /// Group identifier usado por [JsonLoaderService] para distinguir los
 /// ficheros de gasoductos del resto de descargas. Otros consumidores
@@ -57,8 +60,19 @@ class GasoductosService extends GetxService {
   /// motor de corte pueda resolver ctId/ctName sin acceder a prefs.
   Map<int, String> _ctNameById = const {};
 
-  JsonLoaderService get _loader => Get.find<JsonLoaderService>();
-  ConnectivityService get _conn => Get.find<ConnectivityService>();
+  final ConnectivityService? _connArg;
+  final JsonLoaderService? _loaderArg;
+
+  // Resolución perezosa: no se llama a Get.find en construcción, así que
+  // subclases/stubs de test que no usan estas deps no requieren registrarlas.
+  JsonLoaderService get _loader => _loaderArg ?? Get.find<JsonLoaderService>();
+  ConnectivityService get _conn => _connArg ?? Get.find<ConnectivityService>();
+
+  GasoductosService({
+    ConnectivityService? conn,
+    JsonLoaderService? loader,
+  })  : _connArg = conn,
+        _loaderArg = loader;
 
   @override
   void onInit() {
@@ -80,20 +94,31 @@ class GasoductosService extends GetxService {
   }
 
   /// Carga las trazas solo si no se han cargado aún en esta sesión.
+  /// Best-effort: errores se loguean y no propagan (path pasivo/prefetch).
   Future<void> ensureLoaded() async {
     if (_loaded || isLoading.value) return;
-    await _runOnce(forceRefresh: false);
+    try {
+      await _runOnce(forceRefresh: false);
+    } catch (e, st) {
+      AppLog.w('GasoductosService.ensureLoaded: error silenciado', error: e, stackTrace: st);
+    }
   }
 
   /// Fuerza recarga ignorando la caché de sesión (pero usando caché SQLite
-  /// si no hay conexión).
-  Future<void> reload() async {
+  /// si no hay conexión). Propaga excepciones — el llamante (usuario) debe
+  /// manejarlas mostrando error en UI.
+  Future<MasterDataLoadResult> reload({CancelToken? token}) async {
     _loaded = false;
-    await _runOnce(forceRefresh: true);
+    return _runOnce(forceRefresh: true, token: token);
   }
 
-  Future<void> _runOnce({required bool forceRefresh}) async {
+  Future<MasterDataLoadResult> _runOnce({
+    required bool forceRefresh,
+    CancelToken? token,
+  }) async {
     isLoading.value = true;
+    int fetchedCount = 0;
+    MasterDataSource resultSource = MasterDataSource.empty;
     try {
       final ctInfos = await _ctInfosFromPrefs();
       _ctNameById = {for (final c in ctInfos) c.id: c.nombre};
@@ -102,7 +127,9 @@ class GasoductosService extends GetxService {
       if (!_conn.isConnected) {
         await _loadFromCache(ctInfos.map((c) => c.id).toList());
         _loaded = true;
-        return;
+        resultSource = MasterDataSource.cache;
+        fetchedCount = polylines.length;
+        return MasterDataLoadResult(resultSource, fetchedCount);
       }
 
       // Si no es refresh forzado y la caché tiene datos, evitamos red.
@@ -111,7 +138,9 @@ class GasoductosService extends GetxService {
         if (await _hasCache(ctIds)) {
           await _loadFromCache(ctIds);
           _loaded = true;
-          return;
+          resultSource = MasterDataSource.cache;
+          fetchedCount = polylines.length;
+          return MasterDataLoadResult(resultSource, fetchedCount);
         }
       }
 
@@ -129,20 +158,30 @@ class GasoductosService extends GetxService {
       totalFiles.value = files.length;
       processedFiles.value = 0;
 
-      await _loader.loadFiles(files);
+      await _loader.loadFiles(files, token: token);
       // El pipeline ya ha terminado al volver de `loadFiles`, pero esperamos
       // al evento `geoJsonLoadCompleted` por si llega tras un microtask
       // (broadcast asíncrono). Timeout de 1s como salvaguarda.
       await _runCompleter?.future
           .timeout(const Duration(seconds: 1), onTimeout: () {});
 
+      // NF-13: re-check cancellation before persisting.
+      if (token?.isCancelled ?? false) {
+        resultSource = MasterDataSource.cache;
+        fetchedCount = 0;
+        return MasterDataLoadResult(resultSource, fetchedCount);
+      }
+
+      // Capture count BEFORE finally clears the buffer.
+      fetchedCount = _entitiesBuffer.length;
+      resultSource = MasterDataSource.network;
+
       polylines.assignAll(_toPolylines(_entitiesBuffer));
       if (_entitiesBuffer.isNotEmpty) {
         await _cacheGasoductos(_entitiesBuffer);
       }
       _loaded = true;
-    } catch (e) {
-      debugPrint('GasoductosService: error cargando trazas — $e');
+      return MasterDataLoadResult(resultSource, fetchedCount);
     } finally {
       _entitiesBuffer.clear();
       _runCompleter = null;

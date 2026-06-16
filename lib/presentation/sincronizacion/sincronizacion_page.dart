@@ -243,7 +243,8 @@ class _MasterDataRowTile extends GetView<SincronizacionController> {
       return row.kind.description;
     }
     if (last == null) return '${row.kind.description}\nNunca descargado';
-    return '${row.kind.description}\nÚltima descarga: ${_relativeTime(last)}';
+    final cacheHint = row.servedFromCache ? ' (desde caché)' : '';
+    return '${row.kind.description}\nÚltima descarga: ${_relativeTime(last)}$cacheHint';
   }
 
   TextStyle? _subtitleStyle(BuildContext context) {
