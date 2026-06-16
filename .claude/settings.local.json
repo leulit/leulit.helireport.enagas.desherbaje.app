@@ -33,7 +33,18 @@
       "Bash(chmod +x /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/scripts/build.sh)",
       "Bash(dart analyze *)",
       "Bash(git -C /Users/emiloalvarez/Work/PROYECTOS/ENAGAS/HELIREPORT2025/leulit_helireport_enagas_desherbaje_app/.claude/worktrees/agent-ae8a147c2a078381c branch --show-current)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(flutter devices *)",
+      "mcp__codebase-memory-mcp__list_projects",
+      "mcp__codebase-memory-mcp__search_graph",
+      "mcp__codebase-memory-mcp__get_code_snippet",
+      "Bash(pip3 install *)",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=slides_presentacion_operadores.pdf --no-margins \"file://$\\(pwd\\)/_slides.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=tarjeta_a5_reglas_de_oro.pdf --no-margins \"file://$\\(pwd\\)/_a5_card.html\")",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=guion_presentacion_operadores.pdf \"file://$\\(pwd\\)/_guion.html\")",
+      "Bash(git diff *)",
+      "Read(//private/tmp/**)",
+      "Bash(:)"
     ]
   },
   "enabledPlugins": {}

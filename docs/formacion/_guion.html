@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Guión presentación — App Desherbaje Enagas</title>
+<style>
+  @page {
+    size: A4;
+    margin: 22mm 20mm 22mm 22mm;
+    @top-left {
+      content: "App Desherbaje · Guión formación operadores";
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8pt;
+      color: #6b7a8c;
+      letter-spacing: 1px;
+    }
+    @top-right {
+      content: "Enagas · Helireport 2026";
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8pt;
+      color: #6b7a8c;
+      letter-spacing: 1px;
+    }
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+      font-size: 8pt;
+      color: #8895a8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a2433;
+    margin: 0; padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body {
+    font-size: 10.5pt;
+    line-height: 1.55;
+  }
+  /* Cover */
+  .cover {
+    page-break-after: always;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-left: 6mm solid #003E7E;
+    padding-left: 14mm;
+  }
+  .cover .eyebrow {
+    font-size: 10pt;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #ff7a00;
+    font-weight: 700;
+    margin-bottom: 8mm;
+  }
+  .cover h1 {
+    font-size: 36pt;
+    color: #003E7E;
+    font-weight: 800;
+    line-height: 1.05;
+    margin: 0 0 6mm 0;
+  }
+  .cover .subtitle {
+    font-size: 14pt;
+    color: #4a5969;
+    font-weight: 300;
+    max-width: 130mm;
+    line-height: 1.4;
+  }
+  .cover .meta {
+    margin-top: 20mm;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3mm 8mm;
+    font-size: 10pt;
+    color: #4a5969;
+    max-width: 110mm;
+  }
+  .cover .meta dt { font-weight: 700; color: #003E7E; letter-spacing: 1px; text-transform: uppercase; font-size: 9pt; }
+
+  /* Headings */
+  h2 {
+    font-size: 18pt;
+    color: #003E7E;
+    font-weight: 800;
+    line-height: 1.2;
+    margin: 14mm 0 4mm;
+    padding-bottom: 2mm;
+    border-bottom: 2px solid #003E7E;
+    page-break-after: avoid;
+    page-break-before: auto;
+  }
+  h2.block { page-break-before: always; }
+  h2 .tag {
+    display: inline-block;
+    font-size: 9pt;
+    background: #ff7a00;
+    color: #fff;
+    padding: 1mm 3mm;
+    border-radius: 2mm;
+    vertical-align: middle;
+    margin-right: 3mm;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  h3 {
+    font-size: 13pt;
+    color: #2a3a52;
+    font-weight: 700;
+    margin: 7mm 0 3mm;
+    page-break-after: avoid;
+  }
+  h4 {
+    font-size: 11pt;
+    color: #003E7E;
+    font-weight: 700;
+    margin: 5mm 0 2mm;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm 6mm; padding: 0; }
+  li { margin-bottom: 1.5mm; }
+  strong { color: #003E7E; }
+  em { color: #4a5969; }
+
+  /* Bloques especiales */
+  blockquote {
+    margin: 4mm 0;
+    padding: 4mm 6mm;
+    background: #f4f7fb;
+    border-left: 3mm solid #003E7E;
+    border-radius: 0 2mm 2mm 0;
+    color: #2a3a52;
+    page-break-inside: avoid;
+  }
+  blockquote.say {
+    border-left-color: #ff7a00;
+    background: #fff8f1;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+  blockquote em {
+    color: #4a5969;
+    font-style: italic;
+  }
+
+  .anchor {
+    background: #003E7E;
+    color: #fff;
+    padding: 4mm 6mm;
+    border-radius: 2mm;
+    margin: 5mm 0;
+    font-weight: 700;
+    font-size: 12pt;
+    letter-spacing: 0.5px;
+    page-break-inside: avoid;
+  }
+  .anchor .label {
+    display: block;
+    font-size: 8pt;
+    letter-spacing: 3px;
+    color: #ffc14d;
+    margin-bottom: 1mm;
+    font-weight: 700;
+  }
+
+  .micro {
+    background: #fff9d6;
+    border-left: 3mm solid #d6b800;
+    padding: 4mm 5mm;
+    border-radius: 0 2mm 2mm 0;
+    margin: 4mm 0;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  .micro .label {
+    font-weight: 800;
+    color: #8a7400;
+    letter-spacing: 1px;
+    font-size: 9pt;
+    text-transform: uppercase;
+  }
+
+  pre {
+    background: #f4f7fb;
+    border: 1px solid #d3dce8;
+    border-radius: 2mm;
+    padding: 4mm 5mm;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.5pt;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    margin: 3mm 0;
+    page-break-inside: avoid;
+    color: #2a3a52;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: #003E7E;
+    color: #fff;
+    text-align: left;
+    padding: 2.5mm 3mm;
+    font-weight: 700;
+  }
+  td {
+    padding: 2.5mm 3mm;
+    border-bottom: 1px solid #d3dce8;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f4f7fb; }
+  tr.danger td:last-child { color: #cc1a00; font-weight: 700; }
+
+  .toc {
+    page-break-after: always;
+    padding-top: 8mm;
+  }
+  .toc h2 { border: none; margin-top: 0; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li {
+    padding: 3mm 0;
+    border-bottom: 1px dotted #d3dce8;
+    display: flex;
+    align-items: baseline;
+    gap: 4mm;
+    font-size: 11pt;
+  }
+  .toc li .num {
+    color: #ff7a00;
+    font-weight: 800;
+    width: 10mm;
+    flex-shrink: 0;
+    font-size: 10pt;
+  }
+  .toc li .title { flex: 1; color: #1a2433; font-weight: 600; }
+  .toc li .time { color: #6b7a8c; font-size: 9pt; }
+
+  .principle-list {
+    background: #f4f7fb;
+    border-radius: 2mm;
+    padding: 5mm 7mm;
+    margin: 3mm 0;
+  }
+  .principle-list ol { margin: 0; }
+  .principle-list li { margin-bottom: 2mm; }
+
+  .footer-note {
+    margin-top: 14mm;
+    padding-top: 4mm;
+    border-top: 1px solid #d3dce8;
+    font-size: 9pt;
+    color: #6b7a8c;
+    text-align: center;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div class="eyebrow">Enagas · Helireport 2026 · Formación interna</div>
+  <h1>Guión de presentación<br>App de Desherbaje</h1>
+  <div class="subtitle">Para operadores de campo. Diseñado para enseñar el flujo, no los botones.</div>
+  <dl class="meta">
+    <dt>Duración</dt><dd>30-40 minutos</dd>
+    <dt>Audiencia</dt><dd>Operadores de campo · conocimientos IT básicos</dd>
+    <dt>Objetivo</dt><dd>Que salgan sabiendo HACER su jornada con la app, no sabiendo qué botones tiene</dd>
+    <dt>Materiales</dt><dd>Slides para proyectar + tarjeta A5 plastificada con las 3 reglas</dd>
+    <dt>Equipo</dt><dd>Leulit</dd>
+  </dl>
+</section>
+
+<!-- ============ TOC ============ -->
+<section class="toc">
+  <h2>Índice</h2>
+  <ol>
+    <li><span class="num">0</span><span class="title">Apertura</span><span class="time">3 min</span></li>
+    <li><span class="num">1</span><span class="title">La idea grande: el "cuaderno digital"</span><span class="time">5 min</span></li>
+    <li><span class="num">2</span><span class="title">La jornada de un operario, de principio a fin</span><span class="time">5 min</span></li>
+    <li><span class="num">3</span><span class="title">Recorrido por la app</span><span class="time">12 min</span></li>
+    <li><span class="num">4</span><span class="title">Sincronización a fondo: el panel de control</span><span class="time">5 min</span></li>
+    <li><span class="num">5</span><span class="title">Qué hacer cuando algo va mal</span><span class="time">3 min</span></li>
+    <li><span class="num">6</span><span class="title">Las 3 reglas de oro</span><span class="time">2 min</span></li>
+    <li><span class="num">7</span><span class="title">Cierre y turno de preguntas</span><span class="time">3-5 min</span></li>
+  </ol>
+
+  <h2 style="margin-top: 14mm;">Principios pedagógicos aplicados</h2>
+  <p style="color: #6b7a8c; margin-bottom: 4mm;">Notas para el formador. No se cuentan en sala.</p>
+  <div class="principle-list">
+    <ol>
+      <li><strong>Modelo mental primero, botones después.</strong> Si entienden cómo "piensa" la app, deducen los botones solos.</li>
+      <li><strong>Una idea grande, repetida 3 veces</strong> con palabras distintas. La gente recuerda lo que oye tres veces.</li>
+      <li><strong>Analogía con algo que ya conocen</strong> (cuaderno, sello, buzón). El cerebro engancha lo nuevo a lo viejo.</li>
+      <li><strong>Anclar al flujo de la jornada</strong>, no al menú de la app. Ellos no piensan en "pantallas", piensan en "ahora salgo, ahora vuelvo".</li>
+      <li><strong>Micropreguntas cada 5 minutos</strong>: "¿qué pasaría si…?". Si fallan, repites; si aciertan, avanzas.</li>
+      <li><strong>Tres reglas de oro al final.</strong> Si recuerdan tres frases, ganaste.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============ BLOQUE 0 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 0</span>Apertura — 3 min</h2>
+
+<h4>Decir, literalmente:</h4>
+<blockquote class="say">
+  <p>"Buenos días. En los próximos 35 minutos vais a aprender a usar la app de Desherbaje. No vamos a ver botones uno a uno — vamos a ver vuestra jornada de campo, y a medida que avancemos, os enseño dónde se toca cada cosa.</p>
+  <p>Al final tenéis que poder hacer tres cosas: prepararse antes de salir, trabajar tranquilos en campo aunque no haya cobertura, y subir todo al volver. Si os lleváis eso a casa, esta presentación ha servido."</p>
+</blockquote>
+
+<p><strong>Por qué empezar así:</strong> les bajas la ansiedad ("no es un examen de informática") y les das el destino del viaje. Saben qué van a saber al final.</p>
+
+<!-- ============ BLOQUE 1 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 1</span>La idea grande: el "cuaderno digital" — 5 min</h2>
+
+<p><strong>Pizarra/slide:</strong> dibuja dos columnas — "MÓVIL" y "OFICINA"</p>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"Imaginad que la app es un cuaderno de campo, pero digital. Cuando estáis en una válvula a 40 km del pueblo, sin cobertura, podéis escribir en ese cuaderno igual que escribiríais en uno de papel. La app NO necesita internet para funcionar. Eso es lo primero importante.</p>
+  <p><em>[Pausa. Mirar a la sala.]</em></p>
+  <p>Internet solo sirve para dos cosas: descargar lo que tenéis que hacer hoy, y subir lo que ya habéis hecho. Como un buzón de correos: vais por la mañana a recoger las cartas que tenéis que llevar, y al final del día echáis las respuestas. Entre medias, las cartas están en vuestra mano, no en el buzón."</p>
+</blockquote>
+
+<div class="micro">
+  <div class="label">Micropregunta a la sala</div>
+  <p style="margin: 2mm 0 0;">"¿Qué pasa si me quedo sin cobertura en mitad de una inspección?"</p>
+  <p style="margin: 2mm 0 0; font-style: italic;">Esperar respuestas. Validar la correcta: "Exacto — no pasa nada. Sigues trabajando. Todo se guarda en el móvil."</p>
+</div>
+
+<div class="anchor">
+  <span class="label">ANCHOR · A LA PIZARRA</span>
+  REGLA 1 — El móvil siempre funciona. Internet solo sirve para sincronizar.
+</div>
+
+<!-- ============ BLOQUE 2 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 2</span>La jornada de un operario, de principio a fin — 5 min</h2>
+
+<p><strong>No abrir aún la app.</strong> Solo dibujar el flujo en pizarra:</p>
+
+<pre>   MAÑANA (con wifi/cobertura)        CAMPO (sin red da igual)        TARDE (con wifi/cobertura)
+   ──────────────────────────         ──────────────────────          ──────────────────────────
+   Abrir app → Login                   Ver segmentos asignados        Abrir Sincronización
+   Sincronización                      Ir al detalle                  Pulsar "Subir todo"
+   "Preparar trabajo de campo"         Cambiar estado                 Ver que sube ✓
+   ✓ todo descargado                   Hacer fotos antes/después
+                                        Activar mapa si toca tracking</pre>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"Esto es vuestro día. Solo hay TRES momentos en que la red importa: al empezar la mañana para descargaros lo del día, y al volver para subirlo. Lo demás — el trabajo de verdad — la red da igual."</p>
+</blockquote>
+
+<div class="micro">
+  <div class="label">Micropregunta</div>
+  <p style="margin: 2mm 0 0;">"¿En qué momento del día hay que conectarse a la wifi de la oficina?"</p>
+  <p style="margin: 2mm 0 0; font-style: italic;">Respuesta esperada: dos veces, principio y final.</p>
+</div>
+
+<!-- ============ BLOQUE 3 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 3</span>Recorrido por la app — 12 min · ABRIR LA APP AQUÍ</h2>
+
+<p><em>Estrategia: ir abriendo pantalla por pantalla <strong>siguiendo el flujo de la jornada</strong>, no el menú. Cada pantalla = una pregunta que se hace el operario.</em></p>
+
+<h3>3.1 — Login (1 min)</h3>
+<p><strong>Pregunta del operario:</strong> <em>"¿Cómo entro?"</em></p>
+<ul>
+  <li>Usuario y contraseña que le dio la oficina</li>
+  <li><em>"Si pone 'sesión caducada' alguna vez, no es bug — es seguridad. Volvéis a meter contraseña y ya."</em></li>
+</ul>
+
+<h3>3.2 — Lista de segmentos (3 min)</h3>
+<p><strong>Pregunta:</strong> <em>"¿Qué tengo que hacer hoy?"</em></p>
+<ul>
+  <li>Aquí ven sus segmentos agrupados por CT (Centro de Trabajo)</li>
+  <li>Cada tarjeta: número, descripción, estado, tipo de actividad</li>
+  <li>Pueden filtrar por estado o tipo</li>
+  <li><strong>Punto clave a remarcar:</strong> <em>"Los segmentos finalizados desaparecen de esta lista. No es que se hayan perdido — es que ya están hechos. Si queréis verlos, los buscáis en la sincronización o el mapa."</em></li>
+</ul>
+
+<div class="micro">
+  <div class="label">Micropregunta</div>
+  <p style="margin: 2mm 0 0;">"Si veo 12 segmentos esta mañana y vuelvo y veo 8, ¿qué ha pasado?"</p>
+  <p style="margin: 2mm 0 0; font-style: italic;">Respuesta: he finalizado 4.</p>
+</div>
+
+<h3>3.3 — Detalle del segmento (3 min)</h3>
+<p><strong>Pregunta:</strong> <em>"He llegado a un segmento, ¿qué hago?"</em></p>
+<ul>
+  <li><strong>Cambiar estado</strong> según avance: propuesta → validada → en ejecución → finalizada</li>
+  <li><strong>Subir fotos antes</strong> de actuar</li>
+  <li><strong>Subir fotos después</strong> de actuar</li>
+  <li>Mensajes (chat con oficina si hay duda)</li>
+</ul>
+
+<h4>Insistir, despacio:</h4>
+<blockquote class="say">
+  <p>"Cuando cambiáis un estado o sacáis una foto, la app os enseña ✓ verde casi al instante. <strong>Eso NO significa que esté en la oficina.</strong> Eso significa que está guardado en el móvil. Repito: ✓ verde = guardado en TU móvil. Hasta que no sincronices, la oficina no lo ve. Esto es lo que más cuesta entender al principio, y es lo más importante."</p>
+</blockquote>
+
+<div class="anchor">
+  <span class="label">ANCHOR</span>
+  REGLA 2 — ✓ en el móvil ≠ ✓ en la oficina. La sincronización es la que pasa de uno a otro.
+</div>
+
+<h3>3.4 — Cámara (2 min)</h3>
+<p><strong>Pregunta:</strong> <em>"¿Cómo hago la foto?"</em></p>
+<ul>
+  <li>Botón "antes" o "después"</li>
+  <li>La foto se guarda con tu ubicación GPS automáticamente</li>
+  <li><em>"No hace falta acordarse del GPS. La app lo añade sola."</em></li>
+  <li><em>"La foto pesa, pero no os preocupéis del espacio — la app se encarga de subirla cuando pueda y limpiarla."</em></li>
+</ul>
+
+<h3>3.5 — Mapa global (2 min)</h3>
+<p><strong>Pregunta:</strong> <em>"¿Por dónde voy?"</em></p>
+<ul>
+  <li>Mapa con los segmentos, tu posición, los gasoductos</li>
+  <li><strong>Importante (regla específica del proyecto):</strong> <em>"En cuanto entráis en el mapa, la app empieza a grabar vuestra ruta GPS. Veréis arriba una notificación con un símbolo que pone 'Tracking activo'. Esto es a propósito. Cuando salís del mapa, se apaga. Si la notificación no se va, dadle al botón rojo de stop dentro del mapa."</em></li>
+  <li><em>"Por qué grabamos la ruta: para que la oficina sepa por dónde habéis pasado y la planificación del próximo año sea mejor. No es vigilancia, es planificación."</em></li>
+</ul>
+
+<div class="micro">
+  <div class="label">Micropregunta</div>
+  <p style="margin: 2mm 0 0;">"Estoy en el mapa, salgo a comer y bloqueo el móvil. ¿Sigue grabando?"</p>
+  <p style="margin: 2mm 0 0; font-style: italic;">Respuesta: sí, hasta que vuelvas a entrar en el mapa y le des stop, o cierres la app.</p>
+</div>
+
+<h3>3.6 — Sincronización (3 min) · LA PANTALLA MÁS IMPORTANTE</h3>
+<p><strong>Pregunta:</strong> <em>"He vuelto a la furgoneta con wifi, ¿qué hago?"</em></p>
+<p>Estructura de la pantalla:</p>
+<ol>
+  <li><strong>Preparar trabajo de campo</strong> — botón grande arriba. <em>"Esto se pulsa por la MAÑANA. Descarga todo lo que necesitas en el día."</em></li>
+  <li><strong>Pendiente de subir</strong> — lo que has hecho y aún no está en oficina. <em>"Aquí veis los ✓ del móvil que aún no son ✓ de la oficina."</em></li>
+  <li><strong>Conflictos</strong> — <em>"Lo raro. Si veis algo aquí, llamad. No lo intentéis arreglar solos."</em></li>
+</ol>
+
+<blockquote class="say">
+  <p>"Para subir, pulsáis 'Subir todo' y veis cómo el contador baja. Cuando pone 0 pendientes, oficina tiene todo lo vuestro. Esa es la sensación de jornada cerrada."</p>
+</blockquote>
+
+<div class="anchor">
+  <span class="label">ANCHOR</span>
+  REGLA 3 — Pendientes a 0 = jornada cerrada.
+</div>
+
+<!-- ============ BLOQUE 4 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 4</span>Sincronización a fondo: el panel de control — 5 min</h2>
+
+<p><strong>Esta es la pantalla donde se les escapará todo si no la dominan. Insistir.</strong></p>
+
+<p>Dibujar en pizarra el "semáforo" de estados:</p>
+
+<table>
+  <thead>
+    <tr><th>Lo que ves</th><th>Qué significa</th><th>Qué hacer</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Sin internet (naranja)</td><td>Estás sin red</td><td>Trabaja tranquilo, no toques nada</td></tr>
+    <tr><td>Sincronizando… (rueda)</td><td>Está subiendo ahora</td><td>Espera, no cierres</td></tr>
+    <tr><td>X pendientes (amarillo)</td><td>Hay cosas en tu móvil sin subir</td><td>Pulsa "Subir todo"</td></tr>
+    <tr><td>Sincronizado ✓ (verde)</td><td>Todo está en oficina</td><td>Puedes cerrar la app tranquilo</td></tr>
+  </tbody>
+</table>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"El badge de arriba a la derecha siempre os dice en qué estado estáis. <strong>No cerréis la app cuando ponga amarillo.</strong> No la perderéis — sigue dentro — pero hasta que no pongáis en verde, oficina no lo tiene. Tres segundos de mirar el badge antes de cerrar la app os ahorran un dolor de cabeza."</p>
+</blockquote>
+
+<div class="micro">
+  <div class="label">Micropregunta</div>
+  <p style="margin: 2mm 0 0;">"Cierro la app sin sincronizar. ¿Pierdo mi trabajo?"</p>
+  <p style="margin: 2mm 0 0; font-style: italic;">Respuesta: NO. Sigue en el móvil. Pero hasta que no entres y sincronices, oficina no lo tiene.</p>
+</div>
+
+<!-- ============ BLOQUE 5 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 5</span>Qué hacer cuando algo va mal — 3 min</h2>
+
+<p>Tabla simple en pizarra:</p>
+
+<table>
+  <thead>
+    <tr><th>Síntoma</th><th>Causa probable</th><th>Solución</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>"No me deja entrar"</td><td>Sesión caducada</td><td>Vuelve a meter contraseña</td></tr>
+    <tr><td>"No me sube" en sync</td><td>No hay cobertura real (aunque marque wifi)</td><td>Cambia de wifi o usa datos móviles</td></tr>
+    <tr class="danger"><td>"Falla la subida después de 3 intentos"</td><td>Algo raro</td><td>LLAMAR al soporte. No tocar más.</td></tr>
+    <tr class="danger"><td>Aparece "Conflicto"</td><td>Alguien tocó lo mismo en oficina</td><td>LLAMAR. No resolver solos.</td></tr>
+  </tbody>
+</table>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"Hay dos cosas que NUNCA pasan: que perdáis vuestro trabajo, y que la oficina pierda el vuestro. Si veis algo raro, la regla es: parad, sacad foto del móvil con OTRO teléfono o haced captura, y llamad. El soporte ve mejor el problema con la captura."</p>
+</blockquote>
+
+<!-- ============ BLOQUE 6 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 6</span>Las 3 reglas de oro — 2 min · REPETIR HASTA QUE LAS DIGAN ELLOS</h2>
+
+<p><strong>Las escribes grandes en la pizarra y haces que las repitan en voz alta:</strong></p>
+
+<div class="anchor">
+  <span class="label">REGLA 1</span>
+  Antes de salir → Preparar trabajo de campo
+</div>
+<div class="anchor" style="background: linear-gradient(135deg, #cc5a00 0%, #ff7a00 100%);">
+  <span class="label" style="color: #fff4ea;">REGLA 2</span>
+  En campo → trabaja tranquilo, todo se guarda
+</div>
+<div class="anchor">
+  <span class="label">REGLA 3</span>
+  Al volver → Pendientes a 0
+</div>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"Si recordáis solo estas tres frases, sabéis usar la app. Todo lo demás se aprende usándola. No tengáis miedo a tocar — no se rompe nada, no se pierde nada."</p>
+</blockquote>
+
+<!-- ============ BLOQUE 7 ============ -->
+<h2 class="block"><span class="tag">BLOQUE 7</span>Cierre y turno de preguntas — 3-5 min</h2>
+
+<h4>Decir:</h4>
+<blockquote class="say">
+  <p>"Os queda una semana de uso supervisado. Cualquier duda, preguntad — preferimos una pregunta tonta hoy a un problema serio en campo dentro de un mes. ¿Quién tiene la primera?"</p>
+</blockquote>
+
+<h4>Trucos para el turno de preguntas:</h4>
+<ul>
+  <li>Si nadie pregunta → tú lanzas una: <em>"¿Cuál sería el peor momento para que se os fuera la batería?"</em> (respuesta: antes de sincronizar)</li>
+  <li>Si una pregunta es muy técnica → <em>"buena pregunta, la apunto y os la respondo por escrito mañana"</em>. NO improvises.</li>
+  <li>Si la misma pregunta sale dos veces → es la confusa, márcala para hacerle FAQ después.</li>
+</ul>
+
+<!-- ============ NOTAS FINALES ============ -->
+<h2 class="block">Notas para el formador</h2>
+
+<h3>Cosas a evitar en sala</h3>
+<ul>
+  <li>No usar palabras como "outbox", "sync engine", "client_id", "HMAC". Ellos no necesitan esos términos para usar la app, y meterlos solo genera ansiedad.</li>
+  <li>No enseñar todos los botones. Enseña el flujo. Los botones se descubren solos.</li>
+  <li>No prometer "esto es muy fácil". Lo es para ti. Si para uno solo de la sala no lo es, lo has insultado. Mejor: <em>"con un par de jornadas reales, esto sale solo"</em>.</li>
+</ul>
+
+<h3>Material a llevar</h3>
+<ul>
+  <li>Móvil con la app cargada <strong>con datos de prueba realistas</strong> (no <code>test1</code>, <code>test2</code> — nombres y CTs que reconozcan)</li>
+  <li>Un móvil de repuesto por si el wifi falla en la sala</li>
+  <li>Una hoja A5 plastificada con las <strong>3 reglas de oro</strong> para que se lleven cada uno (ver <code>tarjeta_a5_reglas_de_oro.pdf</code>)</li>
+  <li>Slides para proyectar (ver <code>slides_presentacion_operadores.pdf</code>)</li>
+</ul>
+
+<h3>Indicador de éxito al salir de la sala</h3>
+<ul>
+  <li>Si al final preguntas <em>"¿qué hace la app si no hay internet?"</em> y responden <em>"sigue funcionando, guarda en el móvil"</em> → has ganado.</li>
+  <li>Si responden <em>"da error"</em> o <em>"no sé"</em> → repite el bloque 1 antes de soltarlos a campo.</li>
+</ul>
+
+<div class="footer-note">
+  Equipo Leulit · Documento interno · Plantilla pedagógica reutilizable para futuras formaciones de operadores Enagas.
+</div>
+
+</body>
+</html>

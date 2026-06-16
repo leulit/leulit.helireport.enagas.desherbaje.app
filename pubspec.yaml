@@ -13,7 +13,7 @@ dependencies:
   auto_size_text_plus: ^3.0.2
   cached_network_image: ^3.4.1
   camera: ^0.12.0+1
-  chat_bubbles: ^1.9.0  
+  chat_bubbles: ^1.10.1  
   connectivity_plus: ^7.1.1
   crypto: ^3.0.7
   dio: ^5.9.2
@@ -21,12 +21,12 @@ dependencies:
   flutter_map_cancellable_tile_provider: ^3.1.1
   flutter_map_compass: ^1.1.1
   flutter_map_location_marker: ^10.2.0
-  flutter_secure_storage: ^10.0.0  
+  flutter_secure_storage: ^10.3.1  
   get: ^4.7.3
-  image_picker: ^1.2.1
+  image_picker: ^1.2.2
   latlong2: ^0.9.1
 
-  leulit_flutter_actionmanager: ^5.6.0
+  leulit_flutter_actionmanager: ^5.9.0
   leulit_flutter_fullresponsive: ^3.0.0
   leulit_pipeline_pattern:
     path: /Users/emiloalvarez/Work/PROYECTOS/CUSTOM-LIBRARIES-FLUTTER/WORKFLOW-MANAGER/leulit_pipeline_pattern  
@@ -34,21 +34,21 @@ dependencies:
   logger: ^2.7.0
   photo_view: ^0.15.0
   path: ^1.9.1
-  path_provider: ^2.1.5
-  permission_handler: ^12.0.1
+  path_provider: ^2.1.6
+  permission_handler: ^12.0.3
   shared_preferences: ^2.5.5
-  sqflite: ^2.4.2
+  sqflite: ^2.4.3
   intl: ^0.20.2
   uuid: ^4.5.3
   flutter_foreground_task: ^9.2.2
-  geolocator: ^14.0.2
+  geolocator: ^14.0.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   mocktail: ^1.0.5
-  sqflite_common_ffi: ^2.4.0+2
+  sqflite_common_ffi: ^2.4.2
 
 flutter:
   uses-material-design: true

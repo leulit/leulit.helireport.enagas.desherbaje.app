@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tarjeta A5 — 3 reglas de oro</title>
+<style>
+  @page {
+    size: 148mm 210mm;  /* A5 portrait */
+    margin: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: #1a2433;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 148mm;
+    height: 210mm;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* ============ FRONT ============ */
+  .front {
+    background: linear-gradient(160deg, #003E7E 0%, #0066b3 100%);
+    color: #fff;
+    padding: 10mm 12mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .front-header {
+    border-bottom: 1px solid rgba(255,255,255,0.25);
+    padding-bottom: 5mm;
+    margin-bottom: 7mm;
+  }
+  .brand {
+    font-size: 9pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  .front-title {
+    font-size: 26pt;
+    font-weight: 800;
+    line-height: 1.05;
+    margin-top: 2mm;
+  }
+  .front-subtitle {
+    font-size: 11pt;
+    margin-top: 2mm;
+    opacity: 0.85;
+    font-weight: 300;
+  }
+  .rules { flex: 1; display: flex; flex-direction: column; gap: 5mm; }
+  .rule {
+    background: rgba(255,255,255,0.08);
+    border-left: 3mm solid #ff7a00;
+    border-radius: 2mm;
+    padding: 5mm 6mm;
+    backdrop-filter: blur(4px);
+  }
+  .rule-num {
+    font-size: 9pt;
+    letter-spacing: 3px;
+    color: #ffc14d;
+    font-weight: 700;
+  }
+  .rule-when {
+    font-size: 11pt;
+    opacity: 0.7;
+    margin-top: 1mm;
+    font-weight: 300;
+  }
+  .rule-text {
+    font-size: 19pt;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-top: 2mm;
+  }
+  .front-footer {
+    margin-top: 5mm;
+    font-size: 9pt;
+    text-align: center;
+    opacity: 0.7;
+    letter-spacing: 1px;
+  }
+  .front-footer strong { color: #ffc14d; }
+
+  /* ============ BACK ============ */
+  .back {
+    background: #fff;
+    padding: 10mm 12mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .back-header {
+    border-bottom: 2px solid #003E7E;
+    padding-bottom: 4mm;
+    margin-bottom: 5mm;
+  }
+  .back-eyebrow {
+    font-size: 9pt;
+    letter-spacing: 2px;
+    color: #ff7a00;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .back-title {
+    font-size: 18pt;
+    color: #003E7E;
+    font-weight: 800;
+    margin-top: 1mm;
+  }
+  .section-title {
+    font-size: 10pt;
+    color: #003E7E;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin: 5mm 0 3mm;
+  }
+  .section-title:first-of-type { margin-top: 0; }
+  .badges {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5mm;
+  }
+  .badge-row {
+    display: flex;
+    align-items: center;
+    gap: 4mm;
+    padding: 3mm 4mm;
+    border-radius: 2mm;
+    border: 1px solid #d3dce8;
+  }
+  .badge-row .dot {
+    width: 7mm; height: 7mm; border-radius: 50%; flex-shrink: 0;
+  }
+  .badge-row .text { flex: 1; }
+  .badge-row .label { font-size: 10pt; font-weight: 700; color: #1a2433; }
+  .badge-row .meaning { font-size: 8.5pt; color: #4a5969; margin-top: 0.5mm; }
+  .badge-row.offline { background: #fff4ea; border-color: #ffd7ad; }
+  .badge-row.offline .dot { background: #ff7a00; }
+  .badge-row.syncing { background: #eaf2ff; border-color: #b8d0f0; }
+  .badge-row.syncing .dot { background: #0066b3; }
+  .badge-row.pending { background: #fff9d6; border-color: #e6d68a; }
+  .badge-row.pending .dot { background: #d6b800; }
+  .badge-row.done { background: #e8f6ec; border-color: #a8d8b4; }
+  .badge-row.done .dot { background: #1e9c3e; }
+
+  .help-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .help-table td {
+    padding: 2.5mm 3mm;
+    border-bottom: 1px solid #e0e7f0;
+    vertical-align: top;
+  }
+  .help-table td:first-child {
+    font-weight: 700;
+    width: 45%;
+    color: #2a3a52;
+  }
+  .help-table tr.danger td:last-child {
+    color: #cc1a00;
+    font-weight: 700;
+  }
+  .support-box {
+    margin-top: auto;
+    background: #003E7E;
+    color: #fff;
+    border-radius: 2mm;
+    padding: 4mm 5mm;
+    text-align: center;
+  }
+  .support-box .support-label {
+    font-size: 8pt;
+    letter-spacing: 2px;
+    opacity: 0.8;
+  }
+  .support-box .support-team {
+    font-size: 13pt;
+    font-weight: 800;
+    margin-top: 1mm;
+  }
+  .support-box .support-hint {
+    font-size: 8.5pt;
+    margin-top: 1mm;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ FRONT (3 reglas) ============ -->
+<section class="page front">
+  <div class="front-header">
+    <div class="brand">App Desherbaje · Enagas</div>
+    <div class="front-title">Las 3 reglas<br>de oro</div>
+    <div class="front-subtitle">Tu chuleta de campo. Léela cada mañana.</div>
+  </div>
+
+  <div class="rules">
+    <div class="rule">
+      <div class="rule-num">REGLA 1</div>
+      <div class="rule-when">Antes de salir, con wifi</div>
+      <div class="rule-text">Preparar trabajo<br>de campo</div>
+    </div>
+
+    <div class="rule" style="border-left-color: #ffd700;">
+      <div class="rule-num">REGLA 2</div>
+      <div class="rule-when">En campo, sin red da igual</div>
+      <div class="rule-text">Trabaja tranquilo,<br>todo se guarda</div>
+    </div>
+
+    <div class="rule">
+      <div class="rule-num">REGLA 3</div>
+      <div class="rule-when">Al volver, con wifi</div>
+      <div class="rule-text">Pendientes a 0<br>= jornada cerrada</div>
+    </div>
+  </div>
+
+  <div class="front-footer">
+    El móvil siempre funciona. <strong>Internet solo sirve para sincronizar.</strong>
+  </div>
+</section>
+
+<!-- ============ BACK (semáforo + ayuda) ============ -->
+<section class="page back">
+  <div class="back-header">
+    <div class="back-eyebrow">Reverso</div>
+    <div class="back-title">El badge del sincronizado</div>
+  </div>
+
+  <div class="section-title">Qué te dice el badge</div>
+  <div class="badges">
+    <div class="badge-row offline">
+      <div class="dot"></div>
+      <div class="text">
+        <div class="label">Sin conexión</div>
+        <div class="meaning">No hay red. Trabaja tranquilo, no toques sync.</div>
+      </div>
+    </div>
+    <div class="badge-row syncing">
+      <div class="dot"></div>
+      <div class="text">
+        <div class="label">Sincronizando…</div>
+        <div class="meaning">Está subiendo ahora. Espera, no cierres la app.</div>
+      </div>
+    </div>
+    <div class="badge-row pending">
+      <div class="dot"></div>
+      <div class="text">
+        <div class="label">X pendientes</div>
+        <div class="meaning">Cosas sin subir. Ve a Sincronización → "Subir todo".</div>
+      </div>
+    </div>
+    <div class="badge-row done">
+      <div class="dot"></div>
+      <div class="text">
+        <div class="label">Sincronizado ✓</div>
+        <div class="meaning">Todo en oficina. Puedes cerrar tranquilo.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Si algo va raro</div>
+  <table class="help-table">
+    <tr><td>"No me deja entrar"</td><td>Sesión caducada. Vuelve a meter contraseña.</td></tr>
+    <tr><td>"No me sube"</td><td>Sin cobertura real. Prueba otra wifi o datos.</td></tr>
+    <tr class="danger"><td>Falla 3 veces seguidas</td><td>LLAMA al soporte.</td></tr>
+    <tr class="danger"><td>"Conflicto"</td><td>LLAMA. No resuelvas solo.</td></tr>
+  </table>
+
+  <div class="support-box">
+    <div class="support-label">SOPORTE</div>
+    <div class="support-team">Equipo Leulit</div>
+    <div class="support-hint">Cualquier duda, mejor llamar que adivinar.</div>
+  </div>
+</section>
+
+</body>
+</html>
