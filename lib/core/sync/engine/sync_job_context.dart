@@ -11,15 +11,14 @@ class SyncJobContext {
   Syncable? entity;
   SyncOutcome<Syncable>? outcome;
 
-  /// Outcome category after [InterpretSyncOutcomeTask] has classified the
-  /// adapter result.
-  SyncJobResult result = SyncJobResult.pending;
+  /// Outcome category after [InterpretOutcomeTask] has classified the adapter
+  /// result. Null until the pipeline sets it; the engine reads [result!].
+  SyncJobResult? result;
 
   SyncJobContext({required this.job, required this.registration});
 }
 
 enum SyncJobResult {
-  pending,
   succeeded,
   retryable,
   rejected,

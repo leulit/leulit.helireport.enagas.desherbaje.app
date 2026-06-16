@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../../core/services/connectivity_service.dart';
 import '../../core/sync/sync.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 
@@ -13,11 +14,14 @@ class ImagenRepositoryImpl {
   ImagenRepositoryImpl({
     OfflineRepository<ImagenSegmentoEntity>? offline,
     SyncEngine? engine,
+    ConnectivityService? connectivity,
   })  : _offline = offline ?? Get.find<OfflineRepository<ImagenSegmentoEntity>>(),
-        _engine = engine ?? Get.find<SyncEngine>();
+        _engine = engine ?? Get.find<SyncEngine>(),
+        _connectivity = connectivity ?? Get.find<ConnectivityService>();
 
   final OfflineRepository<ImagenSegmentoEntity> _offline;
   final SyncEngine _engine;
+  final ConnectivityService _connectivity;
 
   Future<void> saveLocal(ImagenSegmentoEntity imagen) =>
       _offline.create(imagen);
@@ -42,6 +46,10 @@ class ImagenRepositoryImpl {
   /// the engine doesn't filter by domain attributes. Kept signature for
   /// backwards compatibility with the existing controllers; will be
   /// replaced by a global sync page entry point.
-  Future<DrainSummary> uploadPending(int segmentoId) =>
-      _engine.drain(entityType: 'imagen');
+  ///
+  /// Returns an empty [DrainSummary] immediately when offline.
+  Future<DrainSummary> uploadPending(int segmentoId) async {
+    if (!_connectivity.isConnected) return const DrainSummary();
+    return _engine.drain(entityType: 'imagen');
+  }
 }

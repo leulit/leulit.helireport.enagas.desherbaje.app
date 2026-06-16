@@ -72,22 +72,42 @@ class SyncEngine {
 
   /// Drains pending jobs (optionally filtered to a single [entityType]).
   /// Returns a [DrainSummary] with counts. Concurrent calls are coalesced:
-  /// a second call while one drain is already running returns the
-  /// in-progress drain's eventual result via no-op (returns an empty
-  /// summary immediately to avoid double processing).
+  /// a second call while one drain is already running returns an empty
+  /// summary immediately to avoid double processing.
+  ///
+  /// Termination is guaranteed by a [Set<int>] of already-processed job ids:
+  /// even if [OutboxQueue.markPendingAgain] puts a retryable job back to
+  /// `pending`, it will not be re-fetched within the same drain call.
   Future<DrainSummary> drain({String? entityType}) async {
     if (_isDraining) return const DrainSummary();
     _isDraining = true;
+
+    // Hoist the pipeline: the 5 tasks are stateless; build once, reuse per job.
+    final pipeline = TaskPipeline<SyncJobContext>()
+      ..addTask(LoadEntityTask())
+      ..addTask(InvokeRemoteAdapterTask())
+      ..addTask(InterpretOutcomeTask())
+      ..addTask(UpdateLocalStateTask(outbox: _outbox, db: _db))
+      ..addTask(DispatchActionTask());
+
     var summary = const DrainSummary();
+    final processed = <int>{};
+
     try {
       while (true) {
         final batch = await _outbox.nextPending(
           entityType: entityType,
           limit: 100,
         );
-        if (batch.isEmpty) break;
 
-        for (final job in batch) {
+        // Filter out ids already processed in this drain to prevent infinite
+        // loops when retryable jobs are put back to `pending`.
+        final fresh = batch.where((j) => !processed.contains(j.id)).toList();
+        if (fresh.isEmpty) break;
+
+        for (final job in fresh) {
+          processed.add(job.id);
+
           final registration = _registry.lookup(job.entityType);
           if (registration == null) {
             await _outbox.markRejected(
@@ -108,15 +128,8 @@ class SyncEngine {
 
           await _outbox.markSyncing(job.id);
           final ctx = SyncJobContext(job: job, registration: registration);
-          final pipeline = TaskPipeline<SyncJobContext>()
-            ..addTask(LoadEntityTask())
-            ..addTask(InvokeRemoteAdapterTask())
-            ..addTask(InterpretOutcomeTask())
-            ..addTask(UpdateLocalStateTask(outbox: _outbox, db: _db))
-            ..addTask(DispatchActionTask());
 
           final result = await pipeline.run(DataPipeline.of(ctx));
-          pipeline.dispose();
 
           if (result.isFailure && result.errorOrNull is AuthExpiredException) {
             // Roll back the syncing flag so the job retries cleanly after
@@ -142,7 +155,7 @@ class SyncEngine {
             continue;
           }
 
-          summary = switch (ctx.result) {
+          summary = switch (ctx.result!) {
             SyncJobResult.succeeded =>
               summary.copyWith(succeeded: summary.succeeded + 1),
             SyncJobResult.retryable =>
@@ -151,11 +164,11 @@ class SyncEngine {
               summary.copyWith(rejected: summary.rejected + 1),
             SyncJobResult.conflict =>
               summary.copyWith(conflicts: summary.conflicts + 1),
-            SyncJobResult.pending => summary,
           };
         }
       }
     } finally {
+      pipeline.dispose();
       _isDraining = false;
     }
     return summary;
