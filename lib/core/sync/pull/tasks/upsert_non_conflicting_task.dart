@@ -7,6 +7,10 @@ import '../pull_context.dart';
 
 /// Persists every non-conflicting remote item into the local store and
 /// dispatches an `entitySynced` action per item so listening UIs refresh.
+///
+/// Uses the **resolved** [clientId] from each [ResolvedPullItem] — not the
+/// raw UUID in the remote payload — to avoid accidentally creating a second row
+/// when the backend omits `client_id` and `fromJson` minted a fresh UUID.
 class UpsertNonConflictingTask<T extends Syncable>
     extends PipelineTask<PullContext<T>> {
   @override
@@ -22,23 +26,30 @@ class UpsertNonConflictingTask<T extends Syncable>
     final ctx = data.output;
     if (ctx.cancelled) return DataPipeline.success(input: ctx, output: ctx);
 
-    for (final remote in ctx.safeToUpsert) {
+    for (final item in ctx.safeToUpsert) {
       if (ctx.isCancelRequested) {
         ctx.cancelled = true;
         return DataPipeline.success(input: ctx, output: ctx);
       }
-      await ctx.registration.store.upsert(remote);
+
+      // Re-bind the remote entity under the canonical local clientId so
+      // the store's update-then-insert reconciliation matches the right row.
+      final rebound = ctx.registration.fromJson(
+        {...item.remote.toJson(), 'client_id': item.clientId},
+      );
+
+      await ctx.registration.store.upsert(rebound);
       await ctx.registration.store.markSynced(
-        clientId: remote.clientId,
-        remoteId: remote.remoteId,
+        clientId: item.clientId,
+        remoteId: item.remote.remoteId,
       );
       ctx.upserted++;
       SyncActions.entitySynced.dispatch(
         data: EntitySyncedEvent(
           entityType: ctx.registration.entityType,
-          clientId: remote.clientId,
+          clientId: item.clientId,
           operation: SyncOperation.update,
-          remoteId: remote.remoteId,
+          remoteId: item.remote.remoteId,
         ),
       );
     }

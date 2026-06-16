@@ -125,6 +125,11 @@ class PositionLocalStore implements LocalStore<PositionBatchEntity> {
     );
   }
 
+  /// Push-only store — position batches are never pulled from the backend, so
+  /// there is no remote-id lookup path. Always returns `null`.
+  @override
+  Future<PositionBatchEntity?> findByRemoteId(String remoteId) async => null;
+
   @override
   Future<PositionBatchEntity?> findByClientId(String clientId) async {
     final batchRows = await _db.query(

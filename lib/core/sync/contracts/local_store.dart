@@ -33,6 +33,17 @@ abstract class LocalStore<T extends Syncable> {
 
   Future<T?> findByClientId(String clientId);
 
+  /// Looks up an entity by its backend-assigned remote id.
+  ///
+  /// [remoteId] is the string representation of whatever the backend returns
+  /// (e.g. `"42"` for a numeric INTEGER column). The implementation is
+  /// responsible for any parsing — stores whose primary key is non-numeric
+  /// should return `null` for strings that cannot be coerced.
+  ///
+  /// Returns `null` if the entity has not been pulled yet or the store does
+  /// not track a remote id (push-only stores may always return `null`).
+  Future<T?> findByRemoteId(String remoteId);
+
   Future<List<T>> findAll();
 
   Future<void> markSynced({

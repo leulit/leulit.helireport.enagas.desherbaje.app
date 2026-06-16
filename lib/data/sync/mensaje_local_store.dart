@@ -80,6 +80,11 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
     return rows.map(_rowToEntity).toList(growable: false);
   }
 
+  /// Push-only store — mensajes are never pulled individually, so there is
+  /// no remote-id lookup path. Always returns `null`.
+  @override
+  Future<MensajeSegmentoEntity?> findByRemoteId(String remoteId) async => null;
+
   @override
   Future<void> markSynced({
     required String clientId,

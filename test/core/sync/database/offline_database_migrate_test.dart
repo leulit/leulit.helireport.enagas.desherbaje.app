@@ -63,6 +63,9 @@ class _FakeStore implements LocalStore<_FakeEntity> {
   Future<_FakeEntity?> findByClientId(String clientId) async => null;
 
   @override
+  Future<_FakeEntity?> findByRemoteId(String remoteId) async => null;
+
+  @override
   Future<List<_FakeEntity>> findAll() async => [];
 
   @override

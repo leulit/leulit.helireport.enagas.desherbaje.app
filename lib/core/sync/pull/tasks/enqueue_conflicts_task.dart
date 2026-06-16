@@ -11,6 +11,9 @@ import '../pull_context.dart';
 /// Inserts every divergent remote item into `sync_conflicts` so the
 /// operator can resolve it from the sync page. Dispatches one
 /// `entityConflict` action per row.
+///
+/// Consumes [ResolvedPullItem] so the local copy is already in hand —
+/// no extra DB lookup per item (avoids the previous N+1).
 class EnqueueConflictsTask<T extends Syncable>
     extends PipelineTask<PullContext<T>> {
   final Database db;
@@ -30,21 +33,24 @@ class EnqueueConflictsTask<T extends Syncable>
     final ctx = data.output;
     if (ctx.cancelled) return DataPipeline.success(input: ctx, output: ctx);
 
-    for (final remote in ctx.conflicts) {
+    for (final item in ctx.conflicts) {
       if (ctx.isCancelRequested) {
         ctx.cancelled = true;
         return DataPipeline.success(input: ctx, output: ctx);
       }
-      final local = await ctx.registration.store.findByClientId(remote.clientId);
+
+      // local is guaranteed non-null for conflict items (DetectConflictsTask
+      // only adds items here when a local row was found).
+      final local = item.local;
       if (local == null) continue;
 
       await db.insert(
         OfflineDatabase.syncConflictsTable,
         {
           'entity_type': ctx.registration.entityType,
-          'client_id': remote.clientId,
+          'client_id': item.clientId,
           'local_json': jsonEncode(local.toJson()),
-          'remote_json': jsonEncode(remote.toJson()),
+          'remote_json': jsonEncode(item.remote.toJson()),
           'detected_at': DateTime.now().millisecondsSinceEpoch,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -52,7 +58,7 @@ class EnqueueConflictsTask<T extends Syncable>
       SyncActions.entityConflict.dispatch(
         data: EntityConflictEvent(
           entityType: ctx.registration.entityType,
-          clientId: remote.clientId,
+          clientId: item.clientId,
         ),
       );
     }

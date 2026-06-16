@@ -345,4 +345,66 @@ void main() {
       expect(await queue.countPending(), equals(1));
     });
   });
+
+  // ─── syncingJobs (NF-4) ────────────────────────────────────────────────────
+
+  group('syncingJobs', () {
+    test('returns only jobs with status=syncing', () async {
+      final id1 = await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-1', operation: SyncOperation.update);
+      final id2 = await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-2', operation: SyncOperation.update);
+      await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-3', operation: SyncOperation.update);
+
+      await queue.markSyncing(id1);
+      await queue.markSyncing(id2);
+      // id3 stays pending
+
+      final syncing = await queue.syncingJobs();
+      expect(syncing, hasLength(2));
+      final clientIds = syncing.map((j) => j.clientId).toSet();
+      expect(clientIds, containsAll(['cid-1', 'cid-2']));
+      expect(clientIds, isNot(contains('cid-3')));
+    });
+
+    test('filters by entityType when provided', () async {
+      final id1 = await queue.enqueue(
+          entityType: 'segmento', clientId: 'seg-1', operation: SyncOperation.update);
+      final id2 = await queue.enqueue(
+          entityType: 'imagen', clientId: 'img-1', operation: SyncOperation.create);
+      await queue.markSyncing(id1);
+      await queue.markSyncing(id2);
+
+      final segSyncing = await queue.syncingJobs(entityType: 'segmento');
+      expect(segSyncing, hasLength(1));
+      expect(segSyncing.first.clientId, equals('seg-1'));
+
+      final imgSyncing = await queue.syncingJobs(entityType: 'imagen');
+      expect(imgSyncing, hasLength(1));
+      expect(imgSyncing.first.clientId, equals('img-1'));
+    });
+
+    test('returns empty list when no jobs are syncing', () async {
+      await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-p', operation: SyncOperation.update);
+
+      final syncing = await queue.syncingJobs(entityType: 'segmento');
+      expect(syncing, isEmpty);
+    });
+
+    test('does not include pending or synced jobs', () async {
+      final id = await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-s', operation: SyncOperation.create);
+      await queue.markSyncing(id);
+      await queue.markSynced(id, remoteId: '1');
+
+      await queue.enqueue(
+          entityType: 'segmento', clientId: 'cid-p', operation: SyncOperation.update);
+
+      final syncing = await queue.syncingJobs(entityType: 'segmento');
+      expect(syncing, isEmpty,
+          reason: 'synced and pending jobs must not appear in syncingJobs');
+    });
+  });
 }

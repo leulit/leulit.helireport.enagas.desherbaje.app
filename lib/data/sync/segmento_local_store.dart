@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:latlong2/latlong.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/app_log.dart';
 import '../../core/sync/contracts/local_store.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
@@ -66,11 +67,24 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   @override
   Future<void> upsert(SegmentoEntity entity, {DatabaseExecutor? txn}) async {
     final executor = txn ?? _db;
-    await executor.insert(
+    // Two-step reconciliation: UPDATE first (preserves synced_at because
+    // _entityToRow omits it), then INSERT only for genuinely new rows.
+    // A conflict on idx_segmentos_remote (same remote id, different client_id)
+    // throws with ConflictAlgorithm.abort instead of silently destroying the
+    // existing local row — surfaces data collisions instead of hiding them.
+    final changed = await executor.update(
       _table,
       _entityToRow(entity),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'client_id = ?',
+      whereArgs: [entity.clientId],
     );
+    if (changed == 0) {
+      await executor.insert(
+        _table,
+        _entityToRow(entity),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+    }
   }
 
   @override
@@ -113,7 +127,16 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
     };
     if (remoteId != null) {
       final asInt = int.tryParse(remoteId);
-      if (asInt != null) updates['id'] = asInt;
+      if (asInt != null) {
+        updates['id'] = asInt;
+      } else {
+        // A5: column `id` is INTEGER; non-numeric remoteId cannot be stored.
+        // Log the discard so it is observable in release builds.
+        AppLog.w(
+          'SegmentoLocalStore.markSynced: remoteId "$remoteId" is not a valid '
+          'integer — id column left unchanged for clientId=$clientId.',
+        );
+      }
     }
     await executor.update(
       _table,
@@ -123,13 +146,25 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
     );
   }
 
-  /// Looks up a segmento by its (legacy / numeric) backend id. Returns null
-  /// if the row hasn't been pulled yet.
-  Future<SegmentoEntity?> findByRemoteId(int remoteId) async {
+  /// Looks up a segmento by its backend-assigned numeric id.
+  ///
+  /// [remoteId] is the string representation of the backend id (e.g. `"42"`).
+  /// Returns `null` when [remoteId] cannot be parsed as an integer — the
+  /// discard is logged so it is observable in release builds (A5).
+  @override
+  Future<SegmentoEntity?> findByRemoteId(String remoteId) async {
+    final asInt = int.tryParse(remoteId);
+    if (asInt == null) {
+      AppLog.w(
+        'SegmentoLocalStore.findByRemoteId: "$remoteId" is not a valid '
+        'integer — returning null.',
+      );
+      return null;
+    }
     final rows = await _db.query(
       _table,
       where: 'id = ?',
-      whereArgs: [remoteId],
+      whereArgs: [asInt],
       limit: 1,
     );
     if (rows.isEmpty) return null;

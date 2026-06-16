@@ -42,7 +42,7 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
   @override
   Future<DataResult<SegmentoEntity?>> getById(int id) async {
     try {
-      final found = await _store.findByRemoteId(id);
+      final found = await _store.findByRemoteId(id.toString());
       return DataResult.success(found);
     } catch (e) {
       return DataResult.failure(
@@ -77,7 +77,7 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
   @override
   Future<DataResult<bool>> updateEstado(int id, EstadoActividad estado) async {
     try {
-      final entity = await _store.findByRemoteId(id);
+      final entity = await _store.findByRemoteId(id.toString());
       if (entity == null) {
         return DataResult.failure(
           message: 'Segmento $id no existe en local',

@@ -79,6 +79,9 @@ class _FakeStore extends LocalStore<_TestEntity> {
       _data[clientId];
 
   @override
+  Future<_TestEntity?> findByRemoteId(String remoteId) async => null;
+
+  @override
   Future<List<_TestEntity>> findAll() async => _data.values.toList();
 
   @override

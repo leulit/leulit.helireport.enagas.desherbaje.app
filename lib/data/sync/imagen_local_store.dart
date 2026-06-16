@@ -101,6 +101,11 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
     return rows.map(ImagenSegmentoEntity.fromMap).toList(growable: false);
   }
 
+  /// Push-only store — images are never pulled from the backend, so there is
+  /// no remote-id lookup path. Always returns `null`.
+  @override
+  Future<ImagenSegmentoEntity?> findByRemoteId(String remoteId) async => null;
+
   @override
   Future<void> markSynced({
     required String clientId,

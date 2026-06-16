@@ -76,6 +76,13 @@ class OutboxQueue {
   Future<List<SyncJob>> rejectedJobs({String? entityType}) =>
       _allWithStatus(SyncStatus.rejected, entityType: entityType);
 
+  /// Returns all jobs currently being drained (status=syncing), optionally
+  /// filtered by [entityType]. Used by [DetectConflictsTask] so that a pull
+  /// concurrent with a drain does not classify a `syncing` clientId as safe to
+  /// upsert — avoiding a race that would overwrite an edit being pushed.
+  Future<List<SyncJob>> syncingJobs({String? entityType}) =>
+      _allWithStatus(SyncStatus.syncing, entityType: entityType);
+
   Future<int> countPending({String? entityType}) =>
       _countByStatus(SyncStatus.pending, entityType: entityType);
 

@@ -8,8 +8,14 @@ import '../pull_context.dart';
 /// Splits the items returned by the remote fetcher into:
 /// - `safeToUpsert`: those without local divergence.
 /// - `conflicts`: those whose local copy is more recent than remote OR
-///   whose `client_id` has a pending outbox job (operator's offline edits
-///   not yet pushed).
+///   whose `client_id` has a pending/syncing outbox job (operator's offline
+///   edits not yet pushed or currently being pushed).
+///
+/// **Identity resolution (BE-1 bridge):** when the backend omits `client_id`,
+/// `fromJson` mints a new UUID for every pull. This task first tries to match
+/// the remote item's `remoteId` against the local store. When a match is found,
+/// the *local* `clientId` becomes the canonical identity — preventing the
+/// `ConflictAlgorithm.replace` from silently destroying an edited local row.
 class DetectConflictsTask<T extends Syncable>
     extends PipelineTask<PullContext<T>> {
   final OutboxQueue outbox;
@@ -41,18 +47,49 @@ class DetectConflictsTask<T extends Syncable>
         ctx.cancelled = true;
         return DataPipeline.success(input: ctx, output: ctx);
       }
-      final hasPendingOutbox = pendingClientIds.contains(remote.clientId);
-      final local = await ctx.registration.store.findByClientId(remote.clientId);
 
+      // Step 1 — resolve the canonical local identity.
+      // First try matching by remoteId (covers the case where the backend
+      // omits client_id and fromJson mints a fresh UUID each pull).
+      T? local;
+      String resolvedClientId = remote.clientId;
+
+      if (remote.remoteId != null) {
+        final byRemote =
+            await ctx.registration.store.findByRemoteId(remote.remoteId!);
+        if (byRemote != null) {
+          // Use the local row's clientId as the canonical identity.
+          local = byRemote;
+          resolvedClientId = byRemote.clientId;
+        }
+      }
+
+      // Fall back to clientId lookup if remoteId gave no match.
       if (local == null) {
-        ctx.safeToUpsert.add(remote);
+        local = await ctx.registration.store.findByClientId(remote.clientId);
+        // resolvedClientId stays remote.clientId (new entity or clientId echo).
+      }
+
+      // Step 2 — classify.
+      if (local == null) {
+        // Completely new item — safe to upsert under whatever clientId we have.
+        ctx.safeToUpsert.add(
+          (remote: remote, clientId: resolvedClientId, local: null),
+        );
         continue;
       }
+
+      final hasPending = pendingClientIds.contains(local.clientId);
       final localIsNewer = local.updatedAt.isAfter(remote.updatedAt);
-      if (localIsNewer || hasPendingOutbox) {
-        ctx.conflicts.add(remote);
+
+      if (localIsNewer || hasPending) {
+        ctx.conflicts.add(
+          (remote: remote, clientId: resolvedClientId, local: local),
+        );
       } else {
-        ctx.safeToUpsert.add(remote);
+        ctx.safeToUpsert.add(
+          (remote: remote, clientId: resolvedClientId, local: local),
+        );
       }
     }
     return DataPipeline.success(input: ctx, output: ctx);
@@ -61,10 +98,13 @@ class DetectConflictsTask<T extends Syncable>
   Future<Set<String>> _pendingClientIds(String entityType) async {
     final pending = await outbox.pendingJobs(entityType: entityType);
     final rejected = await outbox.rejectedJobs(entityType: entityType);
+    final syncing = await outbox.syncingJobs(entityType: entityType);
     return {
       for (final job in pending)
         if (job.operation != SyncOperation.delete) job.clientId,
       for (final job in rejected)
+        if (job.operation != SyncOperation.delete) job.clientId,
+      for (final job in syncing)
         if (job.operation != SyncOperation.delete) job.clientId,
     };
   }

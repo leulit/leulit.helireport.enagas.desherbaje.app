@@ -66,6 +66,9 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
       if (response.isSuccess) {
         return SyncSuccess<SegmentoEntity>(remoteId: remoteId.toString());
       }
+      // 409 Conflict on push: currently mapped to SyncUnrecoverable (option b).
+      // A SyncConflict path will be added when the backend guarantees a 409
+      // response with the full conflicting entity body (BE-8).
       return SyncUnrecoverable<SegmentoEntity>(
         'HTTP ${response.statusCode}',
         statusCode: response.statusCode,
