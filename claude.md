@@ -321,7 +321,8 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `MapaGlobalController` | `presentation/mapa/` | Mapa global; arranca/para `GpsBackgroundService` en su ciclo |
 | `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
 | `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo" |
-| `ForzarEnvioController` | `presentation/forzar_envio/` | Atajo "subir todo lo de esta entidad" |
+| `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/mensaje) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
+| `SplashController` | `presentation/splash/` | Ruta inicial; `await AppDI.init()` con spinner/reintentar antes de navegar a login |
 
 ### GetxServices (globales, permanent: true)
 
@@ -401,7 +402,7 @@ formatForDisplay? │
 
 ### Schema modular
 
-Cada `LocalStore<T>` declara `entityType`, `schemaVersion`, y `migrate(db, from, to)`. La tabla `_entity_schema_version` mantiene la versión por entidad (versionado independiente entre entidades, sin colisiones entre PRs).
+Cada `LocalStore<T>` declara `entityType`, `schemaVersion`, y `migrate(DatabaseExecutor db, from, to)`. La tabla `_entity_schema_version` mantiene la versión por entidad (versionado independiente entre entidades, sin colisiones entre PRs). `OfflineDatabase.migrateEntity` ejecuta lectura de versión + `migrate` + escritura dentro de una **transacción** (atómico: una migración a medias hace rollback y no sube versión). La firma recibe `DatabaseExecutor` (no `Database`) para poder anidar en la transacción.
 
 ### Test de extensibilidad — añadir entidad nueva
 
@@ -504,7 +505,15 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 
 ## Lecciones Aprendidas
 
-*(Se irán añadiendo a medida que se corrijan bugs recurrentes)*
+> Revisión + corrección del motor offline-first (rama `fixes/outbox-review`, 2026-06). Informe: `docs/CODE_REVIEW_REDESIGN_PATRON_OUTBOX.md`; plan: `docs/PLAN_FIXES_REDESIGN_PATRON_OUTBOX.md`.
+
+- **Drain del outbox debe acotar el bucle.** Un `while(true)` que re-consulta `nextPending(status='pending')` se cuelga para siempre si un job reintentable vuelve a `pending` en la misma pasada. Usar un `Set<int>` de ids ya procesados y romper cuando el batch filtrado quede vacío. Resetear SIEMPRE `_isDraining` en `finally` (si no, queda en `true` y brickea todo drain futuro).
+- **Identidad en pull, no re-acuñar `clientId`.** Si el backend omite `client_id`, `fromJson` genera un UUID nuevo cada pull → `findByClientId` no matchea → `upsert` con `ConflictAlgorithm.replace` BORRA la fila local editada por el índice UNIQUE de `id`. Resolver identidad por `findByRemoteId` reusando el `clientId` local; nunca `ConflictAlgorithm.replace` cuando hay índice único secundario (usar update-then-insert con `abort`).
+- **Sin éxitos silenciosos.** Tareas `isBlocking=false` y `catch → debugPrint` reportan verde mientras los datos faltan. Todo desenlace (pull/master-data/GPS) debe ser representable (`PullOutcome { ok, okWithConflicts, partial, error, cancelled, authExpired }`) y propagado; los services de master-data deben relanzar, no tragar.
+- **`AppDI.init()` se espera antes de la UI.** Fire-and-forget + `Get.find` en inicializador de campo → "X not found" en arranque. Gate con Splash que `await AppDI.init()`. `init()` es idempotente (`_initFuture ??= _init()`).
+- **Parse fallido → log + fallback determinista, NUNCA `DateTime.now()`.** Un `updated_at`/timestamp corrupto no debe fabricar `now()` (rompe LWW/orden); loguear y caer a un valor determinista (p.ej. `endedAt`).
+- **Buffers: escribir-luego-limpiar + mutex.** En flush de GPS, `await create()` PRIMERO y `removeRange` solo tras éxito; mutex `_flushing` no-reentrante (timer + threshold solapan). `clear()` antes del await pierde el lote si la escritura falla.
+- **No tomar decisiones de funcionalidad/UX sin validación del responsable.** Distinguir corrección de bug (restaura intención) vs cambio de funcionalidad (requiere sign-off). Ver memoria `feedback_no_functionality_decisions`.
 
 ---
 
