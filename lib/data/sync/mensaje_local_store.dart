@@ -17,7 +17,7 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
   int get schemaVersion => 1;
 
   @override
-  Future<void> migrate(Database db, int from, int to) async {
+  Future<void> migrate(DatabaseExecutor db, int from, int to) async {
     if (from == 0 && to == 1) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_table (

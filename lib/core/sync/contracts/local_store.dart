@@ -16,13 +16,16 @@ abstract class LocalStore<T extends Syncable> {
   int get schemaVersion;
 
   /// Brings this entity's schema from [from] to [to]. Called by
-  /// `OfflineDatabase.open` for each registered store at startup.
+  /// `OfflineDatabase.migrateEntity` inside a transaction; receives the
+  /// transaction executor so DDL and version tracking are atomic.
   ///
   /// - When [from] is `0` the entity has never been installed: create the
   ///   table from scratch.
   /// - When [from] > 0 evolve the schema with `ALTER TABLE` / data backfill.
   /// - [to] is always equal to [schemaVersion].
-  Future<void> migrate(Database db, int from, int to);
+  /// - [db] is a [DatabaseExecutor] (either a [Transaction] or a [Database]);
+  ///   use only methods available on that interface (`execute`, `rawQuery`, …).
+  Future<void> migrate(DatabaseExecutor db, int from, int to);
 
   Future<void> upsert(T entity, {DatabaseExecutor? txn});
 

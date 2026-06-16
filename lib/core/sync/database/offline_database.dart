@@ -30,21 +30,31 @@ abstract class OfflineDatabase {
 
   /// Brings a single entity's schema up to its declared `schemaVersion`.
   /// Idempotent: a second call after the version has been bumped is a no-op.
+  ///
+  /// The version read, the [LocalStore.migrate] DDL, and the version write are
+  /// executed inside a single SQLite transaction so they succeed or fail as a
+  /// unit — a partially-applied migration never leaves the version table out of
+  /// sync with the actual schema.
+  ///
+  /// Throws [StateError] if the persisted version exceeds the declared
+  /// [LocalStore.schemaVersion] (downgrade not supported).
   static Future<void> migrateEntity<T>(
     Database db,
     LocalStore store,
   ) async {
-    final current = await _readVersion(db, store.entityType);
-    final target = store.schemaVersion;
-    if (current == target) return;
-    if (current > target) {
-      throw StateError(
-        'Entity "${store.entityType}" persisted version ($current) is greater '
-        'than declared schemaVersion ($target). Downgrades are not supported.',
-      );
-    }
-    await store.migrate(db, current, target);
-    await _writeVersion(db, store.entityType, target);
+    await db.transaction((txn) async {
+      final current = await _readVersion(txn, store.entityType);
+      final target = store.schemaVersion;
+      if (current == target) return;
+      if (current > target) {
+        throw StateError(
+          'Entity "${store.entityType}" persisted version ($current) is greater '
+          'than declared schemaVersion ($target). Downgrades are not supported.',
+        );
+      }
+      await store.migrate(txn, current, target);
+      await _writeVersion(txn, store.entityType, target);
+    });
   }
 
   static Future<void> _configure(Database db) async {
@@ -122,7 +132,7 @@ abstract class OfflineDatabase {
     );
   }
 
-  static Future<int> _readVersion(Database db, String entityType) async {
+  static Future<int> _readVersion(DatabaseExecutor db, String entityType) async {
     final rows = await db.query(
       entitySchemaVersionTable,
       where: 'entity_type = ?',
@@ -134,7 +144,7 @@ abstract class OfflineDatabase {
   }
 
   static Future<void> _writeVersion(
-    Database db,
+    DatabaseExecutor db,
     String entityType,
     int version,
   ) async {
