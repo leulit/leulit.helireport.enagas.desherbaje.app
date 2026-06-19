@@ -60,6 +60,28 @@ enum EstadoActividad {
   final String etiqueta;
   const EstadoActividad(this.descripcion, this.etiqueta);
 
+  /// Estados destino permitidos desde este estado — matriz SSOT (regla de
+  /// negocio desherbaje para la app de campo). Los estados gestionados por el
+  /// gestor de la infraestructura (`propuesta`, `validada`) y el estado
+  /// terminal (`cerrada`) no admiten transición ni edición desde la app móvil.
+  Set<EstadoActividad> get transicionesPermitidas => switch (this) {
+        propuesta => const <EstadoActividad>{},
+        validada => const <EstadoActividad>{},
+        contratista => const {ejecucion},
+        ejecucion => const {finalizada},
+        finalizada => const {cerrada, ejecucion},
+        cerrada => const <EstadoActividad>{},
+      };
+
+  /// `true` si el operario puede editar/transicionar la tarea desde la app
+  /// estando en este estado (tiene al menos una transición de salida).
+  bool get esEditableDesdeApp => transicionesPermitidas.isNotEmpty;
+
+  /// `true` si se puede transicionar a [destino]. Permanecer en el estado
+  /// actual siempre es válido.
+  bool puedeIrA(EstadoActividad destino) =>
+      destino == this || transicionesPermitidas.contains(destino);
+
   static EstadoActividad fromString(String? value) {
     if (value == null) return EstadoActividad.propuesta;
     final q = _normalize(value);
@@ -237,12 +259,24 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.descripcion.value,
       '',
     );
-    entity.pkInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.pkInicio.value, null))?.toDouble();
-    entity.pkFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.pkFin.value, null))?.toDouble();
-    entity.latInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.latInicio.value, null))?.toDouble();
-    entity.lngInicio = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.lngInicio.value, null))?.toDouble();
-    entity.latFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.latFin.value, null))?.toDouble();
-    entity.lngFin = (readJsonDataUtil<num?>(json, SegmentoEntityFieldNames.lngFin.value, null))?.toDouble();
+    entity.pkInicio = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.pkInicio.value, null))
+        ?.toDouble();
+    entity.pkFin = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.pkFin.value, null))
+        ?.toDouble();
+    entity.latInicio = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.latInicio.value, null))
+        ?.toDouble();
+    entity.lngInicio = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.lngInicio.value, null))
+        ?.toDouble();
+    entity.latFin = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.latFin.value, null))
+        ?.toDouble();
+    entity.lngFin = (readJsonDataUtil<num?>(
+            json, SegmentoEntityFieldNames.lngFin.value, null))
+        ?.toDouble();
 
     entity.tipoActividad = TipoActividad.fromString(
       readJsonDataUtil<String>(
@@ -336,7 +370,8 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.mensajes.value:
           mensajes.map((e) => e.toJson()).toList(),
       SegmentoEntityFieldNames.createdAt.value: createdAt?.toIso8601String(),
-      SegmentoEntityFieldNames.fechaInicio.value: fechaInicio?.toIso8601String(),
+      SegmentoEntityFieldNames.fechaInicio.value:
+          fechaInicio?.toIso8601String(),
       SegmentoEntityFieldNames.fechaFin.value: fechaFin?.toIso8601String(),
       SegmentoEntityFieldNames.updatedAt.value: updatedAt.toIso8601String(),
     };
@@ -423,8 +458,7 @@ class SegmentoEntity extends AbsBaseModel
     copy.lngFin = lngFin ?? this.lngFin;
     copy.tipoActividad = tipoActividad ?? this.tipoActividad;
     copy.estado = estado ?? this.estado;
-    copy.imagenes =
-        imagenes ?? List<ImagenSegmentoEntity>.from(this.imagenes);
+    copy.imagenes = imagenes ?? List<ImagenSegmentoEntity>.from(this.imagenes);
     copy.mensajes = mensajes ?? List<MensajeSegmentoEntity>.from(this.mensajes);
     copy.createdAt = createdAt ?? this.createdAt;
     copy.fechaInicio = fechaInicio ?? this.fechaInicio;

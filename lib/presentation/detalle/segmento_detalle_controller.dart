@@ -237,7 +237,9 @@ class SegmentoDetalleController extends MyGetxController {
     return Get.dialog<_PickSource>(
       AlertDialog(
         title: Text(
-          tipo == TipoFoto.antes ? 'Capturar foto antes' : 'Capturar foto después',
+          tipo == TipoFoto.antes
+              ? 'Capturar foto antes'
+              : 'Capturar foto después',
           style: const TextStyle(fontSize: 16),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -355,13 +357,13 @@ class SegmentoDetalleController extends MyGetxController {
   /// intenta propagar al backend el cambio de estado. Muestra feedback al
   /// usuario y se queda en la misma página.
   ///
-  /// Valida antes de guardar que el estado no sea uno "gestionado por el
-  /// gestor de tierra" (propuesta / validada): desde la app móvil el
-  /// operario solo puede transicionar a `contratista`, `ejecución` o
-  /// `finalizada`. Si el estado es inválido, se muestra un diálogo
-  /// informativo y se aborta el guardado.
+  /// Valida la transición de estado contra la matriz SSOT
+  /// (`EstadoActividad.puedeIrA`) antes de persistir. Los estados sin
+  /// transición de salida (`propuesta`, `validada`, `cerrada`) son de solo
+  /// lectura desde la app de campo. Si la transición no procede, muestra un
+  /// diálogo informativo y aborta el guardado.
   Future<void> guardar() async {
-    if (!_validateEstadoEditable()) return;
+    if (!_validateEstado()) return;
 
     isSaving.value = true;
     try {
@@ -385,41 +387,73 @@ class SegmentoDetalleController extends MyGetxController {
     }
   }
 
-  /// Valida que el estado actual es uno que el operario puede asignar desde
-  /// la app. Devuelve `false` y muestra un diálogo explicativo si no lo es.
-  bool _validateEstadoEditable() {
-    final e = estado.value;
-    if (e != EstadoActividad.propuesta && e != EstadoActividad.validada) {
-      return true;
+  /// Valida la transición de estado contra la matriz SSOT
+  /// (`EstadoActividad.transicionesPermitidas`). Defensa en profundidad: el
+  /// dropdown ya oculta destinos inválidos; esto es la red de seguridad antes
+  /// de persistir. Devuelve `false` y muestra un diálogo si no procede.
+  bool _validateEstado() {
+    final origen = segmento.estado; // estado original cargado del backend
+    final destino = estado.value;
+
+    if (!origen.esEditableDesdeApp) {
+      _dialogEstadoBloqueado(origen);
+      return false;
     }
+    if (!origen.puedeIrA(destino)) {
+      _dialogTransicionInvalida(origen, destino);
+      return false;
+    }
+    return true;
+  }
+
+  void _dialogEstadoBloqueado(EstadoActividad origen) {
+    final extra = origen == EstadoActividad.cerrada
+        ? 'La tarea está cerrada y no admite más cambios.'
+        : 'Podrás trabajar sobre la tarea cuando el gestor la pase a "Contratista".';
+    Get.dialog<void>(
+      AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.lock_outline, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Expanded(child: Text('Estado no editable')),
+          ],
+        ),
+        content: Text(
+          'El estado "${origen.etiqueta}" no se puede modificar desde la app '
+          'de campo.\n\n$extra',
+        ),
+        actions: [
+          TextButton(onPressed: Get.back, child: const Text('Entendido')),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  void _dialogTransicionInvalida(
+      EstadoActividad origen, EstadoActividad destino) {
+    final permitidos =
+        origen.transicionesPermitidas.map((e) => e.etiqueta).join(', ');
     Get.dialog<void>(
       AlertDialog(
         title: Row(
           children: const [
             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
             SizedBox(width: 8),
-            Expanded(child: Text('Estado no permitido')),
+            Expanded(child: Text('Cambio de estado no permitido')),
           ],
         ),
         content: Text(
-          'El estado "${e.etiqueta}" es asignado por el gestor de la infraestructura y '
-          'y mientras la tarea este en este estado no puede modificarse.\n\n'
-          'Si has modificado algún valor de la tarea, cambia el estado a '
-          'uno de los siguientes antes de guardar:\n\n'
-          '  •  Contratista — para que el gestor valide los cambios.\n'
-          '  •  En Ejecución — para iniciar los trabajos.\n'
-          '  •  Finalizada — si los trabajos ya han terminado.',
+          'No se puede pasar de "${origen.etiqueta}" a "${destino.etiqueta}".'
+          '\n\nDesde "${origen.etiqueta}" solo se permite: $permitidos.',
         ),
         actions: [
-          TextButton(
-            onPressed: Get.back,
-            child: const Text('Entendido'),
-          ),
+          TextButton(onPressed: Get.back, child: const Text('Entendido')),
         ],
       ),
       barrierDismissible: false,
     );
-    return false;
   }
 
   void _showSnack({

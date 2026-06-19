@@ -113,8 +113,10 @@ void main() {
 
     test('parses dates correctly', () {
       final entity = SegmentoEntity.fromJson(_fullJson());
-      expect(entity.createdAt, equals(DateTime.parse('2024-01-15T10:00:00.000Z')));
-      expect(entity.updatedAt, equals(DateTime.parse('2024-04-10T12:00:00.000Z')));
+      expect(
+          entity.createdAt, equals(DateTime.parse('2024-01-15T10:00:00.000Z')));
+      expect(
+          entity.updatedAt, equals(DateTime.parse('2024-04-10T12:00:00.000Z')));
     });
 
     test('leaves optional dates null when absent', () {
@@ -171,60 +173,136 @@ void main() {
   });
 
   group('EstadoActividad.fromString', () {
-    test('parses propuesta', () =>
-        expect(EstadoActividad.fromString('propuesta'), equals(EstadoActividad.propuesta)));
+    test(
+        'parses propuesta',
+        () => expect(EstadoActividad.fromString('propuesta'),
+            equals(EstadoActividad.propuesta)));
 
-    test('parses validada', () =>
-        expect(EstadoActividad.fromString('validada'), equals(EstadoActividad.validada)));
+    test(
+        'parses validada',
+        () => expect(EstadoActividad.fromString('validada'),
+            equals(EstadoActividad.validada)));
 
-    test('parses ejecución with accent', () =>
-        expect(EstadoActividad.fromString('ejecución'), equals(EstadoActividad.ejecucion)));
+    test(
+        'parses ejecución with accent',
+        () => expect(EstadoActividad.fromString('ejecución'),
+            equals(EstadoActividad.ejecucion)));
 
-    test('parses ejecucion without accent', () =>
-        expect(EstadoActividad.fromString('ejecucion'), equals(EstadoActividad.ejecucion)));
+    test(
+        'parses ejecucion without accent',
+        () => expect(EstadoActividad.fromString('ejecucion'),
+            equals(EstadoActividad.ejecucion)));
 
-    test('parses finalizada', () =>
-        expect(EstadoActividad.fromString('finalizada'), equals(EstadoActividad.finalizada)));
+    test(
+        'parses finalizada',
+        () => expect(EstadoActividad.fromString('finalizada'),
+            equals(EstadoActividad.finalizada)));
 
-    test('parses cerrada', () =>
-        expect(EstadoActividad.fromString('cerrada'), equals(EstadoActividad.cerrada)));
+    test(
+        'parses cerrada',
+        () => expect(EstadoActividad.fromString('cerrada'),
+            equals(EstadoActividad.cerrada)));
 
-    test('defaults to propuesta for null', () =>
-        expect(EstadoActividad.fromString(null), equals(EstadoActividad.propuesta)));
+    test(
+        'defaults to propuesta for null',
+        () => expect(EstadoActividad.fromString(null),
+            equals(EstadoActividad.propuesta)));
 
-    test('defaults to propuesta for unknown string', () =>
-        expect(EstadoActividad.fromString('unknown'), equals(EstadoActividad.propuesta)));
+    test(
+        'defaults to propuesta for unknown string',
+        () => expect(EstadoActividad.fromString('unknown'),
+            equals(EstadoActividad.propuesta)));
 
-    test('is case-insensitive', () =>
-        expect(EstadoActividad.fromString('VALIDADA'), equals(EstadoActividad.validada)));
+    test(
+        'is case-insensitive',
+        () => expect(EstadoActividad.fromString('VALIDADA'),
+            equals(EstadoActividad.validada)));
+  });
+
+  group('EstadoActividad.puedeIrA — matriz de transiciones (app campo)', () {
+    test('permanecer en el mismo estado siempre es válido', () {
+      for (final e in EstadoActividad.values) {
+        expect(e.puedeIrA(e), isTrue, reason: '$e debe permitir permanecer');
+      }
+    });
+
+    test('matriz de transiciones permitidas', () {
+      expect(EstadoActividad.contratista.transicionesPermitidas,
+          {EstadoActividad.ejecucion});
+      expect(EstadoActividad.ejecucion.transicionesPermitidas,
+          {EstadoActividad.finalizada});
+      expect(EstadoActividad.finalizada.transicionesPermitidas,
+          {EstadoActividad.cerrada, EstadoActividad.ejecucion});
+      expect(EstadoActividad.propuesta.transicionesPermitidas, isEmpty);
+      expect(EstadoActividad.validada.transicionesPermitidas, isEmpty);
+      expect(EstadoActividad.cerrada.transicionesPermitidas, isEmpty);
+    });
+
+    test('transiciones válidas e inválidas', () {
+      expect(
+          EstadoActividad.finalizada.puedeIrA(EstadoActividad.cerrada), isTrue);
+      expect(EstadoActividad.finalizada.puedeIrA(EstadoActividad.ejecucion),
+          isTrue);
+      expect(EstadoActividad.contratista.puedeIrA(EstadoActividad.finalizada),
+          isFalse);
+      expect(EstadoActividad.propuesta.puedeIrA(EstadoActividad.contratista),
+          isFalse);
+      expect(
+          EstadoActividad.cerrada.puedeIrA(EstadoActividad.ejecucion), isFalse);
+    });
+
+    test('esEditableDesdeApp', () {
+      expect(EstadoActividad.contratista.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.ejecucion.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.finalizada.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.propuesta.esEditableDesdeApp, isFalse);
+      expect(EstadoActividad.validada.esEditableDesdeApp, isFalse);
+      expect(EstadoActividad.cerrada.esEditableDesdeApp, isFalse);
+    });
   });
 
   group('TipoActividad.fromString', () {
-    test('parses desbroce_manual', () =>
-        expect(TipoActividad.fromString('desbroce_manual'), equals(TipoActividad.desbroceManual)));
+    test(
+        'parses desbroce_manual',
+        () => expect(TipoActividad.fromString('desbroce_manual'),
+            equals(TipoActividad.desbroceManual)));
 
-    test('parses deshierbe_selectivo', () =>
-        expect(TipoActividad.fromString('deshierbe_selectivo'), equals(TipoActividad.desherbajeSelectivo)));
+    test(
+        'parses deshierbe_selectivo',
+        () => expect(TipoActividad.fromString('deshierbe_selectivo'),
+            equals(TipoActividad.desherbajeSelectivo)));
 
-    test('defaults to desherbajeSelectivo for null', () =>
-        expect(TipoActividad.fromString(null), equals(TipoActividad.desherbajeSelectivo)));
+    test(
+        'defaults to desherbajeSelectivo for null',
+        () => expect(TipoActividad.fromString(null),
+            equals(TipoActividad.desherbajeSelectivo)));
 
-    test('defaults to desherbajeSelectivo for unknown', () =>
-        expect(TipoActividad.fromString('???'), equals(TipoActividad.desherbajeSelectivo)));
+    test(
+        'defaults to desherbajeSelectivo for unknown',
+        () => expect(TipoActividad.fromString('???'),
+            equals(TipoActividad.desherbajeSelectivo)));
   });
 
   group('TipoInstalacion.fromString', () {
-    test('parses concentrada', () =>
-        expect(TipoInstalacion.fromString('concentrada'), equals(TipoInstalacion.concentrada)));
+    test(
+        'parses concentrada',
+        () => expect(TipoInstalacion.fromString('concentrada'),
+            equals(TipoInstalacion.concentrada)));
 
-    test('parses lineal', () =>
-        expect(TipoInstalacion.fromString('lineal'), equals(TipoInstalacion.lineal)));
+    test(
+        'parses lineal',
+        () => expect(TipoInstalacion.fromString('lineal'),
+            equals(TipoInstalacion.lineal)));
 
-    test('defaults to lineal for null', () =>
-        expect(TipoInstalacion.fromString(null), equals(TipoInstalacion.lineal)));
+    test(
+        'defaults to lineal for null',
+        () => expect(
+            TipoInstalacion.fromString(null), equals(TipoInstalacion.lineal)));
 
-    test('defaults to lineal for unknown', () =>
-        expect(TipoInstalacion.fromString('unknown'), equals(TipoInstalacion.lineal)));
+    test(
+        'defaults to lineal for unknown',
+        () => expect(TipoInstalacion.fromString('unknown'),
+            equals(TipoInstalacion.lineal)));
   });
 
   group('SegmentoEntity.copyWith', () {
@@ -259,7 +337,9 @@ void main() {
       final json = _minimalJson()
         ..['ubicacion_gis'] = {
           'type': 'LineString',
-          'coordinates': [[-3.7, 40.1]],
+          'coordinates': [
+            [-3.7, 40.1]
+          ],
         };
       final entity = SegmentoEntity.fromJson(json);
       expect(entity.longitud, equals(0.0));

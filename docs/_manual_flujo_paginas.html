@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #212121; }
+
+  .page {
+    width: 210mm; height: 297mm; position: relative; overflow: hidden;
+    background: #fff; page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* Banda verde superior (igual que el manual) */
+  .band {
+    height: 15mm; background: #388E3C; color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14mm; font-size: 9pt; letter-spacing: .4px;
+  }
+  .band .l { text-transform: uppercase; font-weight: 600; }
+  .band .r { opacity: .92; }
+
+  .content { padding: 9mm 14mm 0 14mm; }
+
+  h2 { color: #1B5E20; font-size: 19pt; font-weight: 700; margin: 0 0 3mm 0; }
+  h3 { color: #2E7D32; font-size: 13pt; font-weight: 700; margin: 6mm 0 2mm 0; }
+  p.intro { color: #555; font-size: 11pt; line-height: 1.45; margin: 0 0 4mm 0; }
+
+  ul { margin: 0 0 3mm 0; padding-left: 6mm; }
+  li { font-size: 10.7pt; line-height: 1.5; margin-bottom: 1.6mm; }
+  li::marker { color: #388E3C; }
+
+  .note { color: #2E7D32; font-size: 10pt; line-height: 1.4; margin: 2mm 0 0 0; }
+
+  .warn {
+    border-left: 4px solid #F57C00; background: #FFF3E0;
+    padding: 3mm 4mm; font-size: 10pt; line-height: 1.45; margin: 3mm 0 0 0; border-radius: 3px;
+  }
+  .warn b { color: #B45309; }
+
+  /* Chips de estado — colores reales que ve el operario en la app */
+  .chip { display: inline-block; padding: 1.4mm 3mm; border-radius: 11px; color: #fff;
+          font-size: 9pt; font-weight: 700; white-space: nowrap; line-height: 1; }
+  .e-prop { background: #78909C; } .e-vali { background: #1976D2; }
+  .e-cont { background: #F45DEA; } .e-ejec { background: #F57C00; }
+  .e-fin  { background: #388E3C; } .e-cer  { background: #546E7A; }
+  .owner-en { color: #1565C0; font-weight: 700; }
+  .owner-op { color: #1B5E20; font-weight: 700; }
+
+  /* Diagrama de flujo dos mundos */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 2mm 0 4mm 0; }
+  .world { flex: 1; border: 1.5px solid #C8E6C9; border-radius: 8px; padding: 4mm; background: #fff; }
+  .world.web { border-top: 5px solid #388E3C; }
+  .world.mob { border-top: 5px solid #97BC62; }
+  .world .t { font-weight: 700; color: #1B5E20; font-size: 11pt; margin-bottom: 2mm; }
+  .world ul { padding-left: 5mm; margin: 0; }
+  .world li { font-size: 9.5pt; margin-bottom: 1mm; }
+  .sync { width: 30mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; }
+  .sync .arr { color: #97BC62; font-size: 18pt; line-height: 1; font-weight: 700; }
+  .sync .pill { background: #1B3A1C; color: #fff; border-radius: 7px; padding: 2mm 1mm; font-size: 8pt; font-weight: 700; text-align: center; }
+
+  /* Línea de estados (page C) */
+  .stateflow { display: flex; align-items: center; flex-wrap: wrap; gap: 1mm; margin: 3mm 0 2mm 0; }
+  .stateflow .arr { color: #97BC62; font-weight: 700; font-size: 12pt; margin: 0 0.5mm; }
+
+  /* Tabla */
+  table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+  th, td { text-align: left; vertical-align: top; padding: 2mm 2.5mm; font-size: 9.6pt; border-bottom: 1px solid #E0E0E0; }
+  th { background: #F1F8E9; color: #1B5E20; font-size: 9pt; font-weight: 700; }
+  td.c1 { width: 30mm; white-space: nowrap; }
+  td.c2 { width: 46mm; }
+
+  footer {
+    position: absolute; bottom: 8mm; left: 14mm; right: 14mm;
+    display: flex; justify-content: space-between; color: #9E9E9E; font-size: 8pt;
+  }
+</style>
+</head>
+<body>
+
+<!-- ───────── PÁGINA A ───────── -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Cómo trabajamos con Enagas</h2>
+    <p class="intro">La aplicación conecta dos mundos: la oficina de <b>Enagas</b> (aplicación web) y tú, el operario, en
+      <b>campo</b> (app móvil). El trabajo va y vuelve entre los dos a través de la <b>Sincronización</b>.</p>
+
+    <div class="flow">
+      <div class="world web">
+        <div class="t">WEB · Gestores de Enagas</div>
+        <ul>
+          <li>Preparan y te asignan el trabajo</li>
+          <li>Validan los cambios que propones</li>
+          <li>Aprueban las zonas nuevas</li>
+          <li>Cierran las zonas terminadas</li>
+        </ul>
+      </div>
+      <div class="sync">
+        <div class="arr">➜</div>
+        <div class="pill">SINCRO-<br>NIZACIÓN</div>
+        <div class="arr">⬅</div>
+      </div>
+      <div class="world mob">
+        <div class="t">MÓVIL · Tú, en campo</div>
+        <ul>
+          <li>Verificas la zona sobre el terreno</li>
+          <li>Ejecutas los trabajos</li>
+          <li>Reportas fotos antes / después</li>
+          <li>Propones cambios y zonas nuevas</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Tu jornada, paso a paso</h3>
+    <ul>
+      <li>Los gestores de Enagas preparan el trabajo en la web y te lo asignan.</li>
+      <li>Antes de salir, lo descargas al móvil: <b>Sincronización → Preparar trabajo de campo</b>.</li>
+      <li>En campo trabajas <b>sin conexión</b>: todo lo que haces se guarda en el móvil.</li>
+      <li>Al volver, lo subes: <b>Sincronización → Subir</b>. Enagas recibe tu trabajo.</li>
+    </ul>
+    <p class="note">Internet solo hace falta dos veces al día: al empezar (descargar) y al terminar (subir).
+      El resto de la jornada la app funciona aunque no haya cobertura. <b>Pendientes a 0 = jornada cerrada.</b></p>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Cómo trabajamos · A</span></footer>
+</div>
+
+<!-- ───────── PÁGINA B ───────── -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Verificar, proponer cambios y zonas nuevas</h2>
+    <p class="intro">Lo que Enagas dibuja en la oficina puede no coincidir con lo que hay en el terreno.
+      Tu trabajo es <b>comprobarlo</b> y, si hace falta, <b>proponer un cambio</b> para que Enagas lo apruebe.</p>
+
+    <h3>Verificar y proponer un cambio</h3>
+    <ul>
+      <li>Abre el detalle del segmento y comprueba sobre el mapa que la zona es correcta.</li>
+      <li>Si la zona es más grande, más pequeña o está mal situada: pulsa <b>“Editar extremos”</b> y ajusta la geometría sobre el mapa. También puedes corregir la descripción y el tipo de actividad.</li>
+      <li>Cambia el estado a <span class="chip e-cont">Contratista</span> y guarda. Al sincronizar, Enagas ve tu propuesta y la valida (o la devuelve).</li>
+    </ul>
+    <div class="warn"><b>⚠ Si crees que en esa zona NO hace falta actuar:</b> hoy se comunica escribiendo un
+      <b>Mensaje</b> en el segmento explicando el motivo y dejándolo en <span class="chip e-cont">Contratista</span>.
+      (No existe todavía un botón “No requiere actuación” — pendiente de acordar con Enagas.)</div>
+
+    <h3>Proponer una zona nueva</h3>
+    <ul>
+      <li>Ve al <b>Mapa global</b> y activa el modo <b>“Líneas de corte”</b>.</li>
+      <li>Con dos líneas, corta la traza del gasoducto: la app extrae uno o varios segmentos nuevos.</li>
+      <li>Rellena la descripción y el tipo de actividad. La zona nueva nace en estado <span class="chip e-cont">Contratista</span>.</li>
+      <li>Al sincronizar, Enagas recibe la zona nueva y la valida.</li>
+    </ul>
+    <p class="note">Regla de oro: <b>tú propones, Enagas aprueba.</b> Mientras una zona esté en
+      <span class="chip e-cont">Contratista</span>, está pendiente de que Enagas la valide. Nada se da por
+      aprobado hasta que pasa a <span class="chip e-vali">Validada</span>.</p>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Verificar y proponer · B</span></footer>
+</div>
+
+<!-- ───────── PÁGINA C ───────── -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Los estados y qué hago yo</h2>
+    <p class="intro">Cada zona tiene un <b>estado</b> con un color. Es el idioma común entre tú y Enagas.
+      Son los mismos colores que ves en las tarjetas de la app.</p>
+
+    <div class="stateflow">
+      <span class="chip e-prop">Propuesta</span><span class="arr">➜</span>
+      <span class="chip e-cont">Contratista</span><span class="arr">➜</span>
+      <span class="chip e-vali">Validada</span><span class="arr">➜</span>
+      <span class="chip e-ejec">En Ejecución</span><span class="arr">➜</span>
+      <span class="chip e-fin">Finalizada</span><span class="arr">➜</span>
+      <span class="chip e-cer">Cerrada</span>
+    </div>
+
+    <table>
+      <tr><th>Estado</th><th>Quién manda</th><th>Qué significa y qué hago yo</th></tr>
+      <tr><td class="c1"><span class="chip e-prop">Propuesta</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Zona propuesta por Enagas. <b>Revísala en campo.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-vali">Validada</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Enagas la ha aprobado. Lista para ejecutar.</td></tr>
+      <tr><td class="c1"><span class="chip e-cont">Contratista</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Has propuesto un cambio o una zona nueva. <b>Espera a que Enagas la valide.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-ejec">En Ejecución</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Trabajos en curso. <b>Haz fotos antes y después.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-fin">Finalizada</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Trabajos terminados. Sincroniza para que Enagas lo reciba.</td></tr>
+      <tr><td class="c1"><span class="chip e-cer">Cerrada</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Enagas ha cerrado la zona. Nada más que hacer.</td></tr>
+    </table>
+
+    <p class="note" style="margin-top:4mm;">Los estados que <b>tú</b> pones son:
+      <span class="chip e-cont">Contratista</span> (propongo un cambio),
+      <span class="chip e-ejec">En Ejecución</span> (empiezo los trabajos) y
+      <span class="chip e-fin">Finalizada</span> (he terminado).
+      <span class="chip e-prop">Propuesta</span>, <span class="chip e-vali">Validada</span> y
+      <span class="chip e-cer">Cerrada</span> las controla Enagas.</p>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Estados · C</span></footer>
+</div>
+
+</body>
+</html>

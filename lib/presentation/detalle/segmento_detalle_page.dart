@@ -166,17 +166,13 @@ class _PanelDatosTabs extends StatelessWidget {
 
 // ─── Tab Datos ──────────────────────────────────────────────────────────────
 
-const List<EstadoActividad> _estadosEditablesBase = [
-  EstadoActividad.contratista,
-  EstadoActividad.validada,
-  EstadoActividad.ejecucion,
-  EstadoActividad.finalizada,
-];
-
-List<EstadoActividad> _estadosEditables(EstadoActividad current) {
-  if (_estadosEditablesBase.contains(current)) return _estadosEditablesBase;
-  return [current, ..._estadosEditablesBase];
-}
+/// Estados seleccionables partiendo de [origen]: el propio estado
+/// (permanecer) + sus transiciones permitidas (matriz SSOT en
+/// `EstadoActividad.transicionesPermitidas`). Filtra por el estado ORIGINAL
+/// cargado, no por el valor que el usuario va seleccionando, para que el valor
+/// elegido siempre pertenezca a la lista mostrada.
+List<EstadoActividad> _estadosEditables(EstadoActividad origen) =>
+    EstadoActividad.values.where(origen.puedeIrA).toList();
 
 class _DatosTab extends StatelessWidget {
   final SegmentoDetalleController controller;
@@ -254,7 +250,7 @@ class _DatosTab extends StatelessWidget {
             label: 'Estado',
             icon: Icons.flag_outlined,
             rx: controller.estado,
-            values: _estadosEditables(controller.estado.value),
+            values: _estadosEditables(controller.segmento.estado),
             labelOf: (e) => e.etiqueta,
           ),
           const SizedBox(height: 16),
@@ -349,8 +345,8 @@ class _DropdownInlineField<T> extends StatelessWidget {
                   ),
                   filled: true,
                   fillColor: Colors.grey.shade50,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
                 items: values
                     .map((v) => DropdownMenuItem<T>(
@@ -419,8 +415,7 @@ class _MensajesTab extends StatelessWidget {
             child: Text(
               'Guarda el segmento para ver mensajes',
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
           ),
         );
@@ -490,8 +485,7 @@ class _MensajeBubble extends StatelessWidget {
             ),
           BubbleSpecialThree(
             text: mensaje.mensaje,
-            color:
-                isSender ? AppColors.moduleGreen : const Color(0xFFE8E8EE),
+            color: isSender ? AppColors.moduleGreen : const Color(0xFFE8E8EE),
             tail: true,
             isSender: isSender,
             textStyle: TextStyle(
@@ -535,10 +529,9 @@ class _MensajeInput extends StatelessWidget {
               onSubmitted: (_) => controller.sendMensaje(),
               decoration: InputDecoration(
                 hintText: 'Escribe un mensaje…',
-                hintStyle:
-                    TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 8),
+                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
@@ -763,8 +756,7 @@ class _CountChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.photo_library,
-              color: Colors.white, size: 14),
+          const Icon(Icons.photo_library, color: Colors.white, size: 14),
           const SizedBox(width: 6),
           Text(
             '$current / $total',
@@ -858,8 +850,8 @@ class _MapaSegmento extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               onTap: controller.abrirEdicionExtremos,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [

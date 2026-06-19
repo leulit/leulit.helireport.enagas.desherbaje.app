@@ -224,7 +224,7 @@ void main() {
     },
   );
 
-  // ─── (b) estado no editable → _validateEstadoEditable devuelve false ──────
+  // ─── (b) estado no editable → _validateEstado devuelve false ──────────────
 
   testWidgets(
     '(b) guardar con estado propuesta no llama saveLocal (estado no editable)',
