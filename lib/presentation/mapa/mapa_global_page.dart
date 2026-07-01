@@ -10,12 +10,11 @@ import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
-import '../../core/services/gasoductos_service.dart';
-import '../../core/services/pks_service.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'layers/gasoductos_map_layer.dart';
 import 'layers/pks_map_layer.dart';
+import 'layers/hitos_map_layer.dart';
 import 'layers/segmentos_map_controller.dart';
 import 'layers/segmentos_map_layer.dart';
 import 'lines_cut/lines_cut_ui.dart';
@@ -139,6 +138,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               const GasoductosMapLayer(),
               SegmentosMapLayer(currentZoom: controller.currentZoom),
               PksMapLayer(currentZoom: controller.currentZoom),
+              HitosMapLayer(currentZoom: controller.currentZoom),
               MyCurrentLocationLayer(
                 alignDirectionOnUpdate: AlignOnUpdate.always,
                 alignPositionOnUpdate: AlignOnUpdate.always,

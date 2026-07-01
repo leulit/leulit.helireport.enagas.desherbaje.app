@@ -1,8 +1,6 @@
 import 'package:get/get.dart';
 
 import '../../core/app_di.dart';
-import '../../core/services/connectivity_service.dart';
-import '../../core/sync/engine/sync_engine.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/repository/segmento_repository.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';

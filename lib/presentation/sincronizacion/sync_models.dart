@@ -4,6 +4,7 @@ enum MasterDataKind {
   user,
   gasoductos,
   pks,
+  hitos,
   segmentos,
   posicionesFijas,
 }
@@ -17,6 +18,8 @@ extension MasterDataKindLabel on MasterDataKind {
         return 'Trazas de gasoductos';
       case MasterDataKind.pks:
         return 'Puntos kilométricos';
+      case MasterDataKind.hitos:
+        return 'Hitos';
       case MasterDataKind.segmentos:
         return 'Segmentos';
       case MasterDataKind.posicionesFijas:
@@ -32,6 +35,8 @@ extension MasterDataKindLabel on MasterDataKind {
         return 'Geometría de las trazas de gasoductos para uso en mapa.';
       case MasterDataKind.pks:
         return 'Puntos kilométricos asociados a cada CT.';
+      case MasterDataKind.hitos:
+        return 'Hitos asociados a cada CT.';
       case MasterDataKind.segmentos:
         return 'Lista de segmentos asignados al operador.';
       case MasterDataKind.posicionesFijas:

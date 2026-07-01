@@ -25,6 +25,8 @@ class CtInfo {
 
   String get pkUrl => ApiEndpoints.pkTrack(filename);
 
+  String get hitosUrl => ApiEndpoints.hitosTrack(filename);
+
   factory CtInfo.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'] ?? json['ct_id'] ?? json['ct'];
     final id = rawId is int

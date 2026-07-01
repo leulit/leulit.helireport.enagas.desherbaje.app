@@ -27,7 +27,8 @@ lib/
 │   │   ├── connectivity_service.dart              # GetxService: monitoriza red
 │   │   ├── gasoductos_service.dart                # Master data legacy (no integrado al motor)
 │   │   ├── gps_background_service.dart            # GPS background con buffer 500/30s + permisos de ubicación
-│   │   └── pks_service.dart                       # Master data PK legacy
+│   │   ├── pks_service.dart                       # Master data PK legacy
+│   │   └── hitos_service.dart                     # Master data hitos legacy (réplica de PksService)
 │   └── sync/                                      # Motor offline-first (extraíble a paquete)
 │       ├── sync.dart                              # Barrel export público
 │       ├── sync_actions.dart                      # TypedActions del motor
@@ -75,6 +76,8 @@ lib/
 │   │   ├── position_batch_entity.dart             # Lote GPS — implementa Syncable
 │   │   ├── ct_info_entity.dart
 │   │   ├── gasoducto_entity.dart
+│   │   ├── pk_entity.dart                         # Punto kilométrico (marcador mapa)
+│   │   ├── hito_entity.dart                       # Hito (marcador mapa — misma forma que PkEntity)
 │   │   └── user_entity.dart
 │   ├── repository/
 │   │   ├── segmento_repository.dart               # Interface
@@ -274,6 +277,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
 | `GasoductosService` | Master data legacy de trazas (no integrado al motor — ver §12.2 doc backend) |
 | `PksService` | Master data legacy de puntos kilométricos |
+| `HitosService` | Master data legacy de hitos (réplica de `PksService`; tabla `hitos`, fichero `{filename}-hitos.json`) |
 | `AuthExpirationHandler` | Listener global de `SyncActions.authExpired` → logout + nav login |
 | `TypeRegistry` | Registro de tipos del motor (poblado por `OfflineModule.registerEntity`) |
 | `OutboxQueue` | Cola persistente de operaciones pendientes |

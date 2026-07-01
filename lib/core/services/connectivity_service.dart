@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -15,13 +16,17 @@ class ConnectivityService extends GetxService {
   @override
   Future<void> onInit() async {
     super.onInit();
-    await _init();
+    // NO bloquear el arranque: registrar el listener (síncrono) y resolver el
+    // primer estado en background. `_isConnected` arranca optimista (`true`);
+    // se corrige en microsegundos. Antes: `await checkConnectivity()` +
+    // `_hasActualInternet()` (DNS 5s) colgaban el splash dentro de allReady().
+    Connectivity().onConnectivityChanged.listen(_updateStatus);
+    unawaited(_resolveInitialStatus());
   }
 
-  Future<void> _init() async {
+  Future<void> _resolveInitialStatus() async {
     final result = await Connectivity().checkConnectivity();
     await _updateStatus(result);
-    Connectivity().onConnectivityChanged.listen(_updateStatus);
   }
 
   void addSyncListener(VoidCallback listener) {
@@ -58,7 +63,7 @@ class ConnectivityService extends GetxService {
   Future<bool> _hasActualInternet() async {
     try {
       final result = await InternetAddress.lookup('enagastool.helireport.com')
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 3));
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
     } catch (_) {
       return false;

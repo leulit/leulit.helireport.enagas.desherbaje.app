@@ -13,6 +13,7 @@ import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
 import '../../core/services/pks_service.dart';
+import '../../core/services/hitos_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
@@ -28,12 +29,15 @@ class MapaGlobalController extends GetxController {
   final gasoductosPolylines = <Polyline>[].obs;
   final isLoadingGasoductos = false.obs;
   final isLoadingPks = false.obs;
+  final isLoadingHitos = false.obs;
   final errorGasoductos = Rx<String?>(null);
   final errorPks = Rx<String?>(null);
+  final errorHitos = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
   GasoductosService get _gasoductosService => AppDI.gasoductosService;
   PksService get _pksService => AppDI.pksService;
+  HitosService get _hitosService => AppDI.hitosService;
   SegmentosMapController get _segmentos => Get.find<SegmentosMapController>();
 
   final _segmentoRepo = SegmentoRepositoryImpl();
@@ -41,6 +45,7 @@ class MapaGlobalController extends GetxController {
   bool get isLoading =>
       isLoadingGasoductos.value ||
       isLoadingPks.value ||
+      isLoadingHitos.value ||
       _segmentos.isLoading.value;
 
   List<({String ct, int ctid})> _userCts = const [];
@@ -190,6 +195,7 @@ class MapaGlobalController extends GetxController {
   Future<void> loadAll() async {
     await loadGasoductos();
     await loadPks();
+    await loadHitos();
     await _segmentos.load();
     _fitAllBounds();
   }
@@ -197,6 +203,7 @@ class MapaGlobalController extends GetxController {
   Future<void> reloadAll() async {
     await loadGasoductos(forceRefresh: true);
     await loadPks(forceRefresh: true);
+    await loadHitos(forceRefresh: true);
     await _segmentos.load();
     _fitAllBounds();
   }
@@ -233,6 +240,23 @@ class MapaGlobalController extends GetxController {
       debugPrint('MapaGlobal PKs: $e');
     } finally {
       isLoadingPks.value = false;
+    }
+  }
+
+  Future<void> loadHitos({bool forceRefresh = false}) async {
+    isLoadingHitos.value = true;
+    errorHitos.value = null;
+    try {
+      if (forceRefresh) {
+        await _hitosService.reload();
+      } else {
+        await _hitosService.ensureLoaded();
+      }
+    } catch (e) {
+      errorHitos.value = 'Error cargando hitos';
+      debugPrint('MapaGlobal Hitos: $e');
+    } finally {
+      isLoadingHitos.value = false;
     }
   }
 

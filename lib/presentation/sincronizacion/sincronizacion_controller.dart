@@ -8,6 +8,7 @@ import '../../core/services/connectivity_service.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/master_data_load_result.dart';
 import '../../core/services/pks_service.dart';
+import '../../core/services/hitos_service.dart';
 
 import '../../core/sync/sync.dart';
 import '../../data/repository/auth_repository_impl.dart';
@@ -23,10 +24,12 @@ class SincronizacionController extends MyGetxController {
     AuthRepository? authRepository,
     GasoductosService? gasoductosService,
     PksService? pksService,
+    HitosService? hitosService,
     ConnectivityService? connectivity,
   })  : _auth = authRepository ?? AuthRepositoryImpl(),
         _gasoductos = gasoductosService ?? AppDI.gasoductosService,
         _pks = pksService ?? AppDI.pksService,
+        _hitos = hitosService ?? AppDI.hitosService,
         _connectivity = connectivity ?? AppDI.connectivityService;
 
   static const String _lastDownloadPrefix = 'sync_master_last_download_';
@@ -34,6 +37,7 @@ class SincronizacionController extends MyGetxController {
   final AuthRepository _auth;
   final GasoductosService _gasoductos;
   final PksService _pks;
+  final HitosService _hitos;
   final ConnectivityService _connectivity;
 
   // ─────────────────────────────── State ───────────────────────────────
@@ -205,6 +209,15 @@ class SincronizacionController extends MyGetxController {
           );
           // NF-12: reload now propagates on error; catch at _runOne level handles it.
           masterDataResult = await _pks.reload(token: sharedToken);
+        case MasterDataKind.hitos:
+          downloadWorkers.addAll(
+            _attachProgressWorkers(
+              kind: kind,
+              total: _hitos.totalFiles,
+              processed: _hitos.processedFiles,
+            ),
+          );
+          masterDataResult = await _hitos.reload(token: sharedToken);
         case MasterDataKind.segmentos:
           final int pending = await _countPendingForSegmentos();
           if (pending > 0) {
@@ -220,8 +233,21 @@ class SincronizacionController extends MyGetxController {
             );
             return;
           }
-          final PullSummary? summary =
-              await OfflineModule.runPull('segmento', token: sharedToken);
+          final PullSummary? summary = await OfflineModule.runPull(
+            'segmento',
+            token: sharedToken,
+            onProgress: (p) {
+              final row = _rowFor(kind);
+              _updateRow(
+                kind,
+                row.copyWith(
+                  progress: p.fraction,
+                  progressLabel: p.phase,
+                  clearProgress: p.fraction == null,
+                ),
+              );
+            },
+          );
           if (summary == null) {
             throw StateError("Pull no disponible para 'segmento'");
           }
@@ -323,7 +349,7 @@ class SincronizacionController extends MyGetxController {
       final t = total.value;
       final p = processed.value;
       final ratio = t > 0 ? (p / t).clamp(0.0, 1.0) : null;
-      final label = t > 0 ? '$p / $t' : null;
+      final label = t > 0 ? 'Descargando $p / $t archivos…' : null;
       final row = _rowFor(kind);
       _updateRow(
         kind,

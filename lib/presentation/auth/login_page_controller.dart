@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
-import '../../core/services/session_state.dart';
 import '../../data/repository/auth_repository_impl.dart';
 
 class LoginPageController extends GetxController {

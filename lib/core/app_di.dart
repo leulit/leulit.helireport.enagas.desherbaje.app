@@ -27,6 +27,7 @@ import 'services/connectivity_service.dart';
 import 'services/gasoductos_service.dart';
 import 'services/gps_background_service.dart';
 import 'services/pks_service.dart';
+import 'services/hitos_service.dart';
 import 'services/session_state.dart';
 import 'sync/sync.dart';
 
@@ -84,6 +85,7 @@ class AppDI {
     DI.registerLazySingleton<JsonLoaderService>(() => JsonLoaderService());
     DI.registerLazySingleton<GasoductosService>(() => GasoductosService());
     DI.registerLazySingleton<PksService>(() => PksService());
+    DI.registerLazySingleton<HitosService>(() => HitosService());
 
     // 5. AuthExpirationHandler — sync onInit registers the TypedAction listener.
     //    Must be a singleton so the listener survives for the app lifetime.
@@ -127,6 +129,8 @@ class AppDI {
       di.get<GasoductosService>();
 
   static PksService get pksService => di.get<PksService>();
+
+  static HitosService get hitosService => di.get<HitosService>();
 
   static OutboxQueue get outboxQueue => di.get<OutboxQueue>();
 

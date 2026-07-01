@@ -1,5 +1,73 @@
 # DEVLOG
 
+## 2026-07-01 — Nueva entidad master-data "hitos" (réplica de pks)
+
+Añadida entidad `hitos` al proceso de sincronización, replicando EXACTAMENTE el pipeline de
+`pks`. Mismo tipo de dato (puntos GeoJSON descargados del backend), misma mecánica: descarga
+online multi-fichero vía `JsonLoaderService`, caché SQLite, capa de marcadores en mapa, fila
+en la página de sincronización.
+
+Fichero backend esperado: `{filename}-hitos.json` (ej. `ct-almodovar-hitos.json`), análogo a
+`{filename}-pk.json`.
+
+Nuevos:
+- `lib/domain/entities/hito_entity.dart` — `HitoEntity` (misma forma que `PkEntity`).
+- `lib/core/services/hitos_service.dart` — `HitosService` (`kFileGroupHitos='hitos'`, tabla `hitos`).
+- `lib/presentation/mapa/layers/hitos_map_layer.dart` — `HitosMapLayer` (estilo idéntico a `PksMapLayer`, gate zoom>14).
+
+Modificados:
+- `api_endpoints.dart` — `hitosTrack(filename)`.
+- `ct_info_entity.dart` — getter `hitosUrl`.
+- `local_database.dart` — `_HitoSchemaShim` + `migrateEntity` (tabla `hitos`, PK `(id,ct_id)`).
+- `app_di.dart` — registro `HitosService` + getter `AppDI.hitosService`.
+- `sync_models.dart` — `MasterDataKind.hitos` (+ title/description).
+- `sincronizacion_controller.dart` — `HitosService` en constructor/campo + case en `_runOne`.
+- `mapa_global_controller.dart` — `isLoadingHitos`/`errorHitos`, `loadHitos()`, wiring en `loadAll`/`reloadAll`/`isLoading`.
+- `mapa_global_page.dart` — `HitosMapLayer` en el stack del mapa.
+
+Prueba de extensibilidad: cero cambios en el motor `lib/core/sync/`. Verificación: `flutter analyze` limpio.
+Pendiente sign-off UX: `HitosMapLayer` sale visualmente idéntico a `PksMapLayer` (mismo amarillo) —
+si conviene distinguir hitos de PKs, cambiar color/estilo.
+
+## 2026-07-01 — Arranque lento splash→login (2 fixes en AppDI.init)
+
+Splash tardaba varios segundos en pasar a login. Dos causas en el path de `AppDI.init()`:
+
+1. **`ConnectivityService.onInit` bloqueaba el arranque.** Hacía `await checkConnectivity()`
+   + `_hasActualInternet()` (DNS `InternetAddress.lookup`, timeout 5s) *dentro* de
+   `DI.allReady()`. Si `checkConnectivity()` devolvía `none` un instante al arrancar (común
+   en iOS), el splash se colgaba hasta 5s en el DNS.
+   Fix: `onInit` registra el listener (síncrono) y resuelve el primer estado en background
+   (`unawaited(_resolveInitialStatus())`); `_isConnected` arranca optimista (`true`).
+   DNS timeout 5s→3s.
+2. **`AuthDataProvider._network` eager → sesión nunca restaurada.** Campo
+   `final _network = AppDI.networkService` se resolvía en construcción; `AppDI.init` construye
+   `AuthRepositoryImpl` para `isAuthenticated()` ANTES de registrar `NetworkService` → `di.get`
+   lanzaba "not registered" → el `catch` ponía `sessionState=false` en cada arranque (y el
+   `read` real de keychain nunca corría). Fix: `_network` pasa a getter lazy.
+
+- `lib/core/services/connectivity_service.dart` — onInit no bloqueante; DNS 3s.
+- `lib/data/providers/auth_data_provider.dart` — `_network` getter lazy.
+
+Verificación: `flutter analyze` limpio; hot restart en iPhone físico sin runtime errors.
+Nota: retraso login→sincronización es latencia de red (login `POST`+`GET cts`), no AppDI.
+
+## 2026-07-01 — Inyección de HMAC_SECRET (fix login 401 + builds de tienda)
+
+Login daba `401 {"error":"Firma HMAC inválida"}`: la app corría con el placeholder
+`YOUR_HMAC_SECRET_HERE` (sin `--dart-define=HMAC_SECRET`). El código HMAC era correcto;
+faltaba inyectar el secret. Verificado con curl a `/api/enagas/v1/users/login`
+(secret real → 200; placeholder → 401). Modelo copiado de `leulit_helireport_enagas_webapp`.
+
+- `.env` — nuevo; **única fuente** del secret. `HMAC_SECRET=` (mismo valor que backend
+  `.env enagas_HMAC_SECRET` y webapp).
+- `.vscode/launch.json` — nuevo; `--dart-define-from-file=.env` (debug/profile/release). NO hardcodea el valor.
+- `build-android.sh` / `build-ios.sh` — copiados de la webapp; `flutter build … --dart-define-from-file=.env`
+  (guard grep que falla si `.env` no trae la clave → no se sube build roto).
+
+El valor solo aparece en `.env` (verificado: 0 duplicados en launch.json/scripts). `.env` committeado
+(app aún no en prod). CI/CD desde GitHub Secret sigue pendiente.
+
 ## 2026-06-18 — Matriz de transiciones de estado de segmento (app campo)
 
 Portado el patrón de la webapp: SSOT de transiciones en el enum `EstadoActividad`
@@ -161,3 +229,65 @@ Verificación: `flutter analyze` limpio; 396/396 tests verdes.
 
 **Pendiente:** inyectar el secret real (64-hex, desde GitHub Secret devops) y verificar login en
 dispositivo físico contra `https://enagastool.helireport.com`.
+
+---
+
+## 2026-07-01 — fix(pull): segmentos por CTS enviaba ctids en vez de nombres
+
+**Síntoma:** la página de segmentos agrupados por CT no mostraba nada en la app,
+aunque el mismo usuario en la web obtenía la lista correctamente vía
+`GET /api/enagas/v1/segmentos/bycts/{cts}`.
+
+**Causa raíz:** `SegmentoRemoteFetcher.pullAll` leía `user_cts` (que persiste
+**ctids** enteros vía `jsonEncode(user.ctsId())`) y los enviaba al endpoint
+`bycts/{cts}`, que **keyea por nombres de CT** (`ct-burgos,ct-plasencia,…`),
+no por id. El backend no encontraba coincidencias → devolvía `[]` → el pull
+importaba 0 → store local vacío → listado vacío.
+
+`user_cts` (ids) es correcto para el path de lectura/agrupación local
+(`GetSegmentosUseCase` → `findByCts(List<int>)`); solo el fetch remoto usaba la
+clave equivocada.
+
+**Fix:** el fetcher lee los **nombres** de CT desde el usuario persistido
+(`user_json` → `UserCt.ct`) y los envía URL-encodeados y separados por coma.
+No se toca `user_cts`. No requiere re-login (el `user_json` ya está guardado):
+basta con volver a lanzar la descarga ("Descargar" / "Preparar trabajo de campo").
+
+**Fichero:** `lib/data/sync/segmento_remote_fetcher.dart`.
+
+---
+
+## 2026-07-01 — fix(sync): barra de progreso de segmentos no avanzaba
+
+**Síntoma:** al pulsar "Descargar" en la fila de **segmentos**, la barra no avanzaba
+ni mostraba nada; tras unos segundos, al terminar, simplemente desaparecía.
+
+**Causa raíz:** el pull de segmentos es una **única** `GET /segmentos/bycts` (sin
+paginar) dentro de `PullCoordinator` (que ya usa `leulit_pipeline_pattern`, 6 tasks).
+Nadie propagaba progreso a la fila → `row.progress` quedaba `null` →
+`LinearProgressIndicator(value: null)` = indeterminado: se anima pero nunca rellena,
+y al pasar `isDownloading=false` se quita. gasoductos/pks sí mostraban "3/12" porque
+cuentan N ficheros vía RxInt.
+
+**Fix (decisión con sign-off — opción "pasos + etiquetas"):** se surfacean los
+eventos del `TaskPipeline` del pull hasta la UI.
+- Nuevo `PullProgress { double? fraction; String phase; }` (`lib/core/sync/pull/pull_progress.dart`).
+- `PullCoordinator.pullNow` acepta `onProgress`, se suscribe a `pipeline.events` y mapea
+  `taskStart`/`taskSuccess` → fracción (`completed/total`) + etiqueta española por fase
+  (`_phaseLabel`). El **primer** paso (el GET, duración desconocida) emite `fraction=null`
+  → barra indeterminada animada durante la espera; los pasos rápidos de la cola la rellenan.
+- `OfflineModule.runPull` reenvía `onProgress` (el facade genérico → cualquier entidad
+  pulleable hereda progreso). `registerPullRunnerForTest` envuelve el runner estrecho →
+  cero cambios en tests.
+- El controller de sincronización actualiza `progress`/`progressLabel` de la fila; el
+  subtítulo muestra la etiqueta directamente (`label ?? 'Descargando…'`). Se unificó el
+  label de gasoductos/pks a "Descargando 3/12 archivos…".
+
+**Alcance (con sign-off):** solo segmentos. gasoductos/pks conservan su progreso **real
+por fichero** (mejor que pasos); usuario queda indeterminado (1 llamada, sin sub-pasos).
+No se fuerza el patrón donde no aporta.
+
+**Ficheros:** `pull_progress.dart` (nuevo), `pull_coordinator.dart`, `offline_module.dart`,
+`sync.dart`, `sincronizacion_controller.dart`, `sincronizacion_page.dart`.
+
+**Verificación:** `flutter analyze` limpio; `pull_coordinator_test` (15) + `sincronizacion` (9) verdes.

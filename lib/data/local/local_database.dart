@@ -75,6 +75,35 @@ class _PkSchemaShim extends _NopLocalStore {
   }
 }
 
+class _HitoSchemaShim extends _NopLocalStore {
+  @override
+  String get entityType => 'hito';
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  Future<void> migrate(DatabaseExecutor db, int from, int to) async {
+    if (from == 0) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS hitos (
+          id        TEXT NOT NULL,
+          ct_id     INTEGER NOT NULL,
+          label     TEXT NOT NULL DEFAULT '',
+          lat       REAL NOT NULL,
+          lng       REAL NOT NULL,
+          synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (id, ct_id)
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_hitos_ct ON hitos(ct_id)',
+      );
+    }
+    // Future schema bumps go here.
+  }
+}
+
 /// Abstract NOP base so the shims only need to override the schema methods.
 abstract class _NopLocalStore extends LocalStore<_NopSyncable> {
   @override
@@ -157,6 +186,7 @@ class LocalDatabase {
     // migration system so future schema changes have a safe upgrade path.
     await OfflineDatabase.migrateEntity(db, _GasoductoSchemaShim());
     await OfflineDatabase.migrateEntity(db, _PkSchemaShim());
+    await OfflineDatabase.migrateEntity(db, _HitoSchemaShim());
     return db;
   }
 

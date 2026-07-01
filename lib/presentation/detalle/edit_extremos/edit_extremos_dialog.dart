@@ -6,7 +6,6 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_di.dart';
 import '../../../core/app_theme.dart';
-import '../../../core/services/gasoductos_service.dart';
 import '../../../core/widgets/my_current_location_layer.dart';
 import '../../../domain/entities/segmento_entity.dart';
 import 'edit_extremos_controller.dart';

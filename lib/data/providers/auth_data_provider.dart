@@ -5,7 +5,11 @@ import '../../data/network/network_service.dart';
 import '../../domain/entities/user_entity.dart';
 
 class AuthDataProvider {
-  final NetworkService _network = AppDI.networkService;
+  // Resolución perezosa: NO resolver en construcción. AppDI.init construye
+  // AuthRepositoryImpl (→ AuthDataProvider) para isAuthenticated() ANTES de
+  // registrar NetworkService; un campo eager lanzaría "not registered" y el
+  // catch trataría al usuario como no-autenticado en cada arranque.
+  NetworkService get _network => AppDI.networkService;
 
   Future<UserModel> login(String usuario, String password) async {
     final response = await _network.post(

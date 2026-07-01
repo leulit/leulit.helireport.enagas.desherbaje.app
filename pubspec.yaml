@@ -16,14 +16,14 @@ dependencies:
   chat_bubbles: ^1.10.1  
   connectivity_plus: ^7.2.0
   crypto: ^3.0.7
-  dio: ^5.9.2
-  flutter_map: ^8.3.0
+  dio: ^5.10.0
+  flutter_map: ^8.3.1
   flutter_map_cancellable_tile_provider: ^3.1.1
   flutter_map_compass: ^1.1.1
-  flutter_map_location_marker: ^10.2.0
+  flutter_map_location_marker: ^10.3.0
   flutter_secure_storage: ^10.3.1  
   get: ^4.7.3
-  image_picker: ^1.2.2
+  image_picker: ^1.2.3
   latlong2: ^0.9.1
 
   leulit_flutter_actionmanager: ^5.9.0

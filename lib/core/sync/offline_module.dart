@@ -10,6 +10,7 @@ import 'contracts/syncable.dart';
 import 'database/offline_database.dart';
 import 'pull/cancel_token.dart';
 import 'pull/pull_coordinator.dart';
+import 'pull/pull_progress.dart';
 import 'repository/offline_repository.dart';
 import 'type_registry.dart';
 
@@ -24,18 +25,23 @@ abstract class OfflineModule {
   /// without exposing the generic parameter to callers. Lets the sync page
   /// iterate `TypeRegistry.registrations` and trigger pulls without knowing
   /// the concrete `T` for each entity.
-  static final Map<String, Future<PullSummary> Function({CancelToken? token})>
-      _pullRunners = {};
+  static final Map<
+      String,
+      Future<PullSummary> Function({
+        CancelToken? token,
+        void Function(PullProgress)? onProgress,
+      })> _pullRunners = {};
 
   /// Runs the registered `PullCoordinator` for [entityType]. Returns null if
   /// the entity has no `RemoteFetcher` (i.e. it is not pulleable).
   static Future<PullSummary?> runPull(
     String entityType, {
     CancelToken? token,
+    void Function(PullProgress)? onProgress,
   }) {
     final runner = _pullRunners[entityType];
     if (runner == null) return Future.value(null);
-    return runner(token: token);
+    return runner(token: token, onProgress: onProgress);
   }
 
   /// Returns the entity types that have a `RemoteFetcher` registered.
@@ -51,7 +57,9 @@ abstract class OfflineModule {
     String entityType,
     Future<PullSummary> Function({CancelToken? token}) runner,
   ) {
-    _pullRunners[entityType] = runner;
+    _pullRunners[entityType] =
+        ({CancelToken? token, void Function(PullProgress)? onProgress}) =>
+            runner(token: token);
   }
 
   /// FOR TESTS ONLY — removes all registered pull runners.
@@ -131,8 +139,11 @@ abstract class OfflineModule {
         db: db,
       );
       DI.registerSingleton<PullCoordinator<T>>(coordinator);
-      _pullRunners[entityType] =
-          ({CancelToken? token}) => coordinator.pullNow(token: token);
+      _pullRunners[entityType] = ({
+        CancelToken? token,
+        void Function(PullProgress)? onProgress,
+      }) =>
+          coordinator.pullNow(token: token, onProgress: onProgress);
     }
   }
 }

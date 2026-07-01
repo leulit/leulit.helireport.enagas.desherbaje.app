@@ -5,7 +5,6 @@ import '../../data/repository/auth_repository_impl.dart';
 import '../app_di.dart';
 import '../app_router.dart';
 import '../sync/sync.dart';
-import 'session_state.dart';
 
 /// Listens to [SyncActions.authExpired] and reacts globally:
 /// 1. Clears the persisted auth session (token + prefs).

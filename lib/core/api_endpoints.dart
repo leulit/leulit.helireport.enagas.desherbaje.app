@@ -58,6 +58,9 @@ class ApiEndpoints {
   /// JSON con los puntos kilométricos (PKs) del CT identificado por [filename].
   static String pkTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-pk.json';
 
+  /// JSON con los hitos del CT identificado por [filename].
+  static String hitosTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-hitos.json';
+
   // ──────────────────────────── Imágenes ────────────────────────────
 
   /// Subida multipart de imágenes (legacy: `/operador/additem`).

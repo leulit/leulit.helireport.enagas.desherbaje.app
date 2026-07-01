@@ -231,10 +231,7 @@ class _MasterDataRowTile extends GetView<SincronizacionController> {
   String _subtitle(DateTime? last) {
     if (row.status == MasterDataStatus.downloading) {
       final label = row.progressLabel;
-      if (label != null) {
-        return '${row.kind.description}\nDescargando $label archivos…';
-      }
-      return '${row.kind.description}\nDescargando…';
+      return '${row.kind.description}\n${label ?? 'Descargando…'}';
     }
     if (row.status == MasterDataStatus.error && row.errorMessage != null) {
       return row.errorMessage!;

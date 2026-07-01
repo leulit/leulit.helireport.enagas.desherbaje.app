@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -9,6 +11,7 @@ import '../type_registry.dart';
 import 'cancel_token.dart';
 import 'pull_context.dart';
 import 'pull_outcome.dart';
+import 'pull_progress.dart';
 import 'tasks/detect_conflicts_task.dart';
 import 'tasks/dispatch_pull_completed_task.dart';
 import 'tasks/enqueue_conflicts_task.dart';
@@ -68,18 +71,55 @@ class PullCoordinator<T extends Syncable> {
         _outbox = outbox,
         _db = db;
 
-  Future<PullSummary> pullNow({CancelToken? token}) async {
+  Future<PullSummary> pullNow({
+    CancelToken? token,
+    void Function(PullProgress)? onProgress,
+  }) async {
     final ctx = PullContext<T>(registration: _registration, cancelToken: token);
+
+    final tasks = <PipelineTask<PullContext<T>>>[
+      InvokeRemoteFetcherTask<T>(),
+      DetectConflictsTask<T>(outbox: _outbox),
+      UpsertNonConflictingTask<T>(),
+      EnqueueConflictsTask<T>(db: _db),
+      UpdatePullStateTask<T>(db: _db),
+      DispatchPullCompletedTask<T>(),
+    ];
+    final total = tasks.length;
 
     // broadcast: true so we can subscribe + the pipeline can also emit without
     // "Stream already listened to" errors (belt-and-suspenders for [REVIEW G2]).
-    final pipeline = TaskPipeline<PullContext<T>>(broadcast: true)
-      ..addTask(InvokeRemoteFetcherTask<T>())
-      ..addTask(DetectConflictsTask<T>(outbox: _outbox))
-      ..addTask(UpsertNonConflictingTask<T>())
-      ..addTask(EnqueueConflictsTask<T>(db: _db))
-      ..addTask(UpdatePullStateTask<T>(db: _db))
-      ..addTask(DispatchPullCompletedTask<T>());
+    final pipeline = TaskPipeline<PullContext<T>>(broadcast: true);
+    for (final task in tasks) {
+      pipeline.addTask(task);
+    }
+
+    // Surface pipeline step transitions as UI progress. The first step (the
+    // remote fetch) is of unknown duration → emit a null fraction so the bar
+    // animates as indeterminate; subsequent (fast) steps fill it determinately.
+    StreamSubscription<PipelineEvent<PullContext<T>>>? progressSub;
+    if (onProgress != null) {
+      var completed = 0;
+      progressSub = pipeline.events.listen((event) {
+        switch (event.type) {
+          case PipelineEventType.taskStart:
+            onProgress(PullProgress(
+              fraction: completed == 0 ? null : completed / total,
+              phase: _phaseLabel(event.stepName),
+            ));
+          case PipelineEventType.taskSuccess:
+            completed++;
+            onProgress(PullProgress(
+              fraction: completed / total,
+              phase: _phaseLabel(event.stepName),
+            ));
+          case PipelineEventType.pipelineStart:
+          case PipelineEventType.pipelineEnd:
+          case PipelineEventType.error:
+            break;
+        }
+      });
+    }
 
     try {
       final result = await pipeline.run(DataPipeline.of(ctx));
@@ -108,7 +148,27 @@ class PullCoordinator<T extends Syncable> {
       await _writePullStateBlocking(ctx.registration.entityType, ctx);
       return _summary(ctx);
     } finally {
+      await progressSub?.cancel();
       pipeline.dispose();
+    }
+  }
+
+  static String _phaseLabel(String stepName) {
+    switch (stepName) {
+      case 'InvokeRemoteFetcher':
+        return 'Descargando…';
+      case 'DetectConflicts':
+        return 'Comprobando cambios…';
+      case 'UpsertNonConflicting':
+        return 'Guardando…';
+      case 'EnqueueConflicts':
+        return 'Resolviendo conflictos…';
+      case 'UpdatePullState':
+        return 'Actualizando estado…';
+      case 'DispatchPullCompleted':
+        return 'Finalizando…';
+      default:
+        return 'Descargando…';
     }
   }
 
