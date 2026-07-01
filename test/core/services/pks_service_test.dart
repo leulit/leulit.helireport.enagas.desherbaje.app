@@ -14,9 +14,11 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:helireport_desherbaje/core/app_typed_actions.dart';
 import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/services/master_data_load_result.dart';
 import 'package:helireport_desherbaje/core/services/pks_service.dart';
+import 'package:helireport_desherbaje/data/model/file_data.dart';
 import 'package:helireport_desherbaje/data/services/json_loader_service.dart';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -118,10 +120,21 @@ void main() {
   test('(d) online + network fetch → MasterDataSource.network', () async {
     SharedPreferences.setMockInitialValues({'user_json': _userJsonOneCt});
     when(() => mockConn.isConnected).thenReturn(true);
+    // Loader succeeds and downloads exactly 1 file, but it is legitimately
+    // empty (HTTP 200, no features) → processedFiles becomes 1 (no silent
+    // failure throw), buffer stays empty → itemCount == 0.
     when(() => mockLoader.loadFiles(any(), token: any(named: 'token')))
         .thenAnswer((_) async {
-      // No GeoJSON events → buffer empty → itemCount = 0.
-      // 1s timeout in _runOnce unblocks the completer.
+      AppTypedActions.geoJsonLoaded.dispatch(
+        data: FileLoadGeoJsonResult(
+          originalFileData: const FileData(
+            group: kFileGroupPk,
+            filename: 'x',
+          ),
+          processedData: const <String, dynamic>{},
+        ),
+      );
+      AppTypedActions.geoJsonLoadCompleted.dispatch();
     });
 
     service = PksService(conn: mockConn, loader: mockLoader);

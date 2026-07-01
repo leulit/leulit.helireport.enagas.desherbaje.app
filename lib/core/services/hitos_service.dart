@@ -152,6 +152,21 @@ class HitosService extends GetxService {
         return MasterDataLoadResult(resultSource, fetchedCount);
       }
 
+      // No silent failure: if the network run downloaded 0 files successfully
+      // (every file errored), surface it instead of reporting a green success.
+      // A legit empty file (200, no features) still fires a success event, so
+      // processedFiles > 0 and does not trip this.
+      final int attempted = totalFiles.value;
+      final int succeeded = processedFiles.value;
+      if (attempted > 0 && succeeded == 0) {
+        throw StateError(
+          'Descarga fallida: 0/$attempted ficheros. Revisa la conexión o el backend.',
+        );
+      }
+      if (succeeded < attempted) {
+        AppLog.w('HitosService: descarga parcial $succeeded/$attempted ficheros');
+      }
+
       // Capture count BEFORE finally clears the buffer.
       fetchedCount = _entitiesBuffer.length;
       resultSource = MasterDataSource.network;

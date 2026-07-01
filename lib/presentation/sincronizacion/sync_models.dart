@@ -1,11 +1,11 @@
 /// Identificador estable de cada fila de "datos maestros" en la página de
 /// sincronización. Solo se descargan; nunca se suben.
 enum MasterDataKind {
+  segmentos,
   user,
-  gasoductos,
   pks,
   hitos,
-  segmentos,
+  gasoductos,
   posicionesFijas,
 }
 

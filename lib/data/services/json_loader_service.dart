@@ -102,7 +102,7 @@ class JsonLoaderService extends GetxService {
 
     final pipeline = TaskPipeline<FileLoadGeoJsonResult>(broadcast: true);
     for (final file in files) {
-      pipeline.addTask(_FileDownloadTask(file, _network));
+      pipeline.addTask(_FileDownloadTask(file, _network, token));
     }
 
     pipeline.events.listen((event) {
@@ -149,8 +149,9 @@ class JsonLoaderService extends GetxService {
 class _FileDownloadTask extends PipelineTask<FileLoadGeoJsonResult> {
   final FileData _fileData;
   final NetworkService _network;
+  final CancelToken? _token;
 
-  _FileDownloadTask(this._fileData, this._network);
+  _FileDownloadTask(this._fileData, this._network, this._token);
 
   @override
   String get name => 'DownloadFile(${_fileData.group})';
@@ -162,6 +163,19 @@ class _FileDownloadTask extends PipelineTask<FileLoadGeoJsonResult> {
   Future<DataPipeline<FileLoadGeoJsonResult>> execute(
     DataPipeline<FileLoadGeoJsonResult> inputdata,
   ) async {
+    // Cooperative cancel: skip download if the run was cancelled. Stops the
+    // remaining files instantly (the in-flight request finishes via timeout).
+    if (_token?.isCancelled ?? false) {
+      return DataPipeline.error(
+        input: inputdata.input,
+        error: StateError('cancelled'),
+        output: FileLoadGeoJsonResult(
+          originalFileData: _fileData,
+          processedData: const {},
+        ),
+        stackTrace: StackTrace.current,
+      );
+    }
     try {
       final response = await _network.get(_fileData.filename);
       final raw = response.data;

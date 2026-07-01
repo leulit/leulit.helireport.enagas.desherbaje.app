@@ -83,9 +83,12 @@ class AppDI {
     await DI.allReady();
 
     DI.registerLazySingleton<JsonLoaderService>(() => JsonLoaderService());
-    DI.registerLazySingleton<GasoductosService>(() => GasoductosService());
-    DI.registerLazySingleton<PksService>(() => PksService());
-    DI.registerLazySingleton<HitosService>(() => HitosService());
+    // get_it NO dispara el lifecycle de GetxService: hay que llamar onInit() a
+    // mano o estos services nunca se suscriben a geoJsonLoaded/Completed y el
+    // progreso queda en 0/N con _entitiesBuffer vacío (descarga sin efecto).
+    DI.registerLazySingleton<GasoductosService>(() => GasoductosService()..onInit());
+    DI.registerLazySingleton<PksService>(() => PksService()..onInit());
+    DI.registerLazySingleton<HitosService>(() => HitosService()..onInit());
 
     // 5. AuthExpirationHandler — sync onInit registers the TypedAction listener.
     //    Must be a singleton so the listener survives for the app lifetime.

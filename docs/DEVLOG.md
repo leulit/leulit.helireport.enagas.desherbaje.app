@@ -1,5 +1,46 @@
 # DEVLOG
 
+## 2026-07-01 — Fix: master-data (gasoductos/pks/hitos) no descargaba (barra 0/N, sin datos)
+
+**Síntoma:** en la página de sincronización, gasoductos "colgaba minutos", pks/hitos
+terminaban sin cargar nada, barra clavada en "0/45". Datos de usuario OK (otro path).
+
+**Causa raíz:** `app_di.dart` registraba `GasoductosService`/`PksService`/`HitosService`
+en get_it (`registerLazySingleton`) **sin llamar `onInit()`**. get_it NO dispara el
+lifecycle de `GetxService`, así que estos services nunca se suscribían a las TypedActions
+`geoJsonLoaded`/`geoJsonLoadCompleted`. El `TaskPipeline` descargaba y dispatchaba los
+eventos, pero sin listener: `processedFiles` no subía (barra 0/N) y `_entitiesBuffer`
+quedaba vacío (descarga sin efecto). Footgun documentado en `feedback_di_getit_vs_getx_separate`.
+
+**Descartado:** la petición era correcta. Verificado en vivo con la firma HMAC de la app:
+`GET /api/enagas/v1/tracks/json/ct-almeria-{gasoductos|pk|hitos}.json` → 200. Firma, URL y
+esquema idénticos al webapp (mismo `ctsbyuser` → `UserCt.ct` → `filename: u.ct`). El `CT10`
+del fixture es un placeholder inexistente (404), no un bug de la app.
+
+**Fix principal:** `..onInit()` en las tres factories de `app_di.dart` (mismo patrón que
+Network/Connectivity/AuthExpirationHandler). Reordenadas las filas de sync
+(`MasterDataKind`): segmentos, user, pks, hitos, gasoductos, posicionesFijas.
+
+**Bugs secundarios (aplicados):**
+- **Cancel cooperativo:** `_FileDownloadTask` recibe el `CancelToken` y corta si
+  `isCancelled` → salta los ficheros restantes al instante (el en-vuelo termina por
+  timeout Dio). Antes: cancelar no hacía nada → había que matar la app.
+- **Sin éxito silencioso:** en los 3 services, si la descarga de red completa con
+  `processedFiles==0 && totalFiles>0` (todo falló) → `throw` → fila **error** en vez de
+  verde. Parcial (`0<ok<N`) → `AppLog.w`. Un fichero legítimamente vacío (200 sin
+  features) dispara éxito → `processedFiles>0`, no cae en el throw.
+
+**Ficheros:** `lib/core/app_di.dart`, `lib/presentation/sincronizacion/sync_models.dart`,
+`lib/data/services/json_loader_service.dart`, `lib/core/services/{gasoductos,pks,hitos}_service.dart`.
+Tests: `test/core/services/{gasoductos,pks}_service_test.dart` (fix test (d) → simula 1
+fichero descargado-vacío), `test/presentation/sincronizacion/sincronizacion_controller{,_pull}_test.dart`
+(registran `MockHitosService`, faltaba desde que se añadió `hitos` — rojo pre-existente).
+
+**Verificación:** `flutter analyze` limpio; tests de services (8/8) y de sync verdes.
+Pendiente: correr app y confirmar descarga real.
+
+---
+
 ## 2026-07-01 — Nueva entidad master-data "hitos" (réplica de pks)
 
 Añadida entidad `hitos` al proceso de sincronización, replicando EXACTAMENTE el pipeline de

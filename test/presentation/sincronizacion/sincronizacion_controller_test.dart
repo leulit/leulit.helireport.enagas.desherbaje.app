@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/services/gasoductos_service.dart';
+import 'package:helireport_desherbaje/core/services/hitos_service.dart';
 import 'package:helireport_desherbaje/core/services/master_data_load_result.dart';
 import 'package:helireport_desherbaje/core/services/pks_service.dart';
 import 'package:helireport_desherbaje/core/sync/offline_module.dart';
@@ -37,6 +38,8 @@ class MockGasoductosService extends Mock implements GasoductosService {}
 
 class MockPksService extends Mock implements PksService {}
 
+class MockHitosService extends Mock implements HitosService {}
+
 class MockOutboxQueue extends Mock implements OutboxQueue {}
 
 class MockAuthRepository extends Mock implements AuthRepository {}
@@ -47,6 +50,7 @@ void main() {
   late MockConnectivityService mockConnectivity;
   late MockGasoductosService mockGasoductos;
   late MockPksService mockPks;
+  late MockHitosService mockHitos;
   late MockOutboxQueue mockOutbox;
   late MockAuthRepository mockAuth;
   late SincronizacionController controller;
@@ -59,6 +63,7 @@ void main() {
     mockConnectivity = MockConnectivityService();
     mockGasoductos = MockGasoductosService();
     mockPks = MockPksService();
+    mockHitos = MockHitosService();
     mockOutbox = MockOutboxQueue();
     mockAuth = MockAuthRepository();
 
@@ -71,6 +76,8 @@ void main() {
     when(() => mockGasoductos.processedFiles).thenReturn(RxInt(0));
     when(() => mockPks.totalFiles).thenReturn(RxInt(0));
     when(() => mockPks.processedFiles).thenReturn(RxInt(0));
+    when(() => mockHitos.totalFiles).thenReturn(RxInt(0));
+    when(() => mockHitos.processedFiles).thenReturn(RxInt(0));
 
     DI.registerSingleton<OutboxQueue>(mockOutbox);
     OfflineModule.resetPullRunners();
@@ -79,6 +86,7 @@ void main() {
       authRepository: mockAuth,
       gasoductosService: mockGasoductos,
       pksService: mockPks,
+      hitosService: mockHitos,
       connectivity: mockConnectivity,
     );
     Get.put(controller);
@@ -186,6 +194,7 @@ void main() {
       mockConnectivity = MockConnectivityService();
       mockGasoductos = MockGasoductosService();
       mockPks = MockPksService();
+      mockHitos = MockHitosService();
       mockOutbox = MockOutboxQueue();
       mockAuth = MockAuthRepository();
 
@@ -196,6 +205,8 @@ void main() {
       when(() => mockGasoductos.processedFiles).thenReturn(RxInt(0));
       when(() => mockPks.totalFiles).thenReturn(RxInt(0));
       when(() => mockPks.processedFiles).thenReturn(RxInt(0));
+      when(() => mockHitos.totalFiles).thenReturn(RxInt(0));
+      when(() => mockHitos.processedFiles).thenReturn(RxInt(0));
 
       Get.put<OutboxQueue>(mockOutbox);
 
@@ -203,6 +214,7 @@ void main() {
         authRepository: mockAuth,
         gasoductosService: mockGasoductos,
         pksService: mockPks,
+        hitosService: mockHitos,
         connectivity: mockConnectivity,
       );
       Get.put(freshController);
