@@ -13,6 +13,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,6 +70,7 @@ void main() {
 
   setUp(() async {
     Get.reset();
+    await DI.reset();
     SharedPreferences.setMockInitialValues({});
 
     mockConnectivity = MockConnectivityService();
@@ -81,9 +83,8 @@ void main() {
     when(() => mockOutbox.countPending(entityType: any(named: 'entityType')))
         .thenAnswer((_) async => 0);
 
-    // Register OutboxQueue as plain object (not GetxService) so GetX does not
-    // invoke the service lifecycle on a mock.
-    Get.put<OutboxQueue>(mockOutbox);
+    // Register OutboxQueue in DI — resolved via AppDI.outboxQueue.
+    DI.registerSingleton<OutboxQueue>(mockOutbox);
 
     OfflineModule.resetPullRunners();
 
@@ -99,9 +100,10 @@ void main() {
     await Future.delayed(Duration.zero);
   });
 
-  tearDown(() {
+  tearDown(() async {
     OfflineModule.resetPullRunners();
     Get.reset();
+    await DI.reset();
   });
 
   group('_runOne segmentos — isDegraded branch', () {

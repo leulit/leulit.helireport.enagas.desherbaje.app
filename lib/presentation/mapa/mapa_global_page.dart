@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/api_endpoints.dart';
+import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
@@ -563,7 +564,7 @@ class _PksLoadStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pksService = Get.find<PksService>();
+    final pksService = AppDI.pksService;
     return Obx(() {
       if (!pksService.isLoading.value) return const SizedBox.shrink();
       final total = pksService.totalFiles.value;
@@ -664,8 +665,8 @@ class _MapLoadBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final mapCtrl = Get.find<MapaGlobalController>();
     final segCtrl = Get.find<SegmentosMapController>();
-    final gasoductos = Get.find<GasoductosService>();
-    final pks = Get.find<PksService>();
+    final gasoductos = AppDI.gasoductosService;
+    final pks = AppDI.pksService;
 
     return Obx(() {
       final isGas = mapCtrl.isLoadingGasoductos.value;

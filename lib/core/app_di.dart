@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../data/local/local_database.dart';
@@ -10,6 +10,8 @@ import '../data/model/mensaje_entity.dart';
 import '../data/sync/imagen_local_store.dart';
 import '../data/sync/imagen_remote_adapter.dart';
 import '../data/sync/mensaje_local_store.dart';
+import '../data/sync/video_local_store.dart';
+import '../data/sync/video_remote_adapter.dart';
 import '../data/sync/mensaje_remote_adapter.dart';
 import '../data/sync/position_batch_remote_adapter.dart';
 import '../data/sync/position_local_store.dart';
@@ -19,11 +21,11 @@ import '../data/sync/segmento_remote_fetcher.dart';
 import '../domain/entities/imagen_segmento_entity.dart';
 import '../domain/entities/position_batch_entity.dart';
 import '../domain/entities/segmento_entity.dart';
+import '../domain/entities/video_segmento_entity.dart';
 import 'services/auth_expiration_handler.dart';
 import 'services/connectivity_service.dart';
 import 'services/gasoductos_service.dart';
 import 'services/gps_background_service.dart';
-import 'services/gps_service.dart';
 import 'services/pks_service.dart';
 import 'services/session_state.dart';
 import 'sync/sync.dart';
@@ -47,58 +49,109 @@ class AppDI {
   static void resetForTest() => reset();
 
   static Future<void> _init() async {
-    // SessionState must be available before any route is resolved so that
-    // AuthMiddleware.redirect (synchronous) can read hasSession.
-    final sessionState = Get.put<SessionState>(SessionState(), permanent: true);
+    // 1. SessionState MUST be registered BEFORE any code calls AppDI.sessionState.
+    //    AuthMiddleware.redirect is synchronous and reads hasSession directly.
+    DI.registerLazySingleton<SessionState>(() => SessionState());
+
+    // 2. TypeRegistry — register ONCE (was erroneously duplicated).
+    DI.registerLazySingleton<TypeRegistry>(() => TypeRegistry());
+
     try {
       final isAuth = await AuthRepositoryImpl().isAuthenticated();
-      sessionState.set(isAuth);
+      AppDI.sessionState.set(isAuth);
     } catch (_) {
       // secure_storage unavailable (e.g. first install or permission error) →
       // treat as unauthenticated; do not block startup.
-      sessionState.set(false);
+      AppDI.sessionState.set(false);
     }
 
-    Get.put<TypeRegistry>(TypeRegistry(), permanent: true);
-    await Get.putAsync<ConnectivityService>(
-      () async => ConnectivityService(),
-      permanent: true,
-    );
-    await Get.putAsync<NetworkService>(
-      () async => NetworkService(),
-      permanent: true,
-    );
-    Get.put<GpsService>(GpsService(), permanent: true);
-    Get.put<JsonLoaderService>(JsonLoaderService(), permanent: true);
-    Get.put<GasoductosService>(GasoductosService(), permanent: true);
-    Get.put<PksService>(PksService(), permanent: true);
-    Get.put<AuthExpirationHandler>(AuthExpirationHandler(), permanent: true);
-    // Le ponemos un timeout de 15 segundos. Si en 15s no abre, lanzará un error y sabremos que es aquí.
+    // 3. ConnectivityService — onInit is async (listens to connectivity stream).
+    DI.registerSingletonAsync<ConnectivityService>(() async {
+      final s = ConnectivityService();
+      await s.onInit();
+      return s;
+    });
+
+    // 4. NetworkService — onInit is sync (sets up Dio + interceptors).
+    DI.registerSingletonAsync<NetworkService>(() async {
+      final s = NetworkService();
+      s.onInit();
+      return s;
+    });
+
+    await DI.allReady();
+
+    DI.registerLazySingleton<JsonLoaderService>(() => JsonLoaderService());
+    DI.registerLazySingleton<GasoductosService>(() => GasoductosService());
+    DI.registerLazySingleton<PksService>(() => PksService());
+
+    // 5. AuthExpirationHandler — sync onInit registers the TypedAction listener.
+    //    Must be a singleton so the listener survives for the app lifetime.
+    final handler = AuthExpirationHandler();
+    handler.onInit();
+    DI.registerSingleton<AuthExpirationHandler>(handler);
+
+    // 6. Database — timeout 15s; error surfaces to SplashController.
     final db = await LocalDatabase.instance.database.timeout(
       const Duration(seconds: 15),
       onTimeout: () {
-        throw Exception("La base de datos SQLite no responde tras 15 segundos.");
+        throw Exception(
+          'La base de datos SQLite no responde tras 15 segundos.',
+        );
       },
     );
-    Get.put<Database>(db, permanent: true);
+    DI.registerLazySingleton<Database>(() => db);
+
+    // 7. OutboxQueue — ONE instance, registered as singleton.
+    //    Previous code created two instances (local var + lazy registration) — bug.
     final outbox = OutboxQueue(db);
-    Get.put<OutboxQueue>(outbox, permanent: true);
-    Get.put<SyncEngine>(
-      SyncEngine(
+    DI.registerLazySingleton<OutboxQueue>(() => outbox);
+
+    // 8. SyncEngine reuses the same outbox singleton.
+    DI.registerLazySingleton<SyncEngine>(
+      () => SyncEngine(
         outbox: outbox,
-        registry: Get.find<TypeRegistry>(),
+        registry: AppDI.typeRegistry,
         db: db,
       ),
-      permanent: true,
     );
+
     await _registerEntities(db);
   }
 
+  // ─────────────────────────── Getters (resolve from DI) ───────────────────
+
+  static NetworkService get networkService => di.get<NetworkService>();
+
+  static GasoductosService get gasoductosService =>
+      di.get<GasoductosService>();
+
+  static PksService get pksService => di.get<PksService>();
+
+  static OutboxQueue get outboxQueue => di.get<OutboxQueue>();
+
+  static SyncEngine get syncEngine => di.get<SyncEngine>();
+
+  static ConnectivityService get connectivityService =>
+      di.get<ConnectivityService>();
+
+  static SessionState get sessionState => di.get<SessionState>();
+
+  static JsonLoaderService get jsonLoaderService =>
+      di.get<JsonLoaderService>();
+
+  static TypeRegistry get typeRegistry => di.get<TypeRegistry>();
+
+  static Database get database => di.get<Database>();
+
+  // ─────────────────────────── Entity registration ─────────────────────────
+
   static Future<void> _registerEntities(Database db) async {
-    final network = Get.find<NetworkService>();
+    // All global services resolved from DI (not GetX container).
+    final network = DI.get<NetworkService>();
 
     final segmentoStore = SegmentoLocalStore(db);
-    Get.put<SegmentoLocalStore>(segmentoStore, permanent: true);
+    DI.registerLazySingleton<SegmentoLocalStore>(() => segmentoStore);
     await OfflineModule.registerEntity<SegmentoEntity>(
       entityType: 'segmento',
       store: segmentoStore,
@@ -110,7 +163,7 @@ class AppDI {
     );
 
     final imagenStore = ImagenLocalStore(db);
-    Get.put<ImagenLocalStore>(imagenStore, permanent: true);
+    DI.registerLazySingleton<ImagenLocalStore>(() => imagenStore);
     await OfflineModule.registerEntity<ImagenSegmentoEntity>(
       entityType: 'imagen',
       store: imagenStore,
@@ -120,7 +173,7 @@ class AppDI {
     );
 
     final mensajeStore = MensajeLocalStore(db);
-    Get.put<MensajeLocalStore>(mensajeStore, permanent: true);
+    DI.registerLazySingleton<MensajeLocalStore>(() => mensajeStore);
     await OfflineModule.registerEntity<MensajeSegmentoEntity>(
       entityType: 'mensaje',
       store: mensajeStore,
@@ -130,7 +183,7 @@ class AppDI {
     );
 
     final positionStore = PositionLocalStore(db);
-    Get.put<PositionLocalStore>(positionStore, permanent: true);
+    DI.registerLazySingleton<PositionLocalStore>(() => positionStore);
     await OfflineModule.registerEntity<PositionBatchEntity>(
       entityType: 'position_batch',
       store: positionStore,
@@ -139,7 +192,17 @@ class AppDI {
       fromJson: PositionBatchEntity.fromJson,
     );
 
-    Get.put<GpsBackgroundService>(GpsBackgroundService(), permanent: true);
+    final videoStore = VideoLocalStore(db);
+    DI.registerLazySingleton<VideoLocalStore>(() => videoStore);
+    await OfflineModule.registerEntity<VideoSegmentoEntity>(
+      entityType: 'video',
+      store: videoStore,
+      adapter: VideoRemoteAdapter(network, videoStore),
+      conflictResolver: const ServerWinsResolver<VideoSegmentoEntity>(),
+      fromJson: VideoSegmentoEntity.fromJson,
+    );
+
+    DI.registerLazySingleton<GpsBackgroundService>(() => GpsBackgroundService());
   }
 
   static Map<String, String> _formatSegmentoForDisplay(SegmentoEntity s) => {

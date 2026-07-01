@@ -16,6 +16,7 @@ import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
+import '../../domain/entities/video_segmento_entity.dart';
 import 'segmento_detalle_controller.dart';
 
 class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
@@ -24,7 +25,7 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 6,
       child: Scaffold(
         appBar: _buildAppBar(),
         body: Column(
@@ -140,6 +141,8 @@ class _PanelDatosTabs extends StatelessWidget {
               Tab(icon: Icon(Icons.forum_outlined), text: 'Mensajes'),
               Tab(icon: Icon(Icons.photo_library_outlined), text: 'Antes'),
               Tab(icon: Icon(Icons.photo_library_outlined), text: 'Después'),
+              Tab(icon: Icon(Icons.videocam_outlined), text: 'Vídeo antes'),
+              Tab(icon: Icon(Icons.videocam_outlined), text: 'Vídeo desp.'),
             ],
           ),
         ),
@@ -155,6 +158,14 @@ class _PanelDatosTabs extends StatelessWidget {
               _ImagenesCarousel(
                 controller: controller,
                 tipo: TipoFoto.despues,
+              ),
+              _VideosTab(
+                controller: controller,
+                tipo: TipoVideo.antes,
+              ),
+              _VideosTab(
+                controller: controller,
+                tipo: TipoVideo.despues,
               ),
             ],
           ),
@@ -790,6 +801,113 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Tab Vídeos ─────────────────────────────────────────────────────────────
+
+/// Lista de vídeos de un [tipo] (antes / después) + botón de grabación.
+/// Sin reproducción in-app (v1): muestra nombre, tamaño y badge de estado.
+class _VideosTab extends StatelessWidget {
+  final SegmentoDetalleController controller;
+  final TipoVideo tipo;
+
+  const _VideosTab({required this.controller, required this.tipo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: Obx(() {
+            final vids = controller.videosPorTipo(tipo);
+            if (vids.isEmpty) {
+              return _EmptyState(
+                icon: Icons.videocam_off_outlined,
+                message: tipo == TipoVideo.antes
+                    ? 'Sin vídeos antes'
+                    : 'Sin vídeos después',
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: vids.length,
+              itemBuilder: (_, i) => _VideoTile(video: vids[i]),
+            );
+          }),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => controller.capturarVideo(tipo),
+              icon: const Icon(Icons.videocam),
+              label: Text(
+                tipo == TipoVideo.antes
+                    ? 'Grabar vídeo antes'
+                    : 'Grabar vídeo después',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VideoTile extends StatelessWidget {
+  final VideoSegmentoEntity video;
+  const _VideoTile({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = !video.isSubida;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.moduleGreenLight,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.videocam,
+            color: AppColors.moduleGreen,
+            size: 22,
+          ),
+        ),
+        title: Text(
+          video.filename,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          video.tamanyoLegible,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isPending
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Pendiente',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.orange.shade800,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            : const Icon(Icons.cloud_done, color: AppColors.moduleGreen, size: 20),
       ),
     );
   }

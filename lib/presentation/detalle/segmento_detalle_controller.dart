@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:logger/logger.dart';
 
+import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/my_getx_controller.dart';
@@ -13,27 +17,34 @@ import '../../data/repository/auth_repository_impl.dart';
 import '../../data/repository/imagen_repository_impl.dart';
 import '../../data/repository/mensaje_segmento_repository.dart';
 import '../../data/repository/segmento_repository_impl.dart';
+import '../../data/repository/video_repository_impl.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../domain/entities/video_segmento_entity.dart';
 import 'edit_extremos/edit_extremos_dialog.dart';
 
 class SegmentoDetalleController extends MyGetxController {
+  static final Logger _log = Logger();
+
   SegmentoDetalleController({
     AuthRepositoryImpl? authRepo,
     SegmentoRepositoryImpl? segmentoRepo,
     ImagenRepositoryImpl? imagenRepo,
+    VideoRepositoryImpl? videoRepo,
     MensajeSegmentoRepository? mensajeRepo,
     ImagePicker? picker,
   })  : _authRepo = authRepo ?? AuthRepositoryImpl(),
         _segmentoRepo = segmentoRepo ?? SegmentoRepositoryImpl(),
         _imagenRepo = imagenRepo ?? ImagenRepositoryImpl(),
+        _videoRepo = videoRepo ?? VideoRepositoryImpl(),
         _mensajeRepo = mensajeRepo ?? MensajeSegmentoRepository(),
         _picker = picker ?? ImagePicker();
 
   final AuthRepositoryImpl _authRepo;
   final SegmentoRepositoryImpl _segmentoRepo;
   final ImagenRepositoryImpl _imagenRepo;
+  final VideoRepositoryImpl _videoRepo;
   final MensajeSegmentoRepository _mensajeRepo;
   final ImagePicker _picker;
 
@@ -51,6 +62,9 @@ class SegmentoDetalleController extends MyGetxController {
 
   /// Imágenes mostradas en los carruseles (remotas + capturadas localmente).
   final imagenes = <ImagenSegmentoEntity>[].obs;
+
+  /// Vídeos locales pendientes + subidos para este segmento.
+  final videos = <VideoSegmentoEntity>[].obs;
 
   // ──────────────────────────── Mensajes ────────────────────────────
   final mensajes = <MensajeSegmentoEntity>[].obs;
@@ -78,7 +92,7 @@ class SegmentoDetalleController extends MyGetxController {
 
   final gasoductosPolylines = <Polyline>[].obs;
 
-  GasoductosService get _gasoductosService => Get.find<GasoductosService>();
+  GasoductosService get _gasoductosService => AppDI.gasoductosService;
 
   @override
   void myOnInit() {
@@ -91,6 +105,7 @@ class SegmentoDetalleController extends MyGetxController {
     _initMap();
     _loadUser();
     _loadImagenes();
+    _loadVideos();
     _loadMensajes();
     _ensureGasoductos();
   }
@@ -115,6 +130,10 @@ class SegmentoDetalleController extends MyGetxController {
   /// Imágenes filtradas por tipo (antes / después) para los carruseles.
   List<ImagenSegmentoEntity> imagenesPorTipo(TipoFoto tipo) =>
       imagenes.where((i) => i.tipoFoto == tipo).toList();
+
+  /// Vídeos filtrados por tipo (antes / después).
+  List<VideoSegmentoEntity> videosPorTipo(TipoVideo tipo) =>
+      videos.where((v) => v.tipoVideo == tipo).toList();
 
   Future<void> _loadImagenes() async {
     final remote = segmento.imagenes;
@@ -208,6 +227,71 @@ class SegmentoDetalleController extends MyGetxController {
   void zoomOut() {
     final cam = mapController.camera;
     mapController.move(cam.center, (cam.zoom - 1).clamp(5, 20));
+  }
+
+  Future<void> _loadVideos() async {
+    final segId = segmento.id;
+    if (segId == null) return;
+    final local = await _videoRepo.getAllBySegmento(segId);
+    videos.assignAll(local);
+  }
+
+  // ──────────────────────────── Captura de vídeo ───────────────────────────
+
+  /// Abre la grabadora nativa del SO para capturar un vídeo (máx. 3 min),
+  /// construye la entidad y la persiste localmente en el outbox.
+  Future<void> capturarVideo(TipoVideo tipo) async {
+    XFile? xFile;
+    try {
+      xFile = await _picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 3),
+      );
+    } catch (e, st) {
+      _log.e('SegmentoDetalleController: error al abrir grabadora', error: e, stackTrace: st);
+      _showSnack(
+        title: 'Error',
+        message: 'No se ha podido abrir la grabadora: $e',
+        isError: true,
+      );
+      return;
+    }
+
+    if (xFile == null) return; // usuario canceló
+
+    try {
+      final file = File(xFile.path);
+      final tamanyoBytes = await file.length();
+      final filename = xFile.path.split('/').last;
+      final ext = filename.split('.').last.toLowerCase();
+      final mimeType = switch (ext) {
+        'mp4'  => 'video/mp4',
+        'mov'  => 'video/quicktime',
+        'm4v'  => 'video/x-m4v',
+        _      => 'video/mp4',
+      };
+
+      final video = VideoSegmentoEntity(
+        actividadId: 0,
+        segmentoId: segmento.id ?? 0,
+        tipoVideo: tipo,
+        filename: filename,
+        ruta: xFile.path,
+        capturadaAt: DateTime.now(),
+      )
+        ..mimeType = mimeType
+        ..tamanyoBytes = tamanyoBytes;
+
+      await _videoRepo.saveLocal(video);
+      await _loadVideos();
+    } catch (e, st) {
+      _log.e('SegmentoDetalleController: error al guardar vídeo', error: e, stackTrace: st);
+      _showSnack(
+        title: 'Error',
+        message: 'No se ha podido guardar el vídeo: $e',
+        isError: true,
+      );
+    }
   }
 
   // ──────────────────────────── Captura de foto ────────────────────────────

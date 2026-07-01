@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'services/session_state.dart';
 import '../presentation/auth/login_page.dart';
 import '../presentation/auth/login_page_binding.dart';
@@ -85,8 +86,8 @@ class AuthMiddleware extends GetMiddleware {
     // redirect loop that would occur if the middleware ran on the login page.
     if (route == AppRoutes.login || route == AppRoutes.splash) return null;
 
-    final ok = Get.isRegistered<SessionState>() &&
-        Get.find<SessionState>().hasSession;
+    final ok = DI.isRegistered<SessionState>() &&
+        DI.get<SessionState>().hasSession;
     return ok ? null : const RouteSettings(name: AppRoutes.login);
   }
 }

@@ -1,5 +1,6 @@
-import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
+import '../../core/app_di.dart';
 import '../../core/app_log.dart';
 import '../../core/api_endpoints.dart';
 import '../../core/result/data_result.dart';
@@ -34,10 +35,10 @@ class MensajeSegmentoRepository {
     NetworkService? network,
     OfflineRepository<MensajeSegmentoEntity>? offline,
     MensajeLocalStore? localStore,
-  })  : _network = network ?? Get.find<NetworkService>(),
+  })  : _network = network ?? AppDI.networkService,
         _offline =
-            offline ?? Get.find<OfflineRepository<MensajeSegmentoEntity>>(),
-        _localStore = localStore ?? Get.find<MensajeLocalStore>();
+            offline ?? DI.get<OfflineRepository<MensajeSegmentoEntity>>(),
+        _localStore = localStore ?? DI.get<MensajeLocalStore>();
 
   final NetworkService _network;
   final OfflineRepository<MensajeSegmentoEntity> _offline;

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,11 +17,11 @@ class _MockOffline extends Mock
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Returns a service with a registered mock offline repo.
+/// Returns a service with a registered mock offline repo in DI.
 /// Does NOT call start() — bypasses Geolocator/foreground service plugins.
 GpsBackgroundService _buildService(_MockOffline offline) {
-  Get.put<OfflineRepository<PositionBatchEntity>>(offline);
-  return Get.put<GpsBackgroundService>(GpsBackgroundService());
+  DI.registerSingleton<OfflineRepository<PositionBatchEntity>>(offline);
+  return GpsBackgroundService();
 }
 
 PositionPoint _point(DateTime capturedAt) => PositionPoint(
@@ -33,8 +34,9 @@ void main() {
   late _MockOffline offline;
   late GpsBackgroundService svc;
 
-  setUp(() {
+  setUp(() async {
     Get.reset();
+    await DI.reset();
     offline = _MockOffline();
     svc = _buildService(offline);
 
@@ -48,7 +50,10 @@ void main() {
     );
   });
 
-  tearDown(() => Get.reset());
+  tearDown(() async {
+    Get.reset();
+    await DI.reset();
+  });
 
   // ─── NF-7: write-then-clear ───────────────────────────────────────────────
 

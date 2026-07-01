@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../data/repository/auth_repository_impl.dart';
+import '../app_di.dart';
 import '../app_router.dart';
 import '../sync/sync.dart';
 import 'session_state.dart';
@@ -44,9 +45,7 @@ class AuthExpirationHandler extends GetxService {
     _handling = true;
     try {
       await AuthRepositoryImpl().logout();
-      if (Get.isRegistered<SessionState>()) {
-        Get.find<SessionState>().set(false);
-      }
+      AppDI.sessionState.set(false);
       if (Get.currentRoute != AppRoutes.login) {
         Get.offAllNamed(AppRoutes.login);
       }

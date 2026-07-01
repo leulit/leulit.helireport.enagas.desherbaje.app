@@ -40,6 +40,7 @@ These apply to every line of code in this project, no exceptions:
 
 ### State Management
 - GetX only — no BLoC, no Riverpod, no Provider
+- **DI de singletons globales: `leulit_flutter_dependency_injection` (`DI`/`di.get`, facade sobre get_it), NO el service-locator de GetX.** GetX se usa para routing (`GetMaterialApp`/`GetPage`/`GetMiddleware`), reactividad (`.obs`/`Obx`) y bindings de controllers de pantalla. Servicios/stores/engine/repos-infra se registran y resuelven con `DI`. Regla: si es global → `DI.get<T>()`; si es controller de pantalla → binding GetX.
 - `StatelessWidget` + `GetView<Controller>` as the default
 - `StatefulWidget` only for: `AnimationController`, `FocusNode`, `WidgetsBindingObserver`
 - `Obx` scope as narrow as possible — wrap only the rebuilding widget
@@ -70,6 +71,7 @@ These apply to every line of code in this project, no exceptions:
 5. **Al corregir bugs recurrentes**, documenta la solución en la sección "Lecciones aprendidas".
 6. **Al modificar rutas, roles, o entidades**, actualiza las tablas correspondientes.
 7. **Usa la memoria persistente** (`~/.claude/projects/.../memory/`) para notas detalladas de debugging y enlaza desde aquí.
+8. **El catálogo de referencia** (estructura de `lib/`, rutas, entidades, controladores, GetxServices, casos de uso, dependencias) vive en [`docs/ARCHITECTURE_REFERENCE.md`](docs/ARCHITECTURE_REFERENCE.md), NO aquí. Al crear archivos/entidades/rutas/servicios o cambiar `pubspec.yaml`, actualízalo **allí** con estas mismas reglas.
 
 > Si detectas que alguna información aquí es incorrecta o está desactualizada, corrígela inmediatamente.
 
@@ -87,269 +89,11 @@ Permite gestionar actividades de desherbaje sobre segmentos de gasoducto: consul
 
 ---
 
-## Estructura de lib/
+## Catálogo de referencia (estructura, rutas, entidades, controladores, casos de uso, dependencias)
 
-```
-lib/
-├── main.dart                                      # Entry point, inicialización GetX services
-├── main_app.dart                                  # GetMaterialApp config, tema, rutas
-├── core/
-│   ├── app_config.dart                            # baseUrl, hmacSecret
-│   ├── app_di.dart                                # DI global. Registry → DB → engine → entities
-│   ├── app_router.dart                            # AppRoutes + AppPages + AuthMiddleware
-│   ├── app_theme.dart                             # Colores, TextStyles, espaciado
-│   ├── app_typed_actions.dart                     # TypedActions globales del proyecto
-│   ├── api_endpoints.dart                         # URLs externas y endpoints del backend
-│   ├── my_getx_controller.dart                    # Base controller con TypedAction lifecycle
-│   ├── result/data_result.dart                    # Either<Failure, T> del proyecto
-│   ├── services/
-│   │   ├── api_security_service.dart              # Generación headers HMAC
-│   │   ├── auth_expiration_handler.dart           # Listener global de SyncActions.authExpired
-│   │   ├── connectivity_service.dart              # GetxService: monitoriza red
-│   │   ├── gasoductos_service.dart                # Master data legacy (no integrado al motor)
-│   │   ├── gps_background_service.dart            # GPS background con buffer 500/30s
-│   │   ├── gps_service.dart                       # Permisos de ubicación
-│   │   └── pks_service.dart                       # Master data PK legacy
-│   └── sync/                                      # Motor offline-first (extraíble a paquete)
-│       ├── sync.dart                              # Barrel export público
-│       ├── sync_actions.dart                      # TypedActions del motor
-│       ├── type_registry.dart                     # TypeRegistration<T> + TypeRegistry
-│       ├── offline_module.dart                    # registerEntity<T>() — extension point
-│       ├── contracts/
-│       │   ├── syncable.dart                      # clientId/remoteId/updatedAt/toJson
-│       │   ├── local_store.dart                   # entityType + schemaVersion + migrate + CRUD
-│       │   ├── remote_adapter.dart                # push() + SyncOutcome variants
-│       │   ├── remote_fetcher.dart                # pullAll() (opcional por entidad)
-│       │   ├── conflict_resolver.dart             # 4 presets: ServerWins/LocalWins/LWW/Interactive
-│       │   ├── sync_job.dart                      # SyncOperation + SyncStatus + SyncJob row
-│       │   └── auth_expired_exception.dart        # Excepción 401 que aborta drain
-│       ├── database/
-│       │   └── offline_database.dart              # WAL + tablas infra + migrateEntity
-│       ├── outbox/
-│       │   └── outbox_queue.dart                  # CRUD sync_queue (sin retry, sin backoff)
-│       ├── engine/
-│       │   ├── sync_engine.dart                   # drain() con TaskPipeline por job
-│       │   ├── sync_job_context.dart
-│       │   └── tasks/
-│       │       ├── load_entity_task.dart
-│       │       ├── invoke_remote_adapter_task.dart
-│       │       ├── interpret_outcome_task.dart
-│       │       ├── update_local_state_task.dart
-│       │       └── dispatch_action_task.dart
-│       ├── pull/
-│       │   ├── cancel_token.dart                  # Cancelación cooperativa
-│       │   ├── pull_context.dart
-│       │   ├── pull_coordinator.dart              # pullNow() con TaskPipeline
-│       │   └── tasks/
-│       │       ├── invoke_remote_fetcher_task.dart
-│       │       ├── detect_conflicts_task.dart
-│       │       ├── upsert_non_conflicting_task.dart
-│       │       ├── enqueue_conflicts_task.dart
-│       │       ├── update_pull_state_task.dart
-│       │       └── dispatch_pull_completed_task.dart
-│       └── repository/
-│           └── offline_repository.dart            # CRUD genérico local + outbox enqueue
-├── domain/
-│   ├── entities/
-│   │   ├── segmento_entity.dart                   # Implementa Syncable
-│   │   ├── imagen_segmento_entity.dart            # Implementa Syncable
-│   │   ├── position_batch_entity.dart             # Lote GPS — implementa Syncable
-│   │   ├── ct_info_entity.dart
-│   │   ├── gasoducto_entity.dart
-│   │   └── user_entity.dart
-│   ├── repository/
-│   │   ├── segmento_repository.dart               # Interface
-│   │   └── auth_repository.dart                   # Interface
-│   └── usecases/
-│       ├── get_segmentos_usecase.dart
-│       └── update_segmento_estado_usecase.dart
-├── data/
-│   ├── local/
-│   │   └── local_database.dart                    # Wrapper sobre OfflineDatabase + tablas master
-│   ├── network/
-│   │   ├── network_service.dart                   # Dio + interceptor HMAC + retry transporte
-│   │   ├── network_error.dart                     # NetworkErrorCategory + NetworkError
-│   │   └── sync_outcome_from_network_error.dart   # Mapper + 401 → AuthExpiredException
-│   ├── model/
-│   │   ├── mensaje_entity.dart                    # MensajeSegmentoEntity (Syncable)
-│   │   └── ...
-│   ├── providers/
-│   │   └── auth_data_provider.dart                # Solo auth queda como provider standalone
-│   ├── repository/
-│   │   ├── auth_repository_impl.dart
-│   │   ├── segmento_repository_impl.dart          # Usa OfflineRepository<SegmentoEntity>
-│   │   ├── imagen_repository_impl.dart            # Usa OfflineRepository<ImagenSegmentoEntity>
-│   │   └── mensaje_segmento_repository.dart       # Push via motor + lectura online (TODO §12.1)
-│   └── sync/                                      # Adapters/stores específicos por entidad
-│       ├── segmento_local_store.dart
-│       ├── segmento_remote_adapter.dart
-│       ├── segmento_remote_fetcher.dart
-│       ├── imagen_local_store.dart
-│       ├── imagen_remote_adapter.dart
-│       ├── mensaje_local_store.dart
-│       ├── mensaje_remote_adapter.dart
-│       ├── position_local_store.dart
-│       └── position_batch_remote_adapter.dart
-└── presentation/
-    ├── auth/
-    │   ├── login_page.dart
-    │   ├── login_page_binding.dart
-    │   └── login_page_controller.dart
-    ├── segmentos/                                 # Listado de segmentos
-    │   ├── segmentos_list_page.dart
-    │   ├── segmentos_list_binding.dart
-    │   └── segmentos_list_controller.dart
-    ├── detalle/                                   # Detalle de segmento + edición
-    │   ├── segmento_detalle_page.dart
-    │   ├── segmento_detalle_binding.dart
-    │   ├── segmento_detalle_controller.dart
-    │   └── edit_extremos/
-    ├── camera/                                    # Captura de fotos
-    │   └── camera_capture_page.dart
-    ├── forzar_envio/                              # Atajo "subir todo lo de esta entidad"
-    │   ├── forzar_envio_page.dart
-    │   ├── forzar_envio_binding.dart
-    │   └── forzar_envio_controller.dart
-    ├── sincronizacion/                            # Sync page con 3 secciones + Preparar campo
-    │   ├── sincronizacion_page.dart
-    │   ├── sincronizacion_binding.dart
-    │   ├── sincronizacion_controller.dart
-    │   ├── sync_models.dart                       # DTOs UI: PendingByEntity, ConflictRow, ...
-    │   └── field_work_tasks.dart                  # PipelineTasks de "Preparar trabajo de campo"
-    └── mapa/
-        ├── mapa_global_page.dart
-        ├── mapa_global_binding.dart
-        ├── mapa_global_controller.dart            # Arranca/para GpsBackgroundService
-        ├── lines_cut/
-        └── legacy/
-```
-
----
-
-## Rutas
-
-| Constante | Path | Página | Protegida |
-|---|---|---|---|
-| `AppRoutes.login` | `/login` | `LoginPage` | No |
-| `AppRoutes.segmentos` | `/segmentos` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
-| `AppRoutes.detalle` | `/segmentos/detalle` | `SegmentoDetallePage` | Sí |
-| `AppRoutes.camera` | `/camera` | `CameraCapturePage` | Sí |
-| `AppRoutes.mapa` | `/mapa` | `MapaGlobalPage` | Sí |
-| `AppRoutes.sincronizacion` | `/sincronizacion` | `SincronizacionPage` | Sí (`AuthMiddleware`) |
-| `AppRoutes.forzarEnvio` | `/forzar-envio` | `ForzarEnvioPage` | Sí (`AuthMiddleware`) |
-
----
-
-## Entidades de Dominio
-
-Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 inmutable, `remoteId?` asignado por backend, `updatedAt`). El concepto de `ActividadEntity` ya no existe: sus campos viven dentro de `SegmentoEntity` (estado, fechas, tipoActividad).
-
-### `SegmentoEntity` — `Syncable`, push + pull
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `clientId` | `String` | UUID v4 inmutable (PK lógica del dominio) |
-| `id` | `int?` | ID remoto del backend (nullable hasta primer sync) |
-| `ctId` | `int` | Código CT Enagas (entero) |
-| `nombre` | `String?` | |
-| `descripcion` | `String` | |
-| `traza` | `String?` | |
-| `tipoInstalacion` | `TipoInstalacion` | concentrada, lineal |
-| `pkInicio/Fin` | `double?` | PK kilométrico |
-| `lat/lngInicio`, `lat/lngFin` | `double?` | |
-| `ubicacionGis` | `List<LatLng>` | Polilínea parseada de GeoJSON |
-| `tipoActividad` | `TipoActividad` | deshierbeSelectivo, desbroceManual… |
-| `estado` | `EstadoActividad` | propuesta, validada, ejecución, finalizada, cerrada |
-| `imagenes` | `List<ImagenSegmentoEntity>` | |
-| `mensajes` | `List<MensajeSegmentoEntity>` | |
-| `createdAt`, `fechaInicio`, `fechaFin` | `DateTime?` | |
-| `updatedAt` | `DateTime` | escrito por `touchUpdated()` en cada cambio |
-| `longitud` / `longitudKm` | getters | Haversine sobre `ubicacionGis` |
-
-### `ImagenSegmentoEntity` — `Syncable`, push only
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `clientId` | `String` | UUID v4 |
-| `id` | `int?` | ID remoto tras upload |
-| `actividadId`, `segmentoId` | `int` | |
-| `tipoFoto` | `TipoFoto` | antes, despues |
-| `filename`, `ruta`, `url` | `String` | local/remote |
-| `mimeType`, `tamanyoBytes` | | |
-| `latitud`, `longitud`, `fixedLatitud`, `fixedLongitud` | `double?` | |
-| `capturadaAt`, `subidaAt`, `createdAt`, `updatedAtRemote` | `DateTime?` | |
-| `subidaPor` | `int?` | |
-
-### `MensajeSegmentoEntity` — `Syncable`, push only (lectura online por ahora)
-| Campo | Tipo |
-|---|---|
-| `clientId` | `String` UUID |
-| `id` | `int?` |
-| `segmentoId` | `int` |
-| `mensaje` | `String` |
-| `enviadoPor` | `int?` |
-| `createdAt`, `updatedAt` | `DateTime` |
-
-### `PositionBatchEntity` — `Syncable`, push only (GPS)
-Lote de hasta ~500 puntos GPS. La unidad de sincronización del tracking.
-| Campo | Tipo |
-|---|---|
-| `clientId` (= `batch_client_id`) | `String` UUID |
-| `id` | `int?` (remote_id) |
-| `operadorId` | `int` |
-| `points` | `List<PositionPoint>` |
-| `startedAt`, `endedAt` | `DateTime` |
-
-### `UserEntity`
-NO es `Syncable` — se obtiene en login y vive como info de sesión.
-| Campo | Tipo |
-|---|---|
-| `id` | `int` |
-| `usuario`, `nombre` | `String` |
-| `cts` | `List<CtInfo>` |
-| `token` | `String` |
-
----
-
-## Controladores
-
-| Controlador | Archivo | Responsabilidad clave |
-|---|---|---|
-| `LoginPageController` | `presentation/auth/` | Login, toggle password, último usuario, parse errores |
-| `SegmentosListController` | `presentation/segmentos/` | Lee local de segmentos, filtra por estado, navega a detalle |
-| `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado, edita descripción, gestiona mensajes |
-| `EditExtremosController` | `presentation/detalle/edit_extremos/` | Edición de extremos del segmento sobre el mapa |
-| `CameraCaptureController` | `presentation/camera/` | Captura cámara → enqueue al outbox vía `OfflineRepository` |
-| `MapaGlobalController` | `presentation/mapa/` | Mapa global; arranca/para `GpsBackgroundService` en su ciclo |
-| `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
-| `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo" |
-| `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/mensaje) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
-| `SplashController` | `presentation/splash/` | Ruta inicial; `await AppDI.init()` con spinner/reintentar antes de navegar a login |
-
-### GetxServices (globales, permanent: true)
-
-| Servicio | Responsabilidad |
-|---|---|
-| `ConnectivityService` | Monitoriza red; dispatcha `SyncActions.connectionRestored/Lost` (informativo, NO dispara drain) |
-| `NetworkService` | Cliente Dio singleton con interceptor HMAC + retry de transporte |
-| `GpsService` | Permisos de ubicación |
-| `GpsBackgroundService` | Tracking GPS con buffer 500/30s; lifecycle atado al mapa |
-| `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
-| `GasoductosService` | Master data legacy de trazas (no integrado al motor — ver §12.2 doc backend) |
-| `PksService` | Master data legacy de puntos kilométricos |
-| `AuthExpirationHandler` | Listener global de `SyncActions.authExpired` → logout + nav login |
-| `TypeRegistry` | Registro de tipos del motor (poblado por `OfflineModule.registerEntity`) |
-| `OutboxQueue` | Cola persistente de operaciones pendientes |
-| `SyncEngine` | Motor de drain del outbox (manual, sin retry/backoff) |
-| `OfflineRepository<T>` | Por entidad con adapter — registrado por `OfflineModule` |
-| `PullCoordinator<T>` | Por entidad con fetcher — registrado por `OfflineModule` |
-
----
-
-## Casos de Uso
-
-| Caso de Uso | Firma | Descripción |
-|---|---|---|
-| `GetSegmentosUseCase` | `execute(int operadorId, List<int> cts) → Future<DataResult<List<SegmentoEntity>>>` | Lee segmentos del store local (offline-first) |
-| `UpdateSegmentoEstadoUseCase` | `execute(int id, EstadoActividad) → Future<DataResult<bool>>` | Actualiza estado vía `OfflineRepository` (local + outbox) |
+> El catálogo detallado vive en **[`docs/ARCHITECTURE_REFERENCE.md`](docs/ARCHITECTURE_REFERENCE.md)**: árbol completo de `lib/`, tabla de rutas, entidades de dominio con todos sus campos, controladores + GetxServices, casos de uso y dependencias de `pubspec.yaml` con versiones.
+>
+> Se mantiene fuera de este fichero para no inflarlo ni desincronizarlo: ese contenido refleja el código y se actualiza siguiendo las mismas reglas de auto-mantenimiento (ver arriba).
 
 ---
 
@@ -439,39 +183,17 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 
 ## Seguridad de Red
 
-- **HMAC-SHA256** sobre cada petición: `ApiSecurityService` genera el header firmado con `AppConfig.hmacSecret`
-- `NetworkService` añade el header via interceptor Dio antes de cada request
-- Token de usuario almacenado en `flutter_secure_storage`
+### Esquema HMAC único — TODA la API `/api/enagas/v1`
+> A 2026-06-30 la app usa **un solo** esquema HMAC para todos los endpoints (login, segmentos, mensajes, imágenes, positions, tracks JSON y vídeo). El esquema legacy `x-flutter-*` + nonce fue eliminado: el backend nunca lo validó.
 
----
-
-## Dependencias Clave (pubspec.yaml)
-
-| Paquete | Versión | Uso |
-|---|---|---|
-| `get` | `^4.7.3` | State management, navegación, DI |
-| `dio` | `^5.9.2` | HTTP client |
-| `flutter_map` | `^8.3.0` | Mapas |
-| `flutter_map_cancellable_tile_provider` | `^3.1.1` | Tiles cancelables |
-| `latlong2` | `^0.9.1` | Coordenadas |
-| `sqflite` | `^2.4.2` | SQLite local |
-| `image_picker` | `^1.2.1` | Galería |
-| `camera` | `^0.12.0+1` | Cámara |
-| `photo_view` | `^0.15.0` | Zoom de fotos |
-| `cached_network_image` | `^3.4.1` | Cache de imágenes |
-| `connectivity_plus` | `^7.1.1` | Estado de red |
-| `flutter_secure_storage` | `^10.0.0` | Token seguro |
-| `shared_preferences` | `^2.5.5` | Preferencias ligeras |
-| `crypto` | `^3.0.7` | HMAC |
-| `uuid` | `^4.5.3` | IDs únicos locales |
-| `logger` | `^2.7.0` | Logging con niveles |
-| `permission_handler` | `^12.0.1` | Permisos runtime |
-| `intl` | `^0.20.2` | Fechas/i18n |
-| `geolocator` | `^14.0.2` | GPS stream (foreground + iOS background) |
-| `flutter_foreground_task` | `^9.2.2` | Foreground service Android para GPS |
-| `leulit_flutter_actionmanager` | `^5.6.0` | TypedAction bus entre capas |
-| `leulit_pipeline_pattern` | path | TaskPipeline para flujos secuenciales async |
-| `mocktail` | `^1.0.5` (dev) | Tests |
+- **HMAC-SHA256 sin nonce**: `ApiSecurityService.buildHmacHeaders(method, path)` genera `X-HMAC-Signature` (hex lowercase) + `X-Timestamp` (**milisegundos**)
+- Payload firmado: `"{timestampMs}:{METHOD_UPPERCASE}:{path}"`. `path` = relativo, sin host, con querystring si la hubiera. Ventana anti-replay ±5 min → firmar justo antes de enviar (también en cada reintento)
+- **Sin Bearer token, sin nonce.** La firma HMAC es el único mecanismo de autenticación. El interceptor no añade `Authorization`; el `token` que devuelve el login se guarda en la entidad pero hoy no viaja como Bearer
+- Dos instancias Dio, **mismo esquema**:
+  - `NetworkService._dio` (REST general): `_HmacInterceptor` firma cada request — quita el host de `options.uri` y firma el path con prefijo `/api/enagas/v1`. Lleva `_RetryInterceptor` (5xx/408/429/timeout)
+  - `NetworkService._videoDio` (solo vídeo): sin interceptors; cada método firma manualmente con `buildHmacHeaders`. Timeouts de 4 min (chunks grandes), sin retry (el adapter reintenta por chunk)
+- Secret: `AppConfig.hmacSecret` vía `--dart-define=HMAC_SECRET=<64-hex>` (el backend lee `ENAGAS_HMAC_SECRET`). El placeholder por defecto NO valida → 401
+- **401/403 = fallo de firma HMAC, NO expiración de sesión.** En rutas de vídeo → `SyncUnrecoverable`, sin logout. En login, `login_page_controller._parseError` mapea "401" a "Usuario o contraseña incorrectos"
 
 ---
 
@@ -514,6 +236,11 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 - **Parse fallido → log + fallback determinista, NUNCA `DateTime.now()`.** Un `updated_at`/timestamp corrupto no debe fabricar `now()` (rompe LWW/orden); loguear y caer a un valor determinista (p.ej. `endedAt`).
 - **Buffers: escribir-luego-limpiar + mutex.** En flush de GPS, `await create()` PRIMERO y `removeRange` solo tras éxito; mutex `_flushing` no-reentrante (timer + threshold solapan). `clear()` antes del await pierde el lote si la escritura falla.
 - **No tomar decisiones de funcionalidad/UX sin validación del responsable.** Distinguir corrección de bug (restaura intención) vs cambio de funcionalidad (requiere sign-off). Ver memoria `feedback_no_functionality_decisions`.
+- **Doble esquema HMAC: aislar en el adaptador, no en el motor.** Cuando un endpoint usa un esquema de autenticación distinto al del resto de la app, la respuesta correcta no es modificar `NetworkService` para soportar modos, sino: (a) añadir un método estático nuevo en `ApiSecurityService` para el esquema nuevo; (b) añadir una instancia Dio separada en `NetworkService` con los timeouts y la ausencia de interceptors que requiere ese endpoint; (c) exponer 1-N métodos de facade en `NetworkService` que apliquen el esquema correcto manualmente. El motor (`sync_engine`, `outbox_queue`, etc.) y el motor de interceptors del Dio principal no se tocan.
+- **401/403 no siempre es expiración de token.** `syncOutcomeFromNetworkError` asume que 401 = sesión expirada y lanza `AuthExpiredException`. Esto es correcto para endpoints con Bearer token. Para endpoints HMAC-only (vídeo), 401/403 = firma rechazada → `SyncUnrecoverable` sin logout. El adaptador debe bypassear el helper estándar con un `_mapNetworkError` propio que capture `NetworkErrorCategory.unauthorized` antes de llegar al helper.
+- **DI: `DI` (get_it) y `Get` (GetX) son contenedores SEPARADOS — no mezclar.** `leulit_flutter_dependency_injection` es facade sobre get_it; registrar un global con `DI.register*` y leerlo con `Get.find<T>()` (o viceversa) lanza "not registered" en runtime aunque compile. Migrar uno sin el otro rompe producción Y tests. Además: **get_it NO dispara el lifecycle de `GetxService`** (`onInit`/`onClose`) — si un servicio movido a `DI` necesita su `onInit` (setup Dio, registrar listener), hay que llamarlo manualmente en el factory de registro. Tests: registrar globales con `DI.registerSingleton` + `await DI.reset()` en setUp/tearDown; controllers de pantalla siguen con `Get.put`/`Get.reset`. Ver memoria `feedback_di_getit_vs_getx_separate`.
+- **El grafo codebase-memory es ciego a la DI de GetX/get_it (resolución runtime por tipo).** `trace_path` da falsos "cero callers" para servicios. Para dead-code de servicios: `grep Get.find / DI.get`, no el grafo. Ver memoria `feedback_graph_blind_to_getx_di`.
+- **El esquema de firma migra JUNTO con el path, no solo la URL.** Mover endpoints a un prefijo nuevo (`/api/enagas/v1`) sin migrar el firmador HMAC del Dio principal = 401 en todo. Síntoma engañoso: "Usuario o contraseña incorrectos" (el controller mapea cualquier "401" a credenciales). El backend valida UN esquema; el interceptor del Dio principal debe usar exactamente ese, no uno legacy paralelo. Lección derivada: cuando coexisten dos firmadores y el backend solo acepta uno, no "aislar el nuevo en su adaptador" — **unificar** y borrar el legacy (es un footgun que revive el 401). Verificado con backend en `flutter-security.js` / `usuarios.routes.js`.
 
 ---
 
@@ -537,5 +264,7 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 - Reescribir `GasoductosService` y `PksService` al motor cuando backend tenga endpoints REST (ver §12.2 doc backend).
 - Migrar lectura de `MensajeSegmento` al motor cuando backend exponga endpoint de pull global (§12.1).
 - Filtro de solapamientos del corte contra segmentos existentes (`docs/LINES_CUT_MOBILE_INTEGRATION.md` §8).
-- `AppConfig.hmacSecret` hardcodeado — migrar a variable de entorno / secret CI/CD.
+- `AppConfig.hmacSecret` ya se inyecta por `--dart-define=HMAC_SECRET` (default = placeholder que NO valida). Pendiente: cablearlo en CI/CD desde un GitHub Secret y documentar en `.vscode/launch.json` para desarrollo local.
 - Extraer `lib/core/sync/` a paquete `leulit_offline_sync` cuando madure.
+- **Vídeos — integrar `download_url` en UI**: el adapter ya recibe el `download_url` del servidor; pendiente exponerlo en la entidad y en la vista de detalle para preview/reproducción del vídeo subido.
+- **Vídeos — confirmar idempotencia re-Init con `client_id`**: spec dice que re-init con mismo `client_id` reutiliza sesión en curso; verificar comportamiento real del backend ante re-init de sesión ya completada.

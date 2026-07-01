@@ -1,18 +1,27 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
 import 'package:helireport_desherbaje/core/app_router.dart';
 import 'package:helireport_desherbaje/core/services/session_state.dart';
 
 void main() {
-  setUp(() => Get.reset());
-  tearDown(() => Get.reset());
+  setUp(() async {
+    Get.reset();
+    await DI.reset();
+  });
+
+  tearDown(() async {
+    Get.reset();
+    await DI.reset();
+  });
 
   group('AuthMiddleware.redirect', () {
     test('(a) without session → redirects to /login', () {
-      final session = Get.put<SessionState>(SessionState(), permanent: true);
+      final session = SessionState();
       session.set(false);
+      DI.registerSingleton<SessionState>(session);
 
       final result = AuthMiddleware().redirect(AppRoutes.segmentos);
 
@@ -21,8 +30,9 @@ void main() {
     });
 
     test('(b) with session → returns null (no redirect)', () {
-      final session = Get.put<SessionState>(SessionState(), permanent: true);
+      final session = SessionState();
       session.set(true);
+      DI.registerSingleton<SessionState>(session);
 
       final result = AuthMiddleware().redirect(AppRoutes.segmentos);
 
@@ -42,8 +52,8 @@ void main() {
 
     test('(d) SessionState not registered → redirects to /login without throwing',
         () {
-      // SessionState deliberately not registered.
-      expect(Get.isRegistered<SessionState>(), isFalse);
+      // SessionState deliberately not registered in DI.
+      expect(DI.isRegistered<SessionState>(), isFalse);
 
       RouteSettings? result;
       expect(

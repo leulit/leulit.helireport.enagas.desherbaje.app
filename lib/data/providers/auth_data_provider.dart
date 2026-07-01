@@ -1,11 +1,11 @@
-import 'package:get/get.dart';
 
 import '../../core/api_endpoints.dart';
+import '../../core/app_di.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/user_entity.dart';
 
 class AuthDataProvider {
-  final NetworkService _network = Get.find<NetworkService>();
+  final NetworkService _network = AppDI.networkService;
 
   Future<UserModel> login(String usuario, String password) async {
     final response = await _network.post(

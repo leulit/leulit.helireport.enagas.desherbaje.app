@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/app_di.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/gasoductos_service.dart';
 import '../../../data/repository/segmento_repository_impl.dart';
@@ -27,7 +28,7 @@ class EditExtremosController extends GetxController {
     GasoductosService? gasoductos,
     double snapMaxMeters = 25,
   })  : _repo = segmentoRepo ?? SegmentoRepositoryImpl(),
-        _gasoductos = gasoductos ?? Get.find<GasoductosService>(),
+        _gasoductos = gasoductos ?? AppDI.gasoductosService,
         _snapMaxMeters = snapMaxMeters;
 
   final SegmentoEntity original;

@@ -1,13 +1,14 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/my_getx_controller.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/master_data_load_result.dart';
 import '../../core/services/pks_service.dart';
-import '../../core/services/session_state.dart';
+
 import '../../core/sync/sync.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../domain/repository/auth_repository.dart';
@@ -24,9 +25,9 @@ class SincronizacionController extends MyGetxController {
     PksService? pksService,
     ConnectivityService? connectivity,
   })  : _auth = authRepository ?? AuthRepositoryImpl(),
-        _gasoductos = gasoductosService ?? Get.find<GasoductosService>(),
-        _pks = pksService ?? Get.find<PksService>(),
-        _connectivity = connectivity ?? Get.find<ConnectivityService>();
+        _gasoductos = gasoductosService ?? AppDI.gasoductosService,
+        _pks = pksService ?? AppDI.pksService,
+        _connectivity = connectivity ?? AppDI.connectivityService;
 
   static const String _lastDownloadPrefix = 'sync_master_last_download_';
 
@@ -134,9 +135,7 @@ class SincronizacionController extends MyGetxController {
   /// inicio no deja nada en el stack, así que `Get.back()` no funciona aquí.
   void volver() {
     if (isWorking.value) return;
-    if (Get.isRegistered<SessionState>()) {
-      Get.find<SessionState>().set(false);
-    }
+    AppDI.sessionState.set(false);
     Get.offAllNamed(AppRoutes.login);
   }
 
@@ -347,11 +346,12 @@ class SincronizacionController extends MyGetxController {
   /// segmento. Si cualquiera tiene pendientes, no se debe pisar la cache local
   /// con un pull remoto.
   Future<int> _countPendingForSegmentos() async {
-    final OutboxQueue outbox = Get.find<OutboxQueue>();
+    final OutboxQueue outbox = AppDI.outboxQueue;
     final int segmentos = await outbox.countPending(entityType: 'segmento');
     final int imagenes = await outbox.countPending(entityType: 'imagen');
     final int mensajes = await outbox.countPending(entityType: 'mensaje');
-    return segmentos + imagenes + mensajes;
+    final int videos = await outbox.countPending(entityType: 'video');
+    return segmentos + imagenes + mensajes + videos;
   }
 
   Future<void> _persistLastDownload(MasterDataKind kind, DateTime when) async {

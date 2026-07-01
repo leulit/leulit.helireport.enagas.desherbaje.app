@@ -160,34 +160,85 @@ const shadow = () => ({ type: "outer", color: "000000", blur: 7, offset: 3, angl
     s.addText("Son los mismos colores que el operario ve en las tarjetas de la app.", { x: M, y: y + 0.02, w: W - 2 * M, h: 0.3, fontFace: BODY, italic: true, fontSize: 12, color: C.gray, margin: 0 });
   }
 
-  // ─── S4 Ciclo de vida ──────────────────────────────────────────────────────
+  // ─── S4 Ciclo de vida — dos caminos + bucle ────────────────────────────────
   {
     const s = p.addSlide();
     contentBg(s);
     header(s, "El ciclo de vida de una zona", ic.life);
-    const seq = [
-      ["Propuesta", ESTADO.propuesta], ["Contratista", ESTADO.contratista], ["Validada", ESTADO.validada],
-      ["En Ejecución", ESTADO.ejecucion], ["Finalizada", ESTADO.finalizada], ["Cerrada", ESTADO.cerrada],
-    ];
-    const trans = ["el operario\nrevisa en campo", "Enagas\nvalida", "el operario\nejecuta", "", "Enagas\ncierra"];
-    const cw = 1.72, ax = 0.34, y = 3.1;
-    let x = M;
-    for (let i = 0; i < seq.length; i++) {
-      chip(s, x, y, seq[i][0], seq[i][1], cw, 11);
-      // owner tag
-      const owner = (seq[i][0] === "Contratista" || seq[i][0] === "En Ejecución" || seq[i][0] === "Finalizada") ? "Operario" : "Enagas";
-      s.addText(owner, { x, y: y - 0.34, w: cw, h: 0.3, fontFace: BODY, fontSize: 10, bold: true, color: owner === "Operario" ? C.forest : "1565C0", align: "center", margin: 0 });
-      if (i < seq.length - 1) {
-        arrow(s, x + cw, y, ax);
-        if (trans[i]) s.addText(trans[i], { x: x + cw - 0.25, y: y + 0.5, w: ax + 0.5, h: 0.6, fontFace: BODY, fontSize: 9.5, italic: true, color: C.gray, align: "center", margin: 0 });
-      }
-      x += cw + ax;
+
+    const cw = 1.6, gap = 0.44, ch = 0.46;
+    const colX = [];
+    for (let i = 0; i < 6; i++) colX.push(M + i * (cw + gap));
+    // 0 Propuesta · 1 Contratista · 2 Validada · 3 En Ejecución · 4 Finalizada · 5 Cerrada
+    const divX = colX[3] - 0.22;
+    const yR1 = 2.45, yR2 = 4.45;
+
+    const owners = {
+      Propuesta: ["Enagas", "1565C0"], Contratista: ["Operario", C.forest],
+      Validada: ["Enagas", "1565C0"], Ejecucion: ["Operario", C.forest],
+      Finalizada: ["Operario", C.forest], Cerrada: ["Enagas", "1565C0"],
+    };
+    function node(name, color, ownerKey, x, y) {
+      const [oLbl, oCol] = owners[ownerKey];
+      s.addText(oLbl, { x, y: y - 0.30, w: cw, h: 0.26, fontFace: BODY, fontSize: 9.5, bold: true, color: oCol, align: "center", margin: 0 });
+      chip(s, x, y, name, color, cw, 11);
     }
-    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: M, y: 5.4, w: W - 2 * M, h: 1.0, fill: { color: "E8F0E2" }, line: { color: C.moss, width: 1.5 }, rectRadius: 0.1 });
+    function inArrow(xRight, y) {
+      s.addText("➜", { x: xRight, y, w: gap, h: ch, fontFace: BODY, fontSize: 16, bold: true, color: C.moss, align: "center", valign: "middle", margin: 0 });
+    }
+    // bucle En Ejecución ⇄ Finalizada (flecha de retorno punteada bajo los chips)
+    function loopBack(y) {
+      const cxE = colX[3] + cw / 2, cxF = colX[4] + cw / 2, ly = y + ch + 0.16;
+      s.addShape(p.shapes.LINE, { x: cxE, y: y + ch, w: 0, h: 0.16, line: { color: ESTADO.ejecucion, width: 1.75 } });
+      s.addShape(p.shapes.LINE, { x: cxF, y: y + ch, w: 0, h: 0.16, line: { color: ESTADO.ejecucion, width: 1.75 } });
+      s.addShape(p.shapes.LINE, { x: cxE, y: ly, w: cxF - cxE, h: 0, line: { color: ESTADO.ejecucion, width: 1.75, beginArrowType: "triangle", dashType: "dash" } });
+      s.addText("↺ se repite n veces", { x: colX[3] - 0.4, y: ly + 0.03, w: (colX[4] + cw) - colX[3] + 0.8, h: 0.26, fontFace: BODY, fontSize: 10, italic: true, color: "B45309", align: "center", margin: 0 });
+    }
+
+    // leyenda + cabeceras de grupo (arranque vs tramo común)
     s.addText([
-      { text: "“Contratista” y “Validada” son el punto de traspaso: ", options: { bold: true, color: C.forest } },
-      { text: "el operario propone, Enagas aprueba.", options: { color: C.ink } },
-    ], { x: M + 0.35, y: 5.4, w: W - 2 * M - 0.7, h: 1.0, fontFace: BODY, fontSize: 16, valign: "middle", margin: 0 });
+      { text: "Azul = Enagas (web)", options: { color: "1565C0", bold: true } },
+      { text: "   ·   ", options: { color: C.gray } },
+      { text: "Verde = Operario (móvil)", options: { color: C.forest, bold: true } },
+    ], { x: M, y: 1.42, w: 7, h: 0.26, fontFace: BODY, fontSize: 11, margin: 0 });
+    s.addShape(p.shapes.LINE, { x: divX, y: 1.98, w: 0, h: 3.18, line: { color: C.moss, width: 1.25, dashType: "dash" } });
+    s.addText("El arranque cambia según el caso", { x: M, y: 1.70, w: divX - M, h: 0.26, fontFace: BODY, fontSize: 10.5, italic: true, color: C.gray, align: "center", margin: 0 });
+    s.addText("Tramo común: ejecutar → finalizar → cerrar", { x: divX, y: 1.70, w: (W - M) - divX, h: 0.26, fontFace: BODY, fontSize: 10.5, italic: true, bold: true, color: C.forest, align: "center", margin: 0 });
+
+    // ── Ruta normal (casos 1 y 2): Propuesta ─────► En Ejecución ──────────────
+    node("Propuesta", ESTADO.propuesta, "Propuesta", colX[0], yR1);
+    s.addShape(p.shapes.LINE, { x: colX[0] + cw + 0.05, y: yR1 + ch / 2, w: colX[3] - (colX[0] + cw) - 0.1, h: 0, line: { color: C.moss, width: 2, endArrowType: "triangle" } });
+    s.addText("Casos 1-2 · Enagas asigna la zona ya validada", { x: colX[0] + cw, y: yR1 - 0.30, w: divX - (colX[0] + cw) - 0.05, h: 0.26, fontFace: BODY, fontSize: 10, italic: true, color: C.gray, align: "center", margin: 0 });
+    node("En Ejecución", ESTADO.ejecucion, "Ejecucion", colX[3], yR1);
+    inArrow(colX[3] + cw, yR1);
+    node("Finalizada", ESTADO.finalizada, "Finalizada", colX[4], yR1);
+    inArrow(colX[4] + cw, yR1);
+    node("Cerrada", ESTADO.cerrada, "Cerrada", colX[5], yR1);
+    loopBack(yR1);
+
+    // ── Caso 3 (el operario propone cambio / zona nueva): + Contratista, Validada
+    node("Propuesta", ESTADO.propuesta, "Propuesta", colX[0], yR2);
+    inArrow(colX[0] + cw, yR2);
+    node("Contratista", ESTADO.contratista, "Contratista", colX[1], yR2);
+    inArrow(colX[1] + cw, yR2);
+    node("Validada", ESTADO.validada, "Validada", colX[2], yR2);
+    inArrow(colX[2] + cw, yR2);
+    node("En Ejecución", ESTADO.ejecucion, "Ejecucion", colX[3], yR2);
+    inArrow(colX[3] + cw, yR2);
+    node("Finalizada", ESTADO.finalizada, "Finalizada", colX[4], yR2);
+    inArrow(colX[4] + cw, yR2);
+    node("Cerrada", ESTADO.cerrada, "Cerrada", colX[5], yR2);
+    s.addText("Caso 3 · el operario propone; Enagas valida antes de ejecutar", { x: colX[0], y: yR2 + ch + 0.06, w: (colX[2] + cw) - colX[0], h: 0.26, fontFace: BODY, fontSize: 10, italic: true, color: "A21CAF", align: "center", margin: 0 });
+    loopBack(yR2);
+
+    // ── Callout ──
+    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: M, y: 5.55, w: W - 2 * M, h: 1.0, fill: { color: "E8F0E2" }, line: { color: C.moss, width: 1.5 }, rectRadius: 0.1 });
+    s.addText([
+      { text: "Lo único que cambia es el arranque: ", options: { bold: true, color: C.forest } },
+      { text: "si el operario propone algo, la zona pasa por Contratista → Validada; si no, Enagas la asigna ya lista. El bucle ", options: { color: C.ink } },
+      { text: "En Ejecución ⇄ Finalizada", options: { bold: true, color: "B45309" } },
+      { text: " se repite tantas veces como haga falta antes de que Enagas cierre la zona.", options: { color: C.ink } },
+    ], { x: M + 0.35, y: 5.55, w: W - 2 * M - 0.7, h: 1.0, fontFace: BODY, fontSize: 14.5, valign: "middle", margin: 0 });
   }
 
   // ─── S5 Punto 1 descarga ─────────────────────────────────────────────────

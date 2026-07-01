@@ -1,4 +1,4 @@
-import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
 import '../../core/result/data_result.dart';
 import '../../core/sync/sync.dart';
@@ -12,7 +12,7 @@ import '../sync/segmento_local_store.dart';
 ///
 /// Network operations (push/pull) happen exclusively when the user asks
 /// for them through the sync page or the per-entity "forzar envío" button —
-/// this class never triggers them.
+/// this class never triggers them.tú c
 class SegmentoRepositoryImpl implements SegmentoRepository {
   final OfflineRepository<SegmentoEntity> _offline;
   final SegmentoLocalStore _store;
@@ -20,8 +20,8 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
   SegmentoRepositoryImpl({
     OfflineRepository<SegmentoEntity>? offline,
     SegmentoLocalStore? store,
-  })  : _offline = offline ?? Get.find<OfflineRepository<SegmentoEntity>>(),
-        _store = store ?? Get.find<SegmentoLocalStore>();
+  })  : _offline = offline ?? DI.get<OfflineRepository<SegmentoEntity>>(),
+        _store = store ?? DI.get<SegmentoLocalStore>();
 
   @override
   Future<DataResult<List<SegmentoEntity>>> getByOperador(

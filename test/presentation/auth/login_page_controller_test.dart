@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:helireport_desherbaje/data/network/network_service.dart';
@@ -19,13 +20,18 @@ class _FakeNetworkService extends NetworkService {
 // aceptar AuthRepository por inyección — documentado como mejora pendiente.
 
 void main() {
-  setUp(() {
+  setUp(() async {
     Get.reset();
-    Get.put<NetworkService>(_FakeNetworkService());
+    await DI.reset();
+    // NetworkService is a global resolved via DI (AppDI.networkService).
+    DI.registerSingleton<NetworkService>(_FakeNetworkService());
     SharedPreferences.setMockInitialValues({});
   });
 
-  tearDown(Get.reset);
+  tearDown(() async {
+    Get.reset();
+    await DI.reset();
+  });
 
   group('toggleShowPassword', () {
     test('starts as false', () {

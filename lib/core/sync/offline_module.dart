@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart';
-import 'package:get/get.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
+import '../app_di.dart';
 import 'contracts/conflict_resolver.dart';
 import 'contracts/local_store.dart';
 import 'contracts/remote_adapter.dart';
 import 'contracts/remote_fetcher.dart';
 import 'contracts/syncable.dart';
 import 'database/offline_database.dart';
-import 'outbox/outbox_queue.dart';
 import 'pull/cancel_token.dart';
 import 'pull/pull_coordinator.dart';
 import 'repository/offline_repository.dart';
@@ -62,11 +61,11 @@ abstract class OfflineModule {
   }
 
   /// Registers [T] in the [TypeRegistry], runs its schema migration, and
-  /// binds the matching helpers into GetX:
+  /// binds the matching helpers into the DI container:
   /// - `OfflineRepository<T>` if [adapter] is provided.
   /// - `PullCoordinator<T>` if [fetcher] is provided.
   ///
-  /// Required infrastructure expected in `Get.find` before calling:
+  /// Required infrastructure expected in DI before calling:
   /// `Database`, `OutboxQueue`, `TypeRegistry`.
   ///
   /// At least one of [adapter] / [fetcher] must be non-null. An entity that
@@ -98,9 +97,9 @@ abstract class OfflineModule {
       );
     }
 
-    final registry = Get.find<TypeRegistry>();
-    final db = Get.find<Database>();
-    final outbox = Get.find<OutboxQueue>();
+    final registry = AppDI.typeRegistry;
+    final db = AppDI.database;
+    final outbox = AppDI.outboxQueue; // resolved from DI (not GetX)
 
     final registration = TypeRegistration<T>(
       entityType: entityType,
@@ -116,14 +115,13 @@ abstract class OfflineModule {
     await OfflineDatabase.migrateEntity(db, store);
 
     if (adapter != null) {
-      Get.put<OfflineRepository<T>>(
-        OfflineRepository<T>(
+      DI.registerLazySingleton<OfflineRepository<T>>(
+        () => OfflineRepository<T>(
           entityType: entityType,
           db: db,
           store: store,
           outbox: outbox,
         ),
-        permanent: true,
       );
     }
     if (fetcher != null) {
@@ -132,7 +130,7 @@ abstract class OfflineModule {
         outbox: outbox,
         db: db,
       );
-      Get.put<PullCoordinator<T>>(coordinator, permanent: true);
+      DI.registerSingleton<PullCoordinator<T>>(coordinator);
       _pullRunners[entityType] =
           ({CancelToken? token}) => coordinator.pullNow(token: token);
     }

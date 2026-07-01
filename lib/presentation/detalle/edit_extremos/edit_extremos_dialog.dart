@@ -4,6 +4,7 @@ import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_ti
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/app_di.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/gasoductos_service.dart';
 import '../../../core/widgets/my_current_location_layer.dart';
@@ -87,9 +88,7 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                         maxNativeZoom: 20,
                       ),
                       PolylineLayer(
-                        polylines: Get.find<GasoductosService>()
-                            .polylines
-                            .toList(),
+                        polylines: AppDI.gasoductosService.polylines.toList(),
                       ),
                       PolylineLayer(polylines: [
                         Polyline(

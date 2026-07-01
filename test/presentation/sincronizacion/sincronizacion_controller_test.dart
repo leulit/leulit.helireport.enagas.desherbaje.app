@@ -14,6 +14,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,6 +53,7 @@ void main() {
 
   setUp(() async {
     Get.reset();
+    await DI.reset();
     SharedPreferences.setMockInitialValues({});
 
     mockConnectivity = MockConnectivityService();
@@ -70,7 +72,7 @@ void main() {
     when(() => mockPks.totalFiles).thenReturn(RxInt(0));
     when(() => mockPks.processedFiles).thenReturn(RxInt(0));
 
-    Get.put<OutboxQueue>(mockOutbox);
+    DI.registerSingleton<OutboxQueue>(mockOutbox);
     OfflineModule.resetPullRunners();
 
     controller = SincronizacionController(
@@ -85,9 +87,10 @@ void main() {
     await Future.delayed(Duration.zero);
   });
 
-  tearDown(() {
+  tearDown(() async {
     OfflineModule.resetPullRunners();
     Get.reset();
+    await DI.reset();
   });
 
   // ─── (1) NF-12: reload throws → row error, lastDownloadAt unchanged ─────

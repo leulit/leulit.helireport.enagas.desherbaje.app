@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../../core/app_di.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/engine/sync_engine.dart';
 import '../../data/repository/segmento_repository_impl.dart';
@@ -23,8 +24,8 @@ class ForzarEnvioBinding extends Bindings {
     Get.lazyPut<ForzarEnvioController>(
       () => ForzarEnvioController(
         Get.find<GetSegmentosUseCase>(),
-        Get.find<SyncEngine>(),
-        Get.find<ConnectivityService>(),
+        AppDI.syncEngine,
+        AppDI.connectivityService,
       ),
     );
   }

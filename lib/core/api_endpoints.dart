@@ -5,13 +5,14 @@ import 'app_config.dart';
 /// cambio de host (basta con tocar `AppConfig.baseUrl`).
 ///
 /// Convención: los endpoints del backend devuelven la URL completa (con
-/// `baseUrl`). El [_HmacInterceptor] del [NetworkService] elimina el `baseUrl`
+/// `apiBaseUrl`). El [_HmacInterceptor] del [NetworkService] elimina el `baseUrl`
 /// antes de firmar HMAC, así la firma sigue calculándose sobre el path
 /// relativo (compatibilidad backend).
 class ApiEndpoints {
   ApiEndpoints._();
 
   static String get baseUrl => AppConfig.baseUrl;
+  static String get apiBaseUrl => AppConfig.apiBaseUrl;
 
   // ──────────────────────────── Externos ────────────────────────────
 
@@ -31,47 +32,70 @@ class ApiEndpoints {
 
   // ──────────────────────────── Auth ────────────────────────────
 
-  static String get userLogin => '$baseUrl/users/login';
+  static String get userLogin => '$apiBaseUrl/users/login';
 
   // ──────────────────────────── Segmentos ────────────────────────────
 
-  static String segmentosByCt(String cts) => '$baseUrl/segmentos/bycts/$cts';
-  static String segmentoById(int id) => '$baseUrl/segmentos/byid/$id';
-  static String segmentoUpd(int id) => '$baseUrl/segmentos/update/$id';
-  static String get segmentoAdd => '$baseUrl/segmentos/create';
-  static String get segmentosByEstado => '$baseUrl/segmentos/byestado';
-  static String mensajesBySegmento(int id) => '$baseUrl/segmentos/mensajes/$id';
-  static String mensajeAdd(int segmentoId) =>
-      '$baseUrl/segmentos/mensajes/$segmentoId';
-  static String deleteSegmento(int id) => '$baseUrl/segmentos/delete/$id';
+  static String segmentosByCt(String cts) => '$apiBaseUrl/segmentos/bycts/$cts';
+  static String segmentoById(int id) => '$apiBaseUrl/segmentos/byid/$id';
+  static String segmentoUpd(int id) => '$apiBaseUrl/segmentos/update/$id';
+  static String get segmentoAdd => '$apiBaseUrl/segmentos/create';
+  static String get segmentosByEstado => '$apiBaseUrl/segmentos/byestado';
+  static String mensajesBySegmento(int id) => '$apiBaseUrl/segmentos/mensajes/$id';
+  static String mensajeAdd(int segmentoId) => '$apiBaseUrl/segmentos/mensajes/$segmentoId';
+  static String deleteSegmento(int id) => '$apiBaseUrl/segmentos/delete/$id';
 
   // ──────────────────────────── CTs ────────────────────────────
 
   /// Lista de CTs (con perfil + visibilidad) asignados al usuario.
   /// Se invoca tras el login porque el endpoint de `/users/login` no los
   /// incluye.
-  static String ctsByUser(int iduser) => '$baseUrl/users/ctsbyuser/$iduser';
+  static String ctsByUser(int iduser) => '$apiBaseUrl/users/ctsbyuser/$iduser';
 
   /// JSON con la traza de gasoductos del CT identificado por [filename].
-  static String gasoductosTrack(String filename) =>
-      '$baseUrl/tracks/json/$filename-gasoductos.json';
+  static String gasoductosTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-gasoductos.json';
 
   /// JSON con los puntos kilométricos (PKs) del CT identificado por [filename].
-  static String pkTrack(String filename) =>
-      '$baseUrl/tracks/json/$filename-pk.json';
+  static String pkTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-pk.json';
 
   // ──────────────────────────── Imágenes ────────────────────────────
 
   /// Subida multipart de imágenes (legacy: `/operador/additem`).
-  static String get imagenAdd => '$baseUrl/operador/additem';
+  static String get imagenAdd => '$apiBaseUrl/operador/additem';
+
+  // ──────────────────────────── Vídeos ────────────────────────────
+
+  /// Inicia una nueva sesión de subida chunked.
+  /// `POST /api/enagas/v1/videos/upload`
+  /// Body JSON: `{ originalFilename, totalBytes, mimeType, clientId?,
+  /// segmentoId?, usuariologged?, idusuariologged? }`.
+  /// Devuelve `201 { uploadId, offset, segmentoId }`.
+  static String get videosUploadInit => '$apiBaseUrl/videos/upload';
+
+  /// Consulta estado (GET) o envía chunk (PATCH) de una sesión en curso.
+  /// `GET /api/enagas/v1/videos/upload/{uploadId}`
+  ///   → `200 { uploadId, offset, totalBytes, mimeType, originalFilename, complete }`.
+  /// `PATCH /api/enagas/v1/videos/upload/{uploadId}`
+  ///   Header `Upload-Offset: <bytesYaEnServidor>`, body = bytes raw.
+  ///   → `200 { offset }`.
+  static String videoUpload(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId';
+
+  /// Completa la sesión de subida (activa la conversión MOV→MP4 asíncrona).
+  /// `POST /api/enagas/v1/videos/upload/{uploadId}/complete`
+  /// → `200 { uploadId, status: "recibido" }`.
+  static String videoUploadComplete(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId/complete';
+
+  /// URL de descarga determinista del vídeo convertido (exenta de HMAC).
+  /// `GET /api/enagas/v1/videos/download/{uploadId}.mp4`
+  /// Solo se guarda como referencia en la entidad; no se invoca desde la app.
+  static String videoDownload(String uploadId) => '$apiBaseUrl/videos/download/$uploadId.mp4';
 
   // ──────────────────────────── Posiciones GPS ────────────────────────────
 
   /// Subida en lote de puntos GPS. Idempotente por `batch_client_id`.
   /// Documentado en `docs/BACKEND_SYNC_CONTRACT.md` §8.
-  static String get positionsBatch => '$baseUrl/positions/batch';
+  static String get positionsBatch => '$apiBaseUrl/positions/batch';
 
   /// Thumbnail de incidencia (mock data en `captura_fotos_controller`).
-  static String incidenciaThumb(int id, int width, int height) =>
-      '$baseUrl/incidencias/thumbdb/$id/$width/$height';
+  static String incidenciaThumb(int id, int width, int height) => '$apiBaseUrl/incidencias/thumbdb/$id/$width/$height';
 }

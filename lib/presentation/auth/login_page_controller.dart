@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/services/session_state.dart';
 import '../../data/repository/auth_repository_impl.dart';
@@ -57,9 +58,7 @@ class LoginPageController extends GetxController {
         usuarioController.text.trim(),
         passwordController.text,
       );
-      if (Get.isRegistered<SessionState>()) {
-        Get.find<SessionState>().set(true);
-      }
+      AppDI.sessionState.set(true);
       Get.offAllNamed(AppRoutes.segmentos);
     } catch (e) {
       error.value = _parseError(e);
@@ -78,9 +77,7 @@ class LoginPageController extends GetxController {
         usuarioController.text.trim(),
         passwordController.text,
       );
-      if (Get.isRegistered<SessionState>()) {
-        Get.find<SessionState>().set(true);
-      }
+      AppDI.sessionState.set(true);
       Get.offAllNamed(AppRoutes.sincronizacion);
     } catch (e) {
       error.value = _parseError(e);

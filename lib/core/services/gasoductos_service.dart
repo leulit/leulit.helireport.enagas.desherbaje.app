@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:helireport_desherbaje/core/app_di.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -65,8 +66,8 @@ class GasoductosService extends GetxService {
 
   // Resolución perezosa: no se llama a Get.find en construcción, así que
   // subclases/stubs de test que no usan estas deps no requieren registrarlas.
-  JsonLoaderService get _loader => _loaderArg ?? Get.find<JsonLoaderService>();
-  ConnectivityService get _conn => _connArg ?? Get.find<ConnectivityService>();
+  JsonLoaderService get _loader => _loaderArg ?? AppDI.jsonLoaderService;
+  ConnectivityService get _conn => _connArg ?? AppDI.connectivityService;
 
   GasoductosService({
     ConnectivityService? conn,

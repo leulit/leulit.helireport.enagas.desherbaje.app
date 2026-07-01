@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
 
+import '../../core/app_di.dart';
 import '../../core/app_typed_actions.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/pull/cancel_token.dart';
@@ -57,8 +58,8 @@ class JsonLoaderService extends GetxService {
   int get totalFiles => _currentTotalFiles;
   int get processedFiles => _currentProcessedFiles;
 
-  NetworkService get _network => Get.find<NetworkService>();
-  ConnectivityService get _conn => Get.find<ConnectivityService>();
+  NetworkService get _network => AppDI.networkService;
+  ConnectivityService get _conn => AppDI.connectivityService;
 
   /// Descarga la lista [files] secuencialmente. Si no hay conexión, dispara
   /// directamente `geoJsonLoadCompleted` y deja que el consumidor caiga al

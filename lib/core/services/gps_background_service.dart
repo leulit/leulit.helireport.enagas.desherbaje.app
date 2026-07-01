@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_log.dart';
@@ -45,8 +46,7 @@ class GpsBackgroundService extends GetxService {
   // NF-7: mutex — Dart is single-threaded per isolate; no await between check and set.
   bool _flushing = false;
 
-  OfflineRepository<PositionBatchEntity> get _offline =>
-      Get.find<OfflineRepository<PositionBatchEntity>>();
+  OfflineRepository<PositionBatchEntity> get _offline => DI.get<OfflineRepository<PositionBatchEntity>>();
 
   // ─────────────────────────────── Public API ──────────────────────────
 

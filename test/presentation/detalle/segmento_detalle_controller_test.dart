@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,11 +22,13 @@ import 'package:helireport_desherbaje/data/repository/auth_repository_impl.dart'
 import 'package:helireport_desherbaje/data/repository/imagen_repository_impl.dart';
 import 'package:helireport_desherbaje/data/repository/mensaje_segmento_repository.dart';
 import 'package:helireport_desherbaje/data/repository/segmento_repository_impl.dart';
+import 'package:helireport_desherbaje/data/repository/video_repository_impl.dart';
 import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/segmento_local_store.dart';
 import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/user_entity.dart';
+import 'package:helireport_desherbaje/domain/entities/video_segmento_entity.dart';
 import 'package:helireport_desherbaje/presentation/detalle/segmento_detalle_controller.dart';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +40,9 @@ class _MockOfflineSegmento extends Mock
 
 class _MockOfflineImagen extends Mock
     implements OfflineRepository<ImagenSegmentoEntity> {}
+
+class _MockOfflineVideo extends Mock
+    implements OfflineRepository<VideoSegmentoEntity> {}
 
 class _MockOfflineMensaje extends Mock
     implements OfflineRepository<MensajeSegmentoEntity> {}
@@ -100,12 +106,14 @@ SegmentoDetalleController _buildController({
   required SegmentoEntity segmento,
   required SegmentoRepositoryImpl segmentoRepo,
   required ImagenRepositoryImpl imagenRepo,
+  required VideoRepositoryImpl videoRepo,
   required MensajeSegmentoRepository mensajeRepo,
 }) {
   final ctrl = SegmentoDetalleController(
     authRepo: _StubAuthRepo(),
     segmentoRepo: segmentoRepo,
     imagenRepo: imagenRepo,
+    videoRepo: videoRepo,
     mensajeRepo: mensajeRepo,
   );
   // Directly set state — myOnInit not called (avoids Get.arguments, Dio, etc.)
@@ -123,6 +131,7 @@ SegmentoDetalleController _buildController({
 void main() {
   late _MockOfflineSegmento mockOfflineSegmento;
   late _MockOfflineImagen mockOfflineImagen;
+  late _MockOfflineVideo mockOfflineVideo;
   late _MockOfflineMensaje mockOfflineMensaje;
   late _MockSegmentoLocalStore mockSegmentoStore;
   late _MockMensajeLocalStore mockMensajeStore;
@@ -131,6 +140,7 @@ void main() {
 
   late SegmentoRepositoryImpl segmentoRepo;
   late ImagenRepositoryImpl imagenRepo;
+  late VideoRepositoryImpl videoRepo;
   late MensajeSegmentoRepository mensajeRepo;
 
   setUpAll(() {
@@ -149,14 +159,26 @@ void main() {
     registerFallbackValue(
       MensajeSegmentoEntity(segmentoId: 0, mensaje: '', enviadoPor: 0),
     );
+    registerFallbackValue(
+      VideoSegmentoEntity(
+        actividadId: 0,
+        segmentoId: 0,
+        tipoVideo: TipoVideo.antes,
+        filename: 'test.mp4',
+        ruta: '/tmp/test.mp4',
+        capturadaAt: DateTime.now(),
+      ),
+    );
   });
 
-  setUp(() {
+  setUp(() async {
     Get.reset();
+    await DI.reset();
     SharedPreferences.setMockInitialValues({});
 
     mockOfflineSegmento = _MockOfflineSegmento();
     mockOfflineImagen = _MockOfflineImagen();
+    mockOfflineVideo = _MockOfflineVideo();
     mockOfflineMensaje = _MockOfflineMensaje();
     mockSegmentoStore = _MockSegmentoLocalStore();
     mockMensajeStore = _MockMensajeLocalStore();
@@ -172,6 +194,11 @@ void main() {
     when(() => mockOfflineImagen.create(any())).thenAnswer((_) async {});
     when(() => mockOfflineImagen.findAll()).thenAnswer((_) async => []);
 
+    when(() => mockOfflineVideo.create(any())).thenAnswer((_) async {});
+    when(() => mockOfflineVideo.findAll()).thenAnswer((_) async => []);
+    when(() => mockOfflineVideo.findWhere(any(), any()))
+        .thenAnswer((_) async => []);
+
     segmentoRepo = SegmentoRepositoryImpl(
       offline: mockOfflineSegmento,
       store: mockSegmentoStore,
@@ -183,18 +210,27 @@ void main() {
       connectivity: mockConnectivity,
     );
 
+    videoRepo = VideoRepositoryImpl(
+      offline: mockOfflineVideo,
+      engine: mockEngine,
+      connectivity: mockConnectivity,
+    );
+
     mensajeRepo = _StubMensajeRepo(
       network: _StubNetworkService(),
       offline: mockOfflineMensaje,
       localStore: mockMensajeStore,
     );
 
-    // Register services that are looked up via Get.find in constructors.
-    Get.put<NetworkService>(_StubNetworkService());
-    Get.put<GasoductosService>(_StubGasoductosService());
+    // Register global services in DI — resolved via AppDI getters in constructors.
+    DI.registerSingleton<NetworkService>(_StubNetworkService());
+    DI.registerSingleton<GasoductosService>(_StubGasoductosService());
   });
 
-  tearDown(Get.reset);
+  tearDown(() async {
+    Get.reset();
+    await DI.reset();
+  });
 
   // ─── (a) #4 guardar con id==null → offline.create 1 vez, updateEstado NUNCA
 
@@ -209,6 +245,7 @@ void main() {
         segmento: segmento,
         segmentoRepo: segmentoRepo,
         imagenRepo: imagenRepo,
+        videoRepo: videoRepo,
         mensajeRepo: mensajeRepo,
       );
 
@@ -237,6 +274,7 @@ void main() {
         segmento: segmento,
         segmentoRepo: segmentoRepo,
         imagenRepo: imagenRepo,
+        videoRepo: videoRepo,
         mensajeRepo: mensajeRepo,
       );
       ctrl.estado.value = EstadoActividad.propuesta;
@@ -291,6 +329,7 @@ void main() {
         segmento: segmento,
         segmentoRepo: segmentoRepo,
         imagenRepo: imagenRepo,
+        videoRepo: videoRepo,
         mensajeRepo: mensajeRepo,
       );
 

@@ -147,7 +147,7 @@ class ForzarEnvioController extends MyGetxController {
     try {
       var combined = const DrainSummary();
 
-      for (final entityType in const ['segmento', 'imagen', 'mensaje']) {
+      for (final entityType in const ['segmento', 'imagen', 'video', 'mensaje']) {
         AppLog.i('ForzarEnvioController: drenando tipo "$entityType"...');
         final summary = await _engine.drain(entityType: entityType);
         combined = DrainSummary(
@@ -198,7 +198,7 @@ class ForzarEnvioController extends MyGetxController {
       var combined = const DrainSummary();
 
       // Orden: segmento primero (FK origen), luego sus entidades dependientes.
-      for (final entityType in const ['segmento', 'imagen', 'mensaje', 'position']) {
+      for (final entityType in const ['segmento', 'imagen', 'video', 'mensaje', 'position']) {
         AppLog.i('ForzarEnvioController: drenando tipo "$entityType"...');
         final summary = await _engine.drain(entityType: entityType);
         combined = DrainSummary(

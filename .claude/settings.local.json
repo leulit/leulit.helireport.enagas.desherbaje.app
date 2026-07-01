@@ -72,7 +72,14 @@
       "Read(//Users/emiloalvarez/.local/share/claude/**)",
       "Read(//Users/emiloalvarez/**)",
       "Bash(claude update *)",
-      "mcp__codebase-memory-mcp__index_repository"
+      "mcp__codebase-memory-mcp__index_repository",
+      "Bash(python -m markitdown presentacion_flujo_informacion.pptx)",
+      "Bash(python /Users/emiloalvarez/.claude/plugins/cache/anthropic-agent-skills/document-skills/575462609294/skills/pptx/scripts/office/soffice.py --headless --convert-to pdf presentacion_flujo_informacion.pptx)",
+      "Bash(pdftoppm -jpeg -r 110 -f 3 -l 4 presentacion_flujo_informacion.pdf slide_check)",
+      "Bash(pdftoppm -jpeg -r 130 -f 4 -l 4 presentacion_flujo_informacion.pdf s4)",
+      "mcp__dart__dtd",
+      "mcp__dart__get_runtime_errors",
+      "mcp__dart__hot_reload"
     ]
   },
   "enabledPlugins": {}

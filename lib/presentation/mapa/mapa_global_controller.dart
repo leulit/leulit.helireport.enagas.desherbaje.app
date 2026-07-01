@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/app_di.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
@@ -30,8 +32,8 @@ class MapaGlobalController extends GetxController {
   final errorPks = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
-  GasoductosService get _gasoductosService => Get.find<GasoductosService>();
-  PksService get _pksService => Get.find<PksService>();
+  GasoductosService get _gasoductosService => AppDI.gasoductosService;
+  PksService get _pksService => AppDI.pksService;
   SegmentosMapController get _segmentos => Get.find<SegmentosMapController>();
 
   final _segmentoRepo = SegmentoRepositoryImpl();
@@ -72,14 +74,14 @@ class MapaGlobalController extends GetxController {
     _loadUserCts();
     _loadSavedView();
     loadAll();
-    unawaited(Get.find<GpsBackgroundService>().start());
+    unawaited(DI.get<GpsBackgroundService>().start());
   }
 
   /// NF-8: awaitable stop — call from PopScope/route exit handler so the
   /// final GPS flush completes before the page is disposed.
   /// [onClose] also calls stop() unawaited as a safety net.
   Future<void> stopTracking() =>
-      Get.find<GpsBackgroundService>().stop();
+      DI.get<GpsBackgroundService>().stop();
 
   @override
   void onClose() {
@@ -89,7 +91,7 @@ class MapaGlobalController extends GetxController {
     }
     // Safety net: if stopTracking() was not awaited by the PopScope handler,
     // this ensures the service is stopped (non-awaited, best-effort).
-    unawaited(Get.find<GpsBackgroundService>().stop());
+    unawaited(DI.get<GpsBackgroundService>().stop());
     super.onClose();
   }
 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 
-import '../../../core/services/pks_service.dart';
+import '../../../core/app_di.dart';
 
 class PksMapLayer extends StatelessWidget {
   final RxDouble currentZoom;
@@ -13,7 +13,7 @@ class PksMapLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = Get.find<PksService>();
+    final service = AppDI.pksService;
     return Obx(() {
       if (currentZoom.value <= 14) return const SizedBox.shrink();
       return MarkerLayer(

@@ -70,6 +70,8 @@
 	<string>Necesario para capturar fotos de los trabajos de desherbaje</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Necesario para seleccionar fotos de los trabajos</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Necesario para grabar el audio de los vídeos de los trabajos de desherbaje</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Necesario para geolocalizar las fotos y registrar la ruta durante la jornada de campo.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

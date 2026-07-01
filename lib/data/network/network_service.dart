@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' hide Response, FormData, MultipartFile;
 
+import '../../core/api_endpoints.dart';
 import '../../core/app_config.dart';
 import '../../core/services/api_security_service.dart';
 import 'network_error.dart';
@@ -11,8 +13,19 @@ import 'network_file.dart';
 import 'network_response.dart';
 
 /// Facade over the HTTP layer. No Dio type ever leaks out of this class.
+///
+/// Two separate Dio instances, ambos usando el mismo esquema HMAC unificado
+/// ([ApiSecurityService.buildHmacHeaders]):
+/// - [_dio]: instancia principal con `_HmacInterceptor` + `_RetryInterceptor`
+///   (segmento/imagen/mensaje/positions y cualquier endpoint REST v1).
+/// - [_videoDio]: instancia separada SIN interceptores ni reintentos automáticos;
+///   cada método de vídeo firma manualmente con [ApiSecurityService.buildHmacHeaders]
+///   y usa timeouts de 4 min (send/receive) para chunks binarios grandes sin
+///   superar la ventana anti-replay de ±5 min del servidor.
 class NetworkService extends GetxService {
-  late final Dio _dio;
+  late Dio _dio;
+  // Non-final to allow injection in tests.
+  late Dio _videoDio;
 
   @override
   void onInit() {
@@ -27,7 +40,23 @@ class NetworkService extends GetxService {
     );
     _dio.interceptors.add(_HmacInterceptor());
     _dio.interceptors.add(_RetryInterceptor(_dio));
+
+    // Video Dio: no HMAC interceptor, no retry (adapter handles per-chunk retry).
+    // sendTimeout/receiveTimeout set to 4 min so a 5 MB chunk on a slow field
+    // connection finishes before the 5-min HMAC anti-replay window expires.
+    _videoDio = Dio(
+      BaseOptions(
+        baseUrl: AppConfig.baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(minutes: 4),
+        receiveTimeout: const Duration(minutes: 4),
+      ),
+    );
   }
+
+  /// Injects a [Dio] instance for the video path. Only for unit tests.
+  @visibleForTesting
+  void injectVideoDio(Dio dio) => _videoDio = dio;
 
   Future<NetworkResponse<dynamic>> get(
     String path, {
@@ -102,6 +131,125 @@ class NetworkService extends GetxService {
     }
   }
 
+  // ──────────────────────────── Video upload (new protocol) ────────────────
+
+  /// Inicia una nueva sesión de subida chunked.
+  /// `POST /api/enagas/v1/videos/upload`
+  /// [body] must include `originalFilename`, `totalBytes`, `mimeType`.
+  /// Returns `201 { uploadId, offset, segmentoId }`.
+  Future<NetworkResponse<dynamic>> initVideoUpload(
+    Map<String, dynamic> body,
+  ) async {
+    final fullUrl = ApiEndpoints.videosUploadInit;
+    final path = _videoSigningPath(fullUrl);
+    final hmacHeaders = ApiSecurityService.buildHmacHeaders('POST', path);
+    try {
+      final resp = await _videoDio.post<dynamic>(
+        fullUrl,
+        data: body,
+        options: Options(
+          headers: {
+            ...hmacHeaders,
+            HttpHeaders.contentTypeHeader: 'application/json',
+          },
+        ),
+      );
+      return _toNetworkResponse(resp);
+    } on DioException catch (e, st) {
+      throw _mapDioException(e, st);
+    }
+  }
+
+  /// Sends a raw binary chunk to an active upload session.
+  /// `PATCH /api/enagas/v1/videos/upload/{uploadId}`
+  /// [uploadOffset] = bytes already confirmed on the server.
+  /// Returns `200 { offset }` with the new accumulated offset.
+  Future<NetworkResponse<dynamic>> patchVideoChunk({
+    required String uploadId,
+    required int uploadOffset,
+    required Uint8List bytes,
+  }) async {
+    final fullUrl = ApiEndpoints.videoUpload(uploadId);
+    final path = _videoSigningPath(fullUrl);
+    // Timestamp must be fresh on every request (anti-replay ±5 min).
+    final hmacHeaders = ApiSecurityService.buildHmacHeaders('PATCH', path);
+    try {
+      final resp = await _videoDio.patch<dynamic>(
+        fullUrl,
+        data: bytes,
+        options: Options(
+          headers: {
+            ...hmacHeaders,
+            HttpHeaders.contentTypeHeader: 'application/octet-stream',
+            'Upload-Offset': uploadOffset.toString(),
+          },
+          responseType: ResponseType.json,
+        ),
+      );
+      return _toNetworkResponse(resp);
+    } on DioException catch (e, st) {
+      throw _mapDioException(e, st);
+    }
+  }
+
+  /// Queries an upload session status.
+  /// `GET /api/enagas/v1/videos/upload/{uploadId}`
+  /// Returns `200 { uploadId, offset, totalBytes, mimeType, originalFilename, complete }`.
+  /// Throws [NetworkError] with statusCode 404 when the session is not found.
+  Future<NetworkResponse<dynamic>> getVideoStatus(String uploadId) async {
+    final fullUrl = ApiEndpoints.videoUpload(uploadId);
+    final path = _videoSigningPath(fullUrl);
+    final hmacHeaders = ApiSecurityService.buildHmacHeaders('GET', path);
+    try {
+      final resp = await _videoDio.get<dynamic>(
+        fullUrl,
+        options: Options(headers: hmacHeaders),
+      );
+      return _toNetworkResponse(resp);
+    } on DioException catch (e, st) {
+      throw _mapDioException(e, st);
+    }
+  }
+
+  /// Signals that all chunks have been sent; triggers async MOV→MP4 conversion.
+  /// `POST /api/enagas/v1/videos/upload/{uploadId}/complete`
+  /// Returns `200 { uploadId, status: "recibido" }`.
+  Future<NetworkResponse<dynamic>> completeVideoUpload(String uploadId) async {
+    final fullUrl = ApiEndpoints.videoUploadComplete(uploadId);
+    final path = _videoSigningPath(fullUrl);
+    final hmacHeaders =
+        ApiSecurityService.buildHmacHeaders('POST', path);
+    try {
+      final resp = await _videoDio.post<dynamic>(
+        fullUrl,
+        options: Options(
+          headers: {
+            ...hmacHeaders,
+            HttpHeaders.contentTypeHeader: 'application/json',
+          },
+        ),
+      );
+      return _toNetworkResponse(resp);
+    } on DioException catch (e, st) {
+      throw _mapDioException(e, st);
+    }
+  }
+
+  /// Extracts the relative path (including query) from a full URL by stripping
+  /// [AppConfig.baseUrl]. Falls back to [Uri.path] if the URL does not start
+  /// with the base.
+  String _videoSigningPath(String fullUrl) {
+    final base = AppConfig.baseUrl;
+    if (fullUrl.startsWith(base)) return fullUrl.substring(base.length);
+    try {
+      return Uri.parse(fullUrl).path;
+    } catch (_) {
+      return fullUrl;
+    }
+  }
+
+  // ──────────────────────────── Download ───────────────────────────────────
+
   Future<NetworkResponse<List<int>>> download(
     String path, {
     Map<String, dynamic>? queryParameters,
@@ -152,6 +300,7 @@ class NetworkService extends GetxService {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.sendTimeout:
+      case DioExceptionType.transformTimeout:
         category = NetworkErrorCategory.timeout;
         break;
       case DioExceptionType.connectionError:
@@ -193,19 +342,14 @@ class _HmacInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final method = options.method.toUpperCase();
-    // Si el caller pasó URL absoluta (ApiEndpoints), eliminamos el baseUrl
-    // antes de firmar para que el backend reciba siempre HMAC sobre el path
-    // relativo.
-    final raw = options.path;
+    // Esquema HMAC unificado de la API /api/enagas/v1: X-HMAC-Signature +
+    // X-Timestamp(ms), payload "${ts}:${METHOD}:${path}", sin nonce. Se firma
+    // el path relativo (host quitado), incluyendo querystring si la hubiera.
     final base = AppConfig.baseUrl;
-    final pathStr =
-        raw.startsWith(base) ? raw.substring(base.length) : raw;
-    final headers = ApiSecurityService.buildHeaders(
-      method,
-      pathStr,
-      isMultipart: options.data is FormData,
-    );
-    options.headers.addAll(headers);
+    final raw = options.uri.toString();
+    final path =
+        raw.startsWith(base) ? raw.substring(base.length) : options.uri.path;
+    options.headers.addAll(ApiSecurityService.buildHmacHeaders(method, path));
     handler.next(options);
   }
 }
@@ -257,6 +401,7 @@ class _RetryInterceptor extends Interceptor {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.sendTimeout:
+      case DioExceptionType.transformTimeout:
         return true;
       case DioExceptionType.connectionError:
         return false; // offline — let the caller handle/enqueue.
