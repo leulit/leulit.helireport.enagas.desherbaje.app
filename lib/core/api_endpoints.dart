@@ -101,4 +101,10 @@ class ApiEndpoints {
 
   /// Thumbnail de incidencia (mock data en `captura_fotos_controller`).
   static String incidenciaThumb(int id, int width, int height) => '$apiBaseUrl/incidencias/thumbdb/$id/$width/$height';
+
+  // ──────────────────────────── Posiciones fijas ────────────────────────────
+
+  /// Posiciones fijas asociadas a los CTs del usuario, filtradas por nombre
+  /// de CT (mismo esquema que [segmentosByCt]).
+  static String posicionesFijasByCts(String cts) => '$apiBaseUrl/incidencias/posicionesfijasbycts/$cts';
 }

@@ -79,7 +79,12 @@
       "Bash(pdftoppm -jpeg -r 130 -f 4 -l 4 presentacion_flujo_informacion.pdf s4)",
       "mcp__dart__dtd",
       "mcp__dart__get_runtime_errors",
-      "mcp__dart__hot_reload"
+      "mcp__dart__hot_reload",
+      "Bash(/Users/emiloalvarez/Work/FLUTTER/flutter/bin/flutter test *)",
+      "Bash(git push *)",
+      "Bash(git branch *)",
+      "Bash(git stash *)",
+      "WebFetch(domain:claude.com)"
     ]
   },
   "enabledPlugins": {}

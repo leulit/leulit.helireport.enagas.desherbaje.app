@@ -17,6 +17,7 @@ import '../../core/services/hitos_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
+import 'layers/posiciones_fijas_map_controller.dart';
 import 'layers/segmentos_map_controller.dart';
 import 'lines_cut/lines_cut_controller.dart';
 import 'lines_cut/lines_cut_dialog.dart';
@@ -39,6 +40,8 @@ class MapaGlobalController extends GetxController {
   PksService get _pksService => AppDI.pksService;
   HitosService get _hitosService => AppDI.hitosService;
   SegmentosMapController get _segmentos => Get.find<SegmentosMapController>();
+  PosicionesFijasMapController get _posicionesFijas =>
+      Get.find<PosicionesFijasMapController>();
 
   final _segmentoRepo = SegmentoRepositoryImpl();
 
@@ -46,7 +49,8 @@ class MapaGlobalController extends GetxController {
       isLoadingGasoductos.value ||
       isLoadingPks.value ||
       isLoadingHitos.value ||
-      _segmentos.isLoading.value;
+      _segmentos.isLoading.value ||
+      _posicionesFijas.isLoading.value;
 
   List<({String ct, int ctid})> _userCts = const [];
 
@@ -197,6 +201,7 @@ class MapaGlobalController extends GetxController {
     await loadPks();
     await loadHitos();
     await _segmentos.load();
+    await _posicionesFijas.load();
     _fitAllBounds();
   }
 
@@ -205,6 +210,7 @@ class MapaGlobalController extends GetxController {
     await loadPks(forceRefresh: true);
     await loadHitos(forceRefresh: true);
     await _segmentos.load();
+    await _posicionesFijas.load();
     _fitAllBounds();
   }
 

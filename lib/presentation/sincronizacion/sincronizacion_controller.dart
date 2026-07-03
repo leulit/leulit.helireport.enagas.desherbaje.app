@@ -75,9 +75,7 @@ class SincronizacionController extends MyGetxController {
       final last = prefs.getString('$_lastDownloadPrefix${k.name}');
       return MasterDataRow(
         kind: k,
-        status: k == MasterDataKind.posicionesFijas
-            ? MasterDataStatus.unavailable
-            : MasterDataStatus.idle,
+        status: MasterDataStatus.idle,
         lastDownloadAt: last == null ? null : DateTime.tryParse(last),
       );
     }));
@@ -294,8 +292,63 @@ class SincronizacionController extends MyGetxController {
             return;
           }
         case MasterDataKind.posicionesFijas:
-          // No disponible aún — protegido más arriba; nunca debería llegar.
-          return;
+          final PullSummary? posicionesSummary = await OfflineModule.runPull(
+            'posicion_fija',
+            token: sharedToken,
+            onProgress: (p) {
+              final row = _rowFor(kind);
+              _updateRow(
+                kind,
+                row.copyWith(
+                  progress: p.fraction,
+                  progressLabel: p.phase,
+                  clearProgress: p.fraction == null,
+                ),
+              );
+            },
+          );
+          if (posicionesSummary == null) {
+            throw StateError("Pull no disponible para 'posicion_fija'");
+          }
+          if (posicionesSummary.cancelled) {
+            _updateRow(
+              kind,
+              _rowFor(kind).copyWith(
+                status: MasterDataStatus.idle,
+                clearProgress: true,
+                clearProgressLabel: true,
+              ),
+            );
+            return;
+          }
+          if (posicionesSummary.authExpired) {
+            _updateRow(
+              kind,
+              _rowFor(kind).copyWith(
+                status: MasterDataStatus.error,
+                errorMessage: 'La sesión ha caducado. Vuelve a iniciar sesión.',
+                clearProgress: true,
+                clearProgressLabel: true,
+              ),
+            );
+            return;
+          }
+          if (posicionesSummary.isDegraded) {
+            final msg = posicionesSummary.errorMessage ??
+                (posicionesSummary.outcome == PullOutcome.partial
+                    ? 'Descarga parcial: algunas posiciones fijas no se pudieron guardar.'
+                    : 'Error durante la descarga de posiciones fijas.');
+            _updateRow(
+              kind,
+              _rowFor(kind).copyWith(
+                status: MasterDataStatus.error,
+                errorMessage: msg,
+                clearProgress: true,
+                clearProgressLabel: true,
+              ),
+            );
+            return;
+          }
       }
 
       // NF-14: only persist lastDownloadAt when data came from the network.

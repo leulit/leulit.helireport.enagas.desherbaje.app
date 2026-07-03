@@ -15,11 +15,14 @@ import '../data/sync/video_remote_adapter.dart';
 import '../data/sync/mensaje_remote_adapter.dart';
 import '../data/sync/position_batch_remote_adapter.dart';
 import '../data/sync/position_local_store.dart';
+import '../data/sync/posicion_fija_local_store.dart';
+import '../data/sync/posicion_fija_remote_fetcher.dart';
 import '../data/sync/segmento_local_store.dart';
 import '../data/sync/segmento_remote_adapter.dart';
 import '../data/sync/segmento_remote_fetcher.dart';
 import '../domain/entities/imagen_segmento_entity.dart';
 import '../domain/entities/position_batch_entity.dart';
+import '../domain/entities/posicion_fija_entity.dart';
 import '../domain/entities/segmento_entity.dart';
 import '../domain/entities/video_segmento_entity.dart';
 import 'services/auth_expiration_handler.dart';
@@ -207,6 +210,16 @@ class AppDI {
       adapter: VideoRemoteAdapter(network, videoStore),
       conflictResolver: const ServerWinsResolver<VideoSegmentoEntity>(),
       fromJson: VideoSegmentoEntity.fromJson,
+    );
+
+    final posicionFijaStore = PosicionFijaLocalStore(db);
+    DI.registerLazySingleton<PosicionFijaLocalStore>(() => posicionFijaStore);
+    await OfflineModule.registerEntity<PosicionFijaEntity>(
+      entityType: 'posicion_fija',
+      store: posicionFijaStore,
+      fetcher: PosicionFijaRemoteFetcher(network),
+      conflictResolver: const ServerWinsResolver<PosicionFijaEntity>(),
+      fromJson: PosicionFijaEntity.fromJson,
     );
 
     DI.registerLazySingleton<GpsBackgroundService>(() => GpsBackgroundService());

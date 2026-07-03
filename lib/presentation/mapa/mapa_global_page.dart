@@ -15,6 +15,7 @@ import '../../domain/entities/segmento_entity.dart';
 import 'layers/gasoductos_map_layer.dart';
 import 'layers/pks_map_layer.dart';
 import 'layers/hitos_map_layer.dart';
+import 'layers/posiciones_fijas_map_layer.dart';
 import 'layers/segmentos_map_controller.dart';
 import 'layers/segmentos_map_layer.dart';
 import 'lines_cut/lines_cut_ui.dart';
@@ -139,6 +140,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               SegmentosMapLayer(currentZoom: controller.currentZoom),
               PksMapLayer(currentZoom: controller.currentZoom),
               HitosMapLayer(currentZoom: controller.currentZoom),
+              PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
               MyCurrentLocationLayer(
                 alignDirectionOnUpdate: AlignOnUpdate.always,
                 alignPositionOnUpdate: AlignOnUpdate.always,

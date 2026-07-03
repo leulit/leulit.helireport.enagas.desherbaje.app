@@ -40,7 +40,7 @@ extension MasterDataKindLabel on MasterDataKind {
       case MasterDataKind.segmentos:
         return 'Lista de segmentos asignados al operador.';
       case MasterDataKind.posicionesFijas:
-        return 'Pendiente de backend.';
+        return 'Posiciones fijas asociadas a cada CT.';
     }
   }
 }

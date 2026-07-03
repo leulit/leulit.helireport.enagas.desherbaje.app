@@ -198,4 +198,80 @@ void main() {
       },
     );
   });
+
+  group('_runOne posicionesFijas — pull-only branch', () {
+    test('ok outcome → row becomes success, lastDownloadAt IS set', () async {
+      OfflineModule.registerPullRunnerForTest(
+        'posicion_fija',
+        ({CancelToken? token}) async => _summary(outcome: PullOutcome.ok),
+      );
+
+      await controller.descargar(MasterDataKind.posicionesFijas);
+
+      final row = controller.rows
+          .firstWhere((r) => r.kind == MasterDataKind.posicionesFijas);
+      expect(row.status, equals(MasterDataStatus.success));
+      expect(row.lastDownloadAt, isNotNull);
+    });
+
+    test(
+      'isDegraded (error) → row has error status with fallback message',
+      () async {
+        OfflineModule.registerPullRunnerForTest(
+          'posicion_fija',
+          ({CancelToken? token}) async => _summary(
+            outcome: PullOutcome.error,
+            errorMessage: null,
+          ),
+        );
+
+        await controller.descargar(MasterDataKind.posicionesFijas);
+
+        final row = controller.rows
+            .firstWhere((r) => r.kind == MasterDataKind.posicionesFijas);
+        expect(row.status, equals(MasterDataStatus.error));
+        expect(row.errorMessage, contains('posiciones fijas'));
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.containsKey('sync_master_last_download_posicionesFijas'),
+          isFalse,
+        );
+      },
+    );
+
+    test('cancelled → row goes back to idle', () async {
+      OfflineModule.registerPullRunnerForTest(
+        'posicion_fija',
+        ({CancelToken? token}) async => const PullSummary(
+          total: 0,
+          upserted: 0,
+          conflicts: 0,
+          cancelled: true,
+          outcome: PullOutcome.cancelled,
+        ),
+      );
+
+      await controller.descargar(MasterDataKind.posicionesFijas);
+
+      final row = controller.rows
+          .firstWhere((r) => r.kind == MasterDataKind.posicionesFijas);
+      expect(row.status, equals(MasterDataStatus.idle));
+    });
+
+    test('authExpired → row has error with session-expired message', () async {
+      OfflineModule.registerPullRunnerForTest(
+        'posicion_fija',
+        ({CancelToken? token}) async =>
+            _summary(outcome: PullOutcome.authExpired),
+      );
+
+      await controller.descargar(MasterDataKind.posicionesFijas);
+
+      final row = controller.rows
+          .firstWhere((r) => r.kind == MasterDataKind.posicionesFijas);
+      expect(row.status, equals(MasterDataStatus.error));
+      expect(row.errorMessage, contains('sesión'));
+    });
+  });
 }

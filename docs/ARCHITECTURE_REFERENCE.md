@@ -74,6 +74,7 @@ lib/
 │   │   ├── imagen_segmento_entity.dart            # Implementa Syncable
 │   │   ├── video_segmento_entity.dart             # Implementa Syncable — TipoVideo, uploadOffset, uploadId; remoteId = uploadId ?? id
 │   │   ├── position_batch_entity.dart             # Lote GPS — implementa Syncable
+│   │   ├── posicion_fija_entity.dart              # Implementa Syncable — pull-only; displayLatitude/Longitude (fixed_* > latitud/longitud)
 │   │   ├── ct_info_entity.dart
 │   │   ├── gasoducto_entity.dart
 │   │   ├── pk_entity.dart                         # Punto kilométrico (marcador mapa)
@@ -114,7 +115,9 @@ lib/
 │       ├── mensaje_local_store.dart
 │       ├── mensaje_remote_adapter.dart
 │       ├── position_local_store.dart
-│       └── position_batch_remote_adapter.dart
+│       ├── position_batch_remote_adapter.dart
+│       ├── posicion_fija_local_store.dart         # tabla posiciones_fijas — pull-only, sin outbox
+│       └── posicion_fija_remote_fetcher.dart      # GET /incidencias/posicionesfijasbycts/{cts}
 └── presentation/
     ├── auth/
     │   ├── login_page.dart
@@ -145,6 +148,14 @@ lib/
         ├── mapa_global_page.dart
         ├── mapa_global_binding.dart
         ├── mapa_global_controller.dart            # Arranca/para GpsBackgroundService
+        ├── layers/
+        │   ├── segmentos_map_controller.dart
+        │   ├── segmentos_map_layer.dart
+        │   ├── hitos_map_layer.dart               # Lee AppDI.hitosService directamente
+        │   ├── posiciones_fijas_map_controller.dart  # Lee PosicionFijaLocalStore (DI get_it), pull-only
+        │   ├── posiciones_fijas_map_layer.dart       # Clon visual de HitosMapLayer
+        │   ├── gasoductos_map_layer.dart
+        │   └── pks_map_layer.dart
         ├── lines_cut/
         └── legacy/
 ```
@@ -241,6 +252,23 @@ Lote de hasta ~500 puntos GPS. La unidad de sincronización del tracking.
 | `points` | `List<PositionPoint>` |
 | `startedAt`, `endedAt` | `DateTime` |
 
+### `PosicionFijaEntity` — `Syncable`, **pull only**
+Posición fija (instalación/vigilancia) asociada a un CT. Se descarga y se muestra en el mapa; nunca se sube (sin outbox).
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `clientId` | `String` | UUID v4 |
+| `id` | `int?` | ID remoto (`remoteId` = `id?.toString()`) |
+| `title`, `ctname` | `String` | |
+| `latitud`, `longitud` | `double?` | Llegan como `String` del backend; parseadas con `double.tryParse` |
+| `fixedLatitude`, `fixedLongitude` | `double?` | Idem; pueden venir `"0.000000000"` (inválidas) |
+| `zona`, `tramo`, `subtramo`, `tipoPunto`, `tipoVigilancia`, `trazaname`, `fotos` | `String?` | |
+| `fecha` | `DateTime?` | |
+| `updatedAt` | `DateTime` | Fallback determinista: `updated_at` → `iupdated` → `icreated` → `fecha` → epoch 0. Nunca `DateTime.now()` |
+| `displayLatitude`/`displayLongitude` | getters | Prefieren `fixed_*` si son válidas (no null/NaN/0,0/fuera de rango), si no caen a `latitud/longitud` |
+| `hasValidPoint` | getter | `true` si hay un punto válido para pintar en mapa |
+
+Registrada en el motor solo con `fetcher` (sin `adapter`) — `OfflineModule.registerEntity<PosicionFijaEntity>(entityType: 'posicion_fija', ...)`. Endpoint: `GET /incidencias/posicionesfijasbycts/{cts}` (mismo esquema de nombres de CT que `segmentosByCt`). Capa de mapa: `PosicionesFijasMapController` (lee `PosicionFijaLocalStore` local) + `PosicionesFijasMapLayer` (clon visual de `HitosMapLayer`).
+
 ### `UserEntity`
 NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | Campo | Tipo |
@@ -263,6 +291,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `CameraCaptureController` | `presentation/camera/` | Captura cámara → enqueue al outbox vía `OfflineRepository` |
 | `MapaGlobalController` | `presentation/mapa/` | Mapa global; arranca/para `GpsBackgroundService` en su ciclo |
 | `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
+| `PosicionesFijasMapController` | `presentation/mapa/layers/` | Lee `PosicionFijaLocalStore` (DI get_it) y expone marcadores válidos; solo lectura local, sin red |
 | `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo" |
 | `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/video/mensaje) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
 | `SplashController` | `presentation/splash/` | Ruta inicial; `await AppDI.init()` con spinner/reintentar antes de navegar a login |
