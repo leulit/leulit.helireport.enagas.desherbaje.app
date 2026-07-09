@@ -27,6 +27,7 @@ enum VideoSegmentoFieldNames {
   clientId('client_id'),
   actividadId('actividad_id'),
   segmentoId('segmento_id'),
+  segmentoClientId('segmento_client_id'),
   tipoVideo('tipo_video'),
   filename('filename'),
   ruta('ruta'),
@@ -45,6 +46,7 @@ enum VideoSegmentoFieldNames {
   syncedAt('synced_at'),
   needsSync('needs_sync'),
   uploadOffset('upload_offset'),
+
   /// Server-assigned upload session ID (UUID). Persisted after `initVideoUpload`
   /// to allow resuming across app restarts. NOT sent to the backend as part of
   /// the entity JSON payload.
@@ -69,6 +71,7 @@ class VideoSegmentoEntity implements Syncable {
     required this.ruta,
     required this.capturadaAt,
     String? clientId,
+    this.segmentoClientId,
   }) : _clientId = clientId ?? const Uuid().v4();
 
   /// Identificador remoto asignado por el backend tras la subida.
@@ -80,6 +83,12 @@ class VideoSegmentoEntity implements Syncable {
 
   int actividadId;
   int segmentoId;
+
+  /// `clientId` (UUID local) del segmento propietario de esta captura. Es el
+  /// vínculo estable local: `segmentoId` (remoto) vale 0 mientras el
+  /// segmento no ha sincronizado, así que las lecturas locales deben filtrar
+  /// por este campo, no por `segmentoId`.
+  String? segmentoClientId;
   TipoVideo tipoVideo;
   String filename;
 
@@ -151,38 +160,61 @@ class VideoSegmentoEntity implements Syncable {
     }
 
     final entity = VideoSegmentoEntity(
-      actividadId: readJsonDataUtil<int>(json, VideoSegmentoFieldNames.actividadId.value, 0),
-      segmentoId:  readJsonDataUtil<int>(json, VideoSegmentoFieldNames.segmentoId.value, 0),
-      tipoVideo:   TipoVideo.fromString(readJsonDataUtil<String?>(json, VideoSegmentoFieldNames.tipoVideo.value, null)),
-      filename:    readJsonDataUtil<String>(json, VideoSegmentoFieldNames.filename.value, ''),
-      ruta:        readJsonDataUtil<String>(json, VideoSegmentoFieldNames.ruta.value, ''),
-      capturadaAt: parseDate(VideoSegmentoFieldNames.capturadaAt.value, DateTime.now()),
-      clientId:    readJsonDataUtil<String?>(json, VideoSegmentoFieldNames.clientId.value, null),
+      actividadId: readJsonDataUtil<int>(
+          json, VideoSegmentoFieldNames.actividadId.value, 0),
+      segmentoId: readJsonDataUtil<int>(
+          json, VideoSegmentoFieldNames.segmentoId.value, 0),
+      tipoVideo: TipoVideo.fromString(readJsonDataUtil<String?>(
+          json, VideoSegmentoFieldNames.tipoVideo.value, null)),
+      filename: readJsonDataUtil<String>(
+          json, VideoSegmentoFieldNames.filename.value, ''),
+      ruta: readJsonDataUtil<String>(
+          json, VideoSegmentoFieldNames.ruta.value, ''),
+      capturadaAt:
+          parseDate(VideoSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId: readJsonDataUtil<String?>(
+          json, VideoSegmentoFieldNames.clientId.value, null),
     );
 
-    entity.id           = readJsonDataUtil<int?>(json, VideoSegmentoFieldNames.id.value, null);
-    entity.url          = readJsonDataUtil<String?>(json, VideoSegmentoFieldNames.url.value, null);
-    entity.mimeType     = readJsonDataUtil<String>(json, VideoSegmentoFieldNames.mimeType.value, 'video/mp4');
-    entity.tamanyoBytes = readJsonDataUtil<int?>(json, VideoSegmentoFieldNames.tamanyoBytes.value, null);
-    entity.latitud       = (readJsonDataUtil<num?>(json, VideoSegmentoFieldNames.latitud.value, null))?.toDouble();
-    entity.longitud      = (readJsonDataUtil<num?>(json, VideoSegmentoFieldNames.longitud.value, null))?.toDouble();
-    entity.fixedLatitud  = (readJsonDataUtil<num?>(json, VideoSegmentoFieldNames.fixedLatitud.value, null))?.toDouble();
-    entity.fixedLongitud = (readJsonDataUtil<num?>(json, VideoSegmentoFieldNames.fixedLongitud.value, null))?.toDouble();
-    entity.subidaPor     = readJsonDataUtil<int?>(json, VideoSegmentoFieldNames.subidaPor.value, null);
+    entity.id =
+        readJsonDataUtil<int?>(json, VideoSegmentoFieldNames.id.value, null);
+    entity.url = readJsonDataUtil<String?>(
+        json, VideoSegmentoFieldNames.url.value, null);
+    entity.mimeType = readJsonDataUtil<String>(
+        json, VideoSegmentoFieldNames.mimeType.value, 'video/mp4');
+    entity.tamanyoBytes = readJsonDataUtil<int?>(
+        json, VideoSegmentoFieldNames.tamanyoBytes.value, null);
+    entity.latitud = (readJsonDataUtil<num?>(
+            json, VideoSegmentoFieldNames.latitud.value, null))
+        ?.toDouble();
+    entity.longitud = (readJsonDataUtil<num?>(
+            json, VideoSegmentoFieldNames.longitud.value, null))
+        ?.toDouble();
+    entity.fixedLatitud = (readJsonDataUtil<num?>(
+            json, VideoSegmentoFieldNames.fixedLatitud.value, null))
+        ?.toDouble();
+    entity.fixedLongitud = (readJsonDataUtil<num?>(
+            json, VideoSegmentoFieldNames.fixedLongitud.value, null))
+        ?.toDouble();
+    entity.subidaPor = readJsonDataUtil<int?>(
+        json, VideoSegmentoFieldNames.subidaPor.value, null);
 
     try {
       final subidaRaw = json[VideoSegmentoFieldNames.subidaAt.value];
-      if (subidaRaw != null) entity.subidaAt = DateTime.parse(subidaRaw.toString());
+      if (subidaRaw != null)
+        entity.subidaAt = DateTime.parse(subidaRaw.toString());
     } catch (_) {}
 
     try {
       final createdRaw = json[VideoSegmentoFieldNames.createdAt.value];
-      if (createdRaw != null) entity.createdAt = DateTime.parse(createdRaw.toString());
+      if (createdRaw != null)
+        entity.createdAt = DateTime.parse(createdRaw.toString());
     } catch (_) {}
 
     try {
       final updatedRaw = json[VideoSegmentoFieldNames.updatedAt.value];
-      if (updatedRaw != null) entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
+      if (updatedRaw != null)
+        entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
     } catch (_) {}
 
     return entity;
@@ -206,7 +238,8 @@ class VideoSegmentoEntity implements Syncable {
         VideoSegmentoFieldNames.longitud.value: longitud,
         VideoSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
         VideoSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
-        VideoSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        VideoSegmentoFieldNames.capturadaAt.value:
+            capturadaAt.toIso8601String(),
         VideoSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
         VideoSegmentoFieldNames.subidaPor.value: subidaPor,
       };
@@ -220,6 +253,7 @@ class VideoSegmentoEntity implements Syncable {
         VideoSegmentoFieldNames.clientId.value: clientId,
         VideoSegmentoFieldNames.actividadId.value: actividadId,
         VideoSegmentoFieldNames.segmentoId.value: segmentoId,
+        VideoSegmentoFieldNames.segmentoClientId.value: segmentoClientId,
         VideoSegmentoFieldNames.tipoVideo.value: tipoVideo.valor,
         VideoSegmentoFieldNames.filename.value: filename,
         VideoSegmentoFieldNames.ruta.value: ruta,
@@ -230,11 +264,13 @@ class VideoSegmentoEntity implements Syncable {
         VideoSegmentoFieldNames.longitud.value: longitud,
         VideoSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
         VideoSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
-        VideoSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        VideoSegmentoFieldNames.capturadaAt.value:
+            capturadaAt.toIso8601String(),
         VideoSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
         VideoSegmentoFieldNames.subidaPor.value: subidaPor,
         VideoSegmentoFieldNames.createdAt.value: createdAt?.toIso8601String(),
-        VideoSegmentoFieldNames.updatedAt.value: updatedAtRemote?.toIso8601String(),
+        VideoSegmentoFieldNames.updatedAt.value:
+            updatedAtRemote?.toIso8601String(),
         VideoSegmentoFieldNames.needsSync.value: needsSync ? 1 : 0,
         VideoSegmentoFieldNames.uploadOffset.value: uploadOffset,
         VideoSegmentoFieldNames.uploadId.value: uploadId,
@@ -254,29 +290,43 @@ class VideoSegmentoEntity implements Syncable {
     }
 
     final entity = VideoSegmentoEntity(
-      actividadId: (row[VideoSegmentoFieldNames.actividadId.value] as int?) ?? 0,
-      segmentoId:  (row[VideoSegmentoFieldNames.segmentoId.value] as int?) ?? 0,
-      tipoVideo:   TipoVideo.fromString(row[VideoSegmentoFieldNames.tipoVideo.value] as String?),
-      filename:    (row[VideoSegmentoFieldNames.filename.value] as String?) ?? '',
-      ruta:        (row[VideoSegmentoFieldNames.ruta.value] as String?) ?? '',
-      capturadaAt: parseDateOr(VideoSegmentoFieldNames.capturadaAt.value, DateTime.now()),
-      clientId:    row[VideoSegmentoFieldNames.clientId.value] as String?,
+      actividadId:
+          (row[VideoSegmentoFieldNames.actividadId.value] as int?) ?? 0,
+      segmentoId: (row[VideoSegmentoFieldNames.segmentoId.value] as int?) ?? 0,
+      tipoVideo: TipoVideo.fromString(
+          row[VideoSegmentoFieldNames.tipoVideo.value] as String?),
+      filename: (row[VideoSegmentoFieldNames.filename.value] as String?) ?? '',
+      ruta: (row[VideoSegmentoFieldNames.ruta.value] as String?) ?? '',
+      capturadaAt: parseDateOr(
+          VideoSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId: row[VideoSegmentoFieldNames.clientId.value] as String?,
     );
 
-    entity.id            = row[VideoSegmentoFieldNames.id.value] as int?;
-    entity.url           = row[VideoSegmentoFieldNames.url.value] as String?;
-    entity.mimeType      = (row[VideoSegmentoFieldNames.mimeType.value] as String?) ?? 'video/mp4';
-    entity.tamanyoBytes  = row[VideoSegmentoFieldNames.tamanyoBytes.value] as int?;
-    entity.latitud       = (row[VideoSegmentoFieldNames.latitud.value] as num?)?.toDouble();
-    entity.longitud      = (row[VideoSegmentoFieldNames.longitud.value] as num?)?.toDouble();
-    entity.fixedLatitud  = (row[VideoSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
-    entity.fixedLongitud = (row[VideoSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
-    entity.subidaPor     = row[VideoSegmentoFieldNames.subidaPor.value] as int?;
-    entity.subidaAt        = parseDateNullable(VideoSegmentoFieldNames.subidaAt.value);
-    entity.createdAt       = parseDateNullable(VideoSegmentoFieldNames.createdAt.value);
-    entity.updatedAtRemote = parseDateNullable(VideoSegmentoFieldNames.updatedAt.value);
-    entity.uploadOffset    = (row[VideoSegmentoFieldNames.uploadOffset.value] as int?) ?? 0;
-    entity.uploadId        = row[VideoSegmentoFieldNames.uploadId.value] as String?;
+    entity.id = row[VideoSegmentoFieldNames.id.value] as int?;
+    entity.url = row[VideoSegmentoFieldNames.url.value] as String?;
+    entity.mimeType =
+        (row[VideoSegmentoFieldNames.mimeType.value] as String?) ?? 'video/mp4';
+    entity.tamanyoBytes =
+        row[VideoSegmentoFieldNames.tamanyoBytes.value] as int?;
+    entity.latitud =
+        (row[VideoSegmentoFieldNames.latitud.value] as num?)?.toDouble();
+    entity.longitud =
+        (row[VideoSegmentoFieldNames.longitud.value] as num?)?.toDouble();
+    entity.fixedLatitud =
+        (row[VideoSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
+    entity.fixedLongitud =
+        (row[VideoSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
+    entity.subidaPor = row[VideoSegmentoFieldNames.subidaPor.value] as int?;
+    entity.subidaAt = parseDateNullable(VideoSegmentoFieldNames.subidaAt.value);
+    entity.createdAt =
+        parseDateNullable(VideoSegmentoFieldNames.createdAt.value);
+    entity.updatedAtRemote =
+        parseDateNullable(VideoSegmentoFieldNames.updatedAt.value);
+    entity.uploadOffset =
+        (row[VideoSegmentoFieldNames.uploadOffset.value] as int?) ?? 0;
+    entity.uploadId = row[VideoSegmentoFieldNames.uploadId.value] as String?;
+    entity.segmentoClientId =
+        row[VideoSegmentoFieldNames.segmentoClientId.value] as String?;
 
     return entity;
   }
@@ -285,6 +335,7 @@ class VideoSegmentoEntity implements Syncable {
     int? id,
     int? actividadId,
     int? segmentoId,
+    String? segmentoClientId,
     TipoVideo? tipoVideo,
     String? filename,
     String? ruta,
@@ -303,27 +354,28 @@ class VideoSegmentoEntity implements Syncable {
   }) {
     final e = VideoSegmentoEntity(
       actividadId: actividadId ?? this.actividadId,
-      segmentoId:  segmentoId  ?? this.segmentoId,
-      tipoVideo:   tipoVideo   ?? this.tipoVideo,
-      filename:    filename    ?? this.filename,
-      ruta:        ruta        ?? this.ruta,
+      segmentoId: segmentoId ?? this.segmentoId,
+      tipoVideo: tipoVideo ?? this.tipoVideo,
+      filename: filename ?? this.filename,
+      ruta: ruta ?? this.ruta,
       capturadaAt: capturadaAt ?? this.capturadaAt,
-      clientId:    clientId,
+      clientId: clientId,
+      segmentoClientId: segmentoClientId ?? this.segmentoClientId,
     );
-    e.id           = id           ?? this.id;
-    e.url          = url          ?? this.url;
-    e.mimeType     = mimeType     ?? this.mimeType;
+    e.id = id ?? this.id;
+    e.url = url ?? this.url;
+    e.mimeType = mimeType ?? this.mimeType;
     e.tamanyoBytes = tamanyoBytes ?? this.tamanyoBytes;
-    e.latitud       = latitud       ?? this.latitud;
-    e.longitud      = longitud      ?? this.longitud;
-    e.fixedLatitud  = fixedLatitud  ?? this.fixedLatitud;
+    e.latitud = latitud ?? this.latitud;
+    e.longitud = longitud ?? this.longitud;
+    e.fixedLatitud = fixedLatitud ?? this.fixedLatitud;
     e.fixedLongitud = fixedLongitud ?? this.fixedLongitud;
-    e.subidaAt      = subidaAt      ?? this.subidaAt;
-    e.subidaPor     = subidaPor     ?? this.subidaPor;
-    e.createdAt     = createdAt;
+    e.subidaAt = subidaAt ?? this.subidaAt;
+    e.subidaPor = subidaPor ?? this.subidaPor;
+    e.createdAt = createdAt;
     e.updatedAtRemote = updatedAtRemote;
-    e.uploadOffset  = uploadOffset  ?? this.uploadOffset;
-    e.uploadId      = uploadId      ?? this.uploadId;
+    e.uploadOffset = uploadOffset ?? this.uploadOffset;
+    e.uploadId = uploadId ?? this.uploadId;
     return e;
   }
 

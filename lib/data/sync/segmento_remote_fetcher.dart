@@ -49,10 +49,11 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
         headers: await bearerAuthHeader(_storage),
       );
       final raw = response.data as List? ?? const [];
-      return raw
+      final remote = raw
           .whereType<Map>()
           .map((m) => SegmentoEntity.fromJson(m.cast<String, dynamic>()))
           .toList();
+      return remote;
     } on NetworkError catch (err) {
       if (err.statusCode == 401) {
         throw AuthExpiredException(err.message);

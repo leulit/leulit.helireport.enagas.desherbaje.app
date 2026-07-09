@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:helireport_desherbaje/core/result/data_result.dart';
 import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/sync/engine/sync_engine.dart';
+import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/repository/auth_repository.dart';
 import 'package:helireport_desherbaje/domain/usecases/get_segmentos_usecase.dart';
@@ -20,6 +21,8 @@ class MockSyncEngine extends Mock implements SyncEngine {}
 class MockConnectivityService extends Mock implements ConnectivityService {}
 
 class MockAuthRepository extends Mock implements AuthRepository {}
+
+class MockPurgeUseCase extends Mock implements PurgeSyncedSegmentoUseCase {}
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +41,13 @@ void main() {
   late MockSyncEngine mockEngine;
   late MockConnectivityService mockConnectivity;
   late MockAuthRepository mockAuthRepo;
+  late MockPurgeUseCase mockPurge;
   late ForzarEnvioController controller;
+
+  setUpAll(() {
+    registerFallbackValue(SegmentoEntity(null, 0, TipoInstalacion.lineal, []));
+    registerFallbackValue(<SegmentoEntity>[]);
+  });
 
   setUp(() {
     Get.reset();
@@ -47,6 +56,7 @@ void main() {
     mockEngine = MockSyncEngine();
     mockConnectivity = MockConnectivityService();
     mockAuthRepo = MockAuthRepository();
+    mockPurge = MockPurgeUseCase();
 
     // Stub por defecto: lista vacía para no bloquear onInit.
     when(() => mockUseCase.execute())
@@ -60,11 +70,19 @@ void main() {
     when(() => mockAuthRepo.getCurrentUser())
         .thenAnswer((_) async => null);
 
+    // Stub por defecto: purga no borra nada (no-op inyectado).
+    when(() => mockPurge.purgeIfFullySynced(any()))
+        .thenAnswer(
+            (_) async => const PurgeOutcome(status: PurgeStatus.keptUnsynced));
+    when(() => mockPurge.purgeAllFullySynced(any()))
+        .thenAnswer((_) async => const <PurgeOutcome>[]);
+
     controller = ForzarEnvioController(
       mockUseCase,
       mockEngine,
       mockConnectivity,
       authRepository: mockAuthRepo,
+      purgeUseCase: mockPurge,
     );
     Get.put(controller);
   });
@@ -140,6 +158,29 @@ void main() {
 
       expect(controller.lastDrainSummary.value?.authExpired, isTrue);
     });
+
+    // ─── (f) drenado limpio → purga el segmento enviado ───────────────────
+
+    test('(f) tras un drenado limpio invoca purgeIfFullySynced del segmento',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+
+      await controller.enviarCloud(_fakeSegmento(id: 42));
+
+      verify(() => mockPurge.purgeIfFullySynced(any())).called(1);
+    });
+
+    // ─── (g) authExpired → NUNCA purga (invariante de seguridad) ──────────
+
+    test('(g) authExpired en el drain NO purga el segmento', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockEngine.drain(entityType: 'segmento'))
+          .thenAnswer((_) async => const DrainSummary(authExpired: true));
+
+      await controller.enviarCloud(_fakeSegmento(id: 7));
+
+      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
+    });
   });
 
   // ─── (c) enviarAllCloud drena todos los tipos ──────────────────────────────
@@ -183,6 +224,16 @@ void main() {
       verify(() => mockEngine.drain(entityType: 'imagen')).called(1);
       verifyNever(() => mockEngine.drain(entityType: 'mensaje'));
       verifyNever(() => mockEngine.drain(entityType: 'position'));
+      // Invariante: nunca purgar en lote tras un authExpired.
+      verifyNever(() => mockPurge.purgeAllFullySynced(any()));
+    });
+
+    test('tras un drenado limpio invoca purgeAllFullySynced una vez', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+
+      await controller.enviarAllCloud();
+
+      verify(() => mockPurge.purgeAllFullySynced(any())).called(1);
     });
 
     test('summary combinado acumula totales de todos los tipos', () async {

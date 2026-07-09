@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
+import '../../data/network/network_error.dart';
 import '../../data/repository/auth_repository_impl.dart';
 
 class LoginPageController extends GetxController {
@@ -97,12 +98,24 @@ class LoginPageController extends GetxController {
   }
 
   String _parseError(Object e) {
-    final str = e.toString();
-    if (str.contains('401') || str.contains('credencial')) {
-      return 'Usuario o contraseña incorrectos';
+    if (e is NetworkError) {
+      switch (e.category) {
+        case NetworkErrorCategory.offline:
+          return 'Sin conexión a internet';
+        case NetworkErrorCategory.timeout:
+          return 'La conexión tardó demasiado. Inténtalo de nuevo.';
+        case NetworkErrorCategory.unauthorized:
+          return 'Usuario o contraseña incorrectos';
+        case NetworkErrorCategory.conflict:
+        case NetworkErrorCategory.retryable:
+        case NetworkErrorCategory.unrecoverable:
+          return 'Error del servidor. Inténtalo de nuevo.';
+      }
     }
-    if (str.contains('SocketException') || str.contains('network')) {
-      return 'Sin conexión a internet';
+    // El provider lanza Exception('Invalid credentials') cuando el backend
+    // responde 200 con `rows` vacío (credenciales no válidas, sin 401).
+    if (e.toString().contains('Invalid credentials')) {
+      return 'Usuario o contraseña incorrectos';
     }
     return 'Error al iniciar sesión. Inténtalo de nuevo.';
   }

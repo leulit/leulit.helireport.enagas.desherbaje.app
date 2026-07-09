@@ -51,7 +51,7 @@ class MensajeSegmentoRepository {
       final response = await _network.get(ApiEndpoints.mensajesBySegmento(id));
       final data = response.data;
       if (data is! List) {
-        // NF-16b: unexpected body format — fall back to cache.
+        // NF-16b: /lounexpected body format — fall back to cache.
         // Log via AppLog so contract regressions are visible in release builds.
         AppLog.w(
           'mensajesBySegmento($id): respuesta inesperada del backend '

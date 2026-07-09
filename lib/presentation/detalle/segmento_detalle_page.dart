@@ -16,8 +16,9 @@ import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
-import '../../domain/entities/video_segmento_entity.dart';
 import 'segmento_detalle_controller.dart';
+import 'segmento_media_item.dart';
+import '../camera/video_player_page.dart';
 
 class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
   const SegmentoDetallePage({super.key});
@@ -25,7 +26,7 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 4,
       child: Scaffold(
         appBar: _buildAppBar(),
         body: Column(
@@ -141,8 +142,6 @@ class _PanelDatosTabs extends StatelessWidget {
               Tab(icon: Icon(Icons.forum_outlined), text: 'Mensajes'),
               Tab(icon: Icon(Icons.photo_library_outlined), text: 'Antes'),
               Tab(icon: Icon(Icons.photo_library_outlined), text: 'Después'),
-              Tab(icon: Icon(Icons.videocam_outlined), text: 'Vídeo antes'),
-              Tab(icon: Icon(Icons.videocam_outlined), text: 'Vídeo desp.'),
             ],
           ),
         ),
@@ -151,21 +150,13 @@ class _PanelDatosTabs extends StatelessWidget {
             children: [
               _DatosTab(controller: controller),
               _MensajesTab(controller: controller),
-              _ImagenesCarousel(
+              _MediaCarousel(
                 controller: controller,
                 tipo: TipoFoto.antes,
               ),
-              _ImagenesCarousel(
+              _MediaCarousel(
                 controller: controller,
                 tipo: TipoFoto.despues,
-              ),
-              _VideosTab(
-                controller: controller,
-                tipo: TipoVideo.antes,
-              ),
-              _VideosTab(
-                controller: controller,
-                tipo: TipoVideo.despues,
               ),
             ],
           ),
@@ -198,115 +189,140 @@ class _DatosTab extends StatelessWidget {
         : '${s.longitud.toStringAsFixed(0)} m';
     final superficieText = '${s.superficie.toStringWithComma(decimals: 0)} m²';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFA5D6A7)),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _InfoRow(
-                  icon: Icons.timeline,
-                  label: 'Traza',
-                  value: (s.traza ?? '').isNotEmpty ? s.traza! : '—',
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(Icons.straighten,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    const Text('Long: ',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text(lengthText, style: const TextStyle(fontSize: 13)),
-                    const Text('  -  ',
-                        style: TextStyle(fontSize: 13, color: Colors.grey)),
-                    Icon(Icons.square_foot,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    const Text('Sup: ',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                    Flexible(
-                      child: Text(
-                        superficieText,
-                        style: const TextStyle(fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFA5D6A7)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _InfoRow(
+                        icon: Icons.timeline,
+                        label: 'Traza',
+                        value: (s.traza ?? '').isNotEmpty ? s.traza! : '—',
                       ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.straighten,
+                              size: 16, color: Colors.grey.shade600),
+                          const SizedBox(width: 6),
+                          const Text('Long: ',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          Text(lengthText,
+                              style: const TextStyle(fontSize: 13)),
+                          const Text('  -  ',
+                              style:
+                                  TextStyle(fontSize: 13, color: Colors.grey)),
+                          Icon(Icons.square_foot,
+                              size: 16, color: Colors.grey.shade600),
+                          const SizedBox(width: 6),
+                          const Text('Sup: ',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          Flexible(
+                            child: Text(
+                              superficieText,
+                              style: const TextStyle(fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _DropdownInlineField<TipoActividad>(
+                  label: 'Tipo actividad',
+                  icon: Icons.category_outlined,
+                  rx: controller.tipoActividad,
+                  values: TipoActividad.values,
+                  labelOf: (t) => t.etiqueta,
+                ),
+                const SizedBox(height: 12),
+                _DropdownInlineField<EstadoActividad>(
+                  label: 'Estado',
+                  icon: Icons.flag_outlined,
+                  rx: controller.estado,
+                  values: _estadosEditables(controller.segmento.estado),
+                  labelOf: (e) => e.etiqueta,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Descripción',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  initialValue: controller.descripcion.value,
+                  onChanged: (v) => controller.descripcion.value = v,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    hintText:
+                        'Describe el área de trabajo o las características del tramo...',
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _DropdownInlineField<TipoActividad>(
-            label: 'Tipo actividad',
-            icon: Icons.category_outlined,
-            rx: controller.tipoActividad,
-            values: TipoActividad.values,
-            labelOf: (t) => t.etiqueta,
-          ),
-          const SizedBox(height: 12),
-          _DropdownInlineField<EstadoActividad>(
-            label: 'Estado',
-            icon: Icons.flag_outlined,
-            rx: controller.estado,
-            values: _estadosEditables(controller.segmento.estado),
-            labelOf: (e) => e.etiqueta,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Descripción',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: controller.descripcion.value,
-            onChanged: (v) => controller.descripcion.value = v,
-            maxLines: 5,
-            decoration: InputDecoration(
-              hintText:
-                  'Describe el área de trabajo o las características del tramo...',
-              filled: true,
-              fillColor: Colors.grey.shade50,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.all(12),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Obx(() => ElevatedButton.icon(
-                  onPressed:
-                      controller.isSaving.value ? null : controller.guardar,
-                  icon: controller.isSaving.value
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.check, size: 18),
-                  label: const Text('Guardar'),
-                )),
-          ),
-        ],
+        ),
+        _GuardarBar(controller: controller),
+      ],
+    );
+  }
+}
+
+/// Barra inferior fija con el botón "Guardar", pinneada bajo el `Expanded`
+/// scrollable de `_DatosTab` para que sea siempre visible sin hacer scroll.
+class _GuardarBar extends StatelessWidget {
+  final SegmentoDetalleController controller;
+  const _GuardarBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: SizedBox(
+        width: double.infinity,
+        child: Obx(() => ElevatedButton.icon(
+              onPressed: controller.isSaving.value ? null : controller.guardar,
+              icon: controller.isSaving.value
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check, size: 18),
+              label: const Text('Guardar'),
+            )),
       ),
     );
   }
@@ -348,6 +364,7 @@ class _DropdownInlineField<T> extends StatelessWidget {
           child: Obx(() => DropdownButtonFormField<T>(
                 initialValue: rx.value,
                 isDense: true,
+                isExpanded: true,
                 decoration: InputDecoration(
                   prefixIcon:
                       Icon(icon, color: AppColors.moduleGreen, size: 20),
@@ -363,6 +380,7 @@ class _DropdownInlineField<T> extends StatelessWidget {
                     .map((v) => DropdownMenuItem<T>(
                           value: v,
                           child: Text(labelOf(v),
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 13)),
                         ))
                     .toList(),
@@ -588,20 +606,17 @@ class _MensajeInput extends StatelessWidget {
 /// Carrusel + botón de captura de fotos para un único [TipoFoto] (antes /
 /// después). Usa [PageView] con un indicador de puntos. Lee de
 /// `controller.imagenes` (Rx) para reaccionar a las capturas nuevas.
-class _ImagenesCarousel extends StatefulWidget {
+class _MediaCarousel extends StatefulWidget {
   final SegmentoDetalleController controller;
   final TipoFoto tipo;
 
-  const _ImagenesCarousel({
-    required this.controller,
-    required this.tipo,
-  });
+  const _MediaCarousel({required this.controller, required this.tipo});
 
   @override
-  State<_ImagenesCarousel> createState() => _ImagenesCarouselState();
+  State<_MediaCarousel> createState() => _MediaCarouselState();
 }
 
-class _ImagenesCarouselState extends State<_ImagenesCarousel> {
+class _MediaCarouselState extends State<_MediaCarousel> {
   late final PageController _pageController = PageController();
   int _current = 0;
 
@@ -613,27 +628,32 @@ class _ImagenesCarouselState extends State<_ImagenesCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    final esAntes = widget.tipo == TipoFoto.antes;
     return Column(
       children: [
         Expanded(
           child: Obx(() {
-            final imagenes = widget.controller.imagenesPorTipo(widget.tipo);
-            if (imagenes.isEmpty) {
+            final media = widget.controller.mediaPorTipo(widget.tipo);
+            if (media.isEmpty) {
               return _EmptyState(
-                icon: Icons.photo_library_outlined,
-                message:
-                    'Sin imágenes ${widget.tipo == TipoFoto.antes ? 'antes' : 'después'}',
+                icon: Icons.perm_media_outlined,
+                message: 'Sin fotos ni vídeos ${esAntes ? 'antes' : 'después'}',
               );
             }
             // Reposicionar el indicador si la lista cambió y desbordamos.
-            if (_current >= imagenes.length) _current = imagenes.length - 1;
+            if (_current >= media.length) _current = media.length - 1;
             return Stack(
               children: [
                 PageView.builder(
                   controller: _pageController,
-                  itemCount: imagenes.length,
+                  itemCount: media.length,
                   onPageChanged: (i) => setState(() => _current = i),
-                  itemBuilder: (_, i) => _CarouselSlide(imagen: imagenes[i]),
+                  itemBuilder: (_, i) {
+                    final item = media[i];
+                    return item.isVideo
+                        ? _VideoSlide(item: item)
+                        : _CarouselSlide(item: item);
+                  },
                 ),
                 // Contador "n / N" arriba-derecha — siempre visible.
                 Positioned(
@@ -641,16 +661,16 @@ class _ImagenesCarouselState extends State<_ImagenesCarousel> {
                   right: 10,
                   child: _CountChip(
                     current: _current + 1,
-                    total: imagenes.length,
+                    total: media.length,
                   ),
                 ),
-                if (imagenes.length > 1)
+                if (media.length > 1)
                   Positioned(
                     bottom: 12,
                     left: 0,
                     right: 0,
                     child: _DotsIndicator(
-                      count: imagenes.length,
+                      count: media.length,
                       current: _current,
                     ),
                   ),
@@ -663,12 +683,12 @@ class _ImagenesCarouselState extends State<_ImagenesCarousel> {
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => widget.controller.capturarFoto(widget.tipo),
+              onPressed: () => widget.controller.capturarMedia(widget.tipo),
               icon: const Icon(Icons.add_a_photo),
               label: Text(
-                widget.tipo == TipoFoto.antes
-                    ? 'Capturar foto antes'
-                    : 'Capturar foto después',
+                esAntes
+                    ? 'Añadir foto/vídeo antes'
+                    : 'Añadir foto/vídeo después',
               ),
             ),
           ),
@@ -679,12 +699,23 @@ class _ImagenesCarouselState extends State<_ImagenesCarousel> {
 }
 
 class _CarouselSlide extends StatelessWidget {
-  final ImagenSegmentoEntity imagen;
-  const _CarouselSlide({required this.imagen});
+  final SegmentoMediaItem item;
+  const _CarouselSlide({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    final url = imagen.url;
+    return Stack(
+      children: [
+        Positioned.fill(child: _image()),
+        if (item.onDelete != null)
+          Positioned(
+              top: 10, left: 10, child: _DeleteBadge(onTap: item.onDelete!)),
+      ],
+    );
+  }
+
+  Widget _image() {
+    final url = item.remoteUrl;
     if (url != null && url.isNotEmpty) {
       final fullUrl =
           url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
@@ -701,16 +732,124 @@ class _CarouselSlide extends StatelessWidget {
       );
     }
     // Sin URL remota → la imagen aún vive solo en disco local.
-    if (imagen.ruta.isNotEmpty) {
+    final local = item.localPath;
+    if (local != null && local.isNotEmpty) {
       return Container(
         color: Colors.black,
-        child: Image.file(File(imagen.ruta), fit: BoxFit.contain),
+        child: Image.file(File(local), fit: BoxFit.contain),
       );
     }
     return Container(
       color: Colors.grey.shade200,
       child: const Center(
         child: Icon(Icons.image_not_supported, color: Colors.grey, size: 48),
+      ),
+    );
+  }
+}
+
+/// Slide de vídeo en el carrusel: póster negro con botón play. Al tocar abre
+/// el reproductor a pantalla completa: usa el fichero local si existe, y si no
+/// la url remota (vídeo ya en la nube). Si no hay ninguna fuente, avisa.
+class _VideoSlide extends StatelessWidget {
+  final SegmentoMediaItem item;
+  const _VideoSlide({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _open,
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(Icons.videocam, color: Colors.white24, size: 96),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child:
+                  const Icon(Icons.play_arrow, color: Colors.white, size: 44),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.filename,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    item.isSubida
+                        ? Icons.cloud_done
+                        : Icons.cloud_upload_outlined,
+                    color: item.isSubida
+                        ? AppColors.moduleGreen
+                        : Colors.orangeAccent,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+            if (item.onDelete != null)
+              Positioned(
+                top: 10,
+                left: 10,
+                child: _DeleteBadge(onTap: item.onDelete!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _open() {
+    final local = item.localPath;
+    if (local != null && local.isNotEmpty && File(local).existsSync()) {
+      Get.to<void>(() => VideoPlayerPage(path: local));
+      return;
+    }
+    final url = item.remoteUrl;
+    if (url != null && url.isNotEmpty) {
+      final full = url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
+      Get.to<void>(() => VideoPlayerPage.network(full));
+      return;
+    }
+    Get.snackbar(
+      'Video no disponible',
+      'No hay fuente reproducible para este video.',
+      snackPosition: SnackPosition.BOTTOM,
+    );
+  }
+}
+
+class _DeleteBadge extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DeleteBadge({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.delete_outline, color: Colors.white, size: 22),
+        ),
       ),
     );
   }
@@ -801,113 +940,6 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Tab Vídeos ─────────────────────────────────────────────────────────────
-
-/// Lista de vídeos de un [tipo] (antes / después) + botón de grabación.
-/// Sin reproducción in-app (v1): muestra nombre, tamaño y badge de estado.
-class _VideosTab extends StatelessWidget {
-  final SegmentoDetalleController controller;
-  final TipoVideo tipo;
-
-  const _VideosTab({required this.controller, required this.tipo});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: Obx(() {
-            final vids = controller.videosPorTipo(tipo);
-            if (vids.isEmpty) {
-              return _EmptyState(
-                icon: Icons.videocam_off_outlined,
-                message: tipo == TipoVideo.antes
-                    ? 'Sin vídeos antes'
-                    : 'Sin vídeos después',
-              );
-            }
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: vids.length,
-              itemBuilder: (_, i) => _VideoTile(video: vids[i]),
-            );
-          }),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => controller.capturarVideo(tipo),
-              icon: const Icon(Icons.videocam),
-              label: Text(
-                tipo == TipoVideo.antes
-                    ? 'Grabar vídeo antes'
-                    : 'Grabar vídeo después',
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VideoTile extends StatelessWidget {
-  final VideoSegmentoEntity video;
-  const _VideoTile({required this.video});
-
-  @override
-  Widget build(BuildContext context) {
-    final isPending = !video.isSubida;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: ListTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.moduleGreenLight,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(
-            Icons.videocam,
-            color: AppColors.moduleGreen,
-            size: 22,
-          ),
-        ),
-        title: Text(
-          video.filename,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          video.tamanyoLegible,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-        trailing: isPending
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Pendiente',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.orange.shade800,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              )
-            : const Icon(Icons.cloud_done, color: AppColors.moduleGreen, size: 20),
       ),
     );
   }

@@ -19,11 +19,11 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
   String get entityType => 'imagen';
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
-    if (from == 0 && to == 1) {
+    if (from < 1 && to >= 1) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_table (
           client_id        TEXT PRIMARY KEY,
@@ -56,6 +56,15 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
       await db.execute(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
         'ON $_table(id) WHERE id IS NOT NULL',
+      );
+    }
+    if (from < 2 && to >= 2) {
+      await db.execute(
+        'ALTER TABLE $_table ADD COLUMN segmento_client_id TEXT',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_segclient '
+        'ON $_table(segmento_client_id)',
       );
     }
   }

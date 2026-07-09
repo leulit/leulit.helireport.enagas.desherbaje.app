@@ -45,6 +45,20 @@ class OfflineRepository<T extends Syncable> {
     });
   }
 
+  /// Deletes an entity that has never been pushed: removes the local row and
+  /// purges any pending outbox job for it (no remote delete is enqueued). Use
+  /// for user-initiated deletion of not-yet-synced captures.
+  Future<void> purgeLocal(T entity) async {
+    await _db.transaction((txn) async {
+      await _store.delete(entity.clientId, txn: txn);
+      await _outbox.removeForEntity(
+        entityType: entityType,
+        clientId: entity.clientId,
+        txn: txn,
+      );
+    });
+  }
+
   Future<T?> findByClientId(String clientId) =>
       _store.findByClientId(clientId);
 

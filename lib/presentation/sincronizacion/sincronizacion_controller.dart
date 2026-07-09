@@ -165,9 +165,13 @@ class SincronizacionController extends MyGetxController {
         clearError: true,
         clearProgress: true,
         clearProgressLabel: true,
+        clearWarning: true,
       ),
     );
 
+    // Aviso no bloqueante que se adjunta a la fila `success` al final (solo lo
+    // fija la rama de segmentos cuando hay cambios locales pendientes).
+    String? warning;
     final List<Worker> downloadWorkers = <Worker>[];
     try {
       if (sharedToken?.isCancelled ?? false) {
@@ -217,19 +221,14 @@ class SincronizacionController extends MyGetxController {
           );
           masterDataResult = await _hitos.reload(token: sharedToken);
         case MasterDataKind.segmentos:
+          // La descarga es ADD-ONLY (el fetcher nunca pisa filas locales), así
+          // que ya no se aborta por cambios pendientes: se descargan los
+          // segmentos nuevos y se avisa de forma no bloqueante si hay locales
+          // sin subir.
           final int pending = await _countPendingForSegmentos();
           if (pending > 0) {
-            _updateRow(
-              kind,
-              _rowFor(kind).copyWith(
-                status: MasterDataStatus.error,
-                errorMessage:
-                    'Hay $pending cambios pendientes de subir. Súbelos antes de descargar la lista actualizada.',
-                clearProgress: true,
-                clearProgressLabel: true,
-              ),
-            );
-            return;
+            warning =
+                'Hay $pending cambios pendientes de subir. Súbelos antes de descargar la lista actualizada.';
           }
           final PullSummary? summary = await OfflineModule.runPull(
             'segmento',
@@ -365,9 +364,11 @@ class SincronizacionController extends MyGetxController {
           status: MasterDataStatus.success,
           lastDownloadAt: servedFromCache ? null : now,
           servedFromCache: servedFromCache,
+          warningMessage: warning,
           clearError: true,
           clearProgress: true,
           clearProgressLabel: true,
+          clearWarning: warning == null,
         ),
       );
     } catch (e) {

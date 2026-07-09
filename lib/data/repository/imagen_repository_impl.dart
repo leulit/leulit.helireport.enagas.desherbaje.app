@@ -27,11 +27,16 @@ class ImagenRepositoryImpl {
   Future<void> saveLocal(ImagenSegmentoEntity imagen) =>
       _offline.create(imagen);
 
-  Future<void> delete(ImagenSegmentoEntity imagen) =>
-      _offline.delete(imagen);
+  Future<void> delete(ImagenSegmentoEntity imagen) => _offline.delete(imagen);
 
-  Future<List<ImagenSegmentoEntity>> getAllBySegmento(int segmentoId) =>
-      _offline.findWhere('segmento_id', segmentoId);
+  /// Local-only delete for a not-yet-uploaded capture: removes the row and
+  /// cancels its pending outbox create (no remote delete).
+  Future<void> purgeLocal(ImagenSegmentoEntity imagen) =>
+      _offline.purgeLocal(imagen);
+
+  Future<List<ImagenSegmentoEntity>> getAllByClientId(
+          String segmentoClientId) =>
+      _offline.findWhere('segmento_client_id', segmentoClientId);
 
   /// Drains ALL pending images through the generic sync engine.
   ///

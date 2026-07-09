@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:gal/gal.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:logger/logger.dart';
 
@@ -23,6 +24,7 @@ import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/entities/video_segmento_entity.dart';
 import 'edit_extremos/edit_extremos_dialog.dart';
+import 'segmento_media_item.dart';
 
 class SegmentoDetalleController extends MyGetxController {
   static final Logger _log = Logger();
@@ -127,22 +129,71 @@ class SegmentoDetalleController extends MyGetxController {
     return 'CT ${segmento.ctId}';
   }
 
-  /// Imágenes filtradas por tipo (antes / después) para los carruseles.
-  List<ImagenSegmentoEntity> imagenesPorTipo(TipoFoto tipo) =>
-      imagenes.where((i) => i.tipoFoto == tipo).toList();
+  /// A cloud media row (all media lives in the imagenes list on the backend) is a
+  /// video when its mime type is video/* — with a filename/url extension fallback
+  /// for legacy rows that lack a reliable mime type.
+  static const Set<String> _videoExts = {
+    'mp4',
+    'mov',
+    'm4v',
+    'avi',
+    'mkv',
+    'webm',
+    '3gp',
+  };
 
-  /// Vídeos filtrados por tipo (antes / después).
-  List<VideoSegmentoEntity> videosPorTipo(TipoVideo tipo) =>
-      videos.where((v) => v.tipoVideo == tipo).toList();
+  bool _esVideo(ImagenSegmentoEntity i) {
+    if (i.mimeType.toLowerCase().startsWith('video/')) return true;
+    // Fallback por extensión para filas legacy sin mime fiable. Se prueban
+    // AMBAS fuentes (filename y url): un endpoint de descarga sin extensión
+    // limpia (p.ej. `/videos/download/42`) no debe descartar un filename
+    // `.mp4` válido. Se recorta el querystring antes de tomar la extensión.
+    bool hasVideoExt(String? s) {
+      if (s == null || s.isEmpty) return false;
+      final ext = s.split('?').first.split('.').last.toLowerCase();
+      return _videoExts.contains(ext);
+    }
+
+    return hasVideoExt(i.filename) || hasVideoExt(i.url);
+  }
+
+  /// Media combinada (fotos + videos, nube + local) de un [tipo], ordenada por
+  /// fecha de captura ascendente. Lee ambas RxList para que el Obx reaccione a
+  /// cualquiera. Un video de nube que ya existe como captura local (mismo
+  /// clientId) se omite: gana la copia local (reproduce offline).
+  List<SegmentoMediaItem> mediaPorTipo(TipoFoto tipo) {
+    final tv = _tipoVideoDesde(tipo);
+    final localVideoIds = <String>{
+      for (final v in videos)
+        if (v.tipoVideo == tv) v.clientId,
+    };
+    final items = <SegmentoMediaItem>[];
+    for (final i in imagenes) {
+      if (i.tipoFoto != tipo) continue;
+      if (_esVideo(i)) {
+        if (localVideoIds.contains(i.clientId)) continue; // dedup: local wins
+        items.add(SegmentoMediaItem.remoteVideo(i));
+      } else {
+        items.add(SegmentoMediaItem.imagen(
+          i,
+          onDelete: i.isSubida ? null : () => confirmDeleteImagen(i),
+        ));
+      }
+    }
+    for (final v in videos) {
+      if (v.tipoVideo != tv) continue;
+      items.add(SegmentoMediaItem.localVideo(
+        v,
+        onDelete: v.isSubida ? null : () => confirmDeleteVideo(v),
+      ));
+    }
+    items.sort((a, b) => a.capturadaAt.compareTo(b.capturadaAt));
+    return items;
+  }
 
   Future<void> _loadImagenes() async {
     final remote = segmento.imagenes;
-    final segId = segmento.id;
-    if (segId == null) {
-      imagenes.assignAll(remote);
-      return;
-    }
-    final local = await _imagenRepo.getAllBySegmento(segId);
+    final local = await _imagenRepo.getAllByClientId(segmento.clientId);
     final extras =
         local.where((l) => !remote.any((r) => r.clientId == l.clientId));
     imagenes.assignAll([...remote, ...extras]);
@@ -230,53 +281,36 @@ class SegmentoDetalleController extends MyGetxController {
   }
 
   Future<void> _loadVideos() async {
-    final segId = segmento.id;
-    if (segId == null) return;
-    final local = await _videoRepo.getAllBySegmento(segId);
+    final local = await _videoRepo.getAllByClientId(segmento.clientId);
     videos.assignAll(local);
   }
 
   // ──────────────────────────── Captura de vídeo ───────────────────────────
 
-  /// Abre la grabadora nativa del SO para capturar un vídeo (máx. 3 min),
-  /// construye la entidad y la persiste localmente en el outbox.
-  Future<void> capturarVideo(TipoVideo tipo) async {
-    XFile? xFile;
+  /// Construye la entidad de vídeo desde un path local y la persiste en el
+  /// outbox. Reusada por la grabadora nativa (tab Vídeos) y por la pantalla
+  /// de cámara con toggle foto/vídeo (tab Fotos).
+  Future<void> _saveVideoFromPath(String path, TipoVideo tipo,
+      {required bool saveToGallery}) async {
     try {
-      xFile = await _picker.pickVideo(
-        source: ImageSource.camera,
-        maxDuration: const Duration(minutes: 3),
-      );
-    } catch (e, st) {
-      _log.e('SegmentoDetalleController: error al abrir grabadora', error: e, stackTrace: st);
-      _showSnack(
-        title: 'Error',
-        message: 'No se ha podido abrir la grabadora: $e',
-        isError: true,
-      );
-      return;
-    }
-
-    if (xFile == null) return; // usuario canceló
-
-    try {
-      final file = File(xFile.path);
+      final file = File(path);
       final tamanyoBytes = await file.length();
-      final filename = xFile.path.split('/').last;
+      final filename = path.split('/').last;
       final ext = filename.split('.').last.toLowerCase();
       final mimeType = switch (ext) {
-        'mp4'  => 'video/mp4',
-        'mov'  => 'video/quicktime',
-        'm4v'  => 'video/x-m4v',
-        _      => 'video/mp4',
+        'mp4' => 'video/mp4',
+        'mov' => 'video/quicktime',
+        'm4v' => 'video/x-m4v',
+        _ => 'video/mp4',
       };
 
       final video = VideoSegmentoEntity(
         actividadId: 0,
         segmentoId: segmento.id ?? 0,
+        segmentoClientId: segmento.clientId,
         tipoVideo: tipo,
         filename: filename,
-        ruta: xFile.path,
+        ruta: path,
         capturadaAt: DateTime.now(),
       )
         ..mimeType = mimeType
@@ -284,8 +318,10 @@ class SegmentoDetalleController extends MyGetxController {
 
       await _videoRepo.saveLocal(video);
       await _loadVideos();
+      if (saveToGallery) await _saveToGallery(path, isVideo: true);
     } catch (e, st) {
-      _log.e('SegmentoDetalleController: error al guardar vídeo', error: e, stackTrace: st);
+      _log.e('SegmentoDetalleController: error al guardar vídeo',
+          error: e, stackTrace: st);
       _showSnack(
         title: 'Error',
         message: 'No se ha podido guardar el vídeo: $e',
@@ -296,25 +332,52 @@ class SegmentoDetalleController extends MyGetxController {
 
   // ──────────────────────────── Captura de foto ────────────────────────────
 
-  /// Pide al usuario el origen (galería / cámara), obtiene el path y lo
-  /// persiste como `ImagenSegmentoEntity` del [tipo] indicado.
-  Future<void> capturarFoto(TipoFoto tipo) async {
+  /// Pide el origen (galería / cámara) y persiste la captura como foto o vídeo
+  /// del [tipo] indicado. La cámara propia ofrece toggle foto/vídeo (vídeo sin
+  /// audio). Las capturas de cámara se copian además a la galería del
+  /// dispositivo; las elegidas de galería no (ya están allí).
+  Future<void> capturarMedia(TipoFoto tipo) async {
     final source = await _showSourceDialog(tipo);
     if (source == null) return;
 
-    String? path;
     if (source == _PickSource.gallery) {
-      final xFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      path = xFile?.path;
-    } else {
-      path = await Get.toNamed<String?>(AppRoutes.camera);
+      final xFile = await _picker.pickMedia(imageQuality: 85);
+      final path = xFile?.path;
+      if (path == null || path.isEmpty) return;
+      if (_isVideoPath(path)) {
+        await _saveVideoFromPath(path, _tipoVideoDesde(tipo),
+            saveToGallery: false);
+      } else {
+        await _addImagen(path, tipo, saveToGallery: false);
+      }
+      return;
     }
 
-    if (path == null || path.isEmpty) return;
-    await _addImagen(path, tipo);
+    // Cámara: pantalla propia con toggle foto/vídeo. Devuelve
+    // `({String path, bool isVideo})` o null si el usuario cancela.
+    // GetX construye GetPageRoute<dynamic>; navegar dynamic y castear el result.
+    final result = await Get.toNamed<dynamic>(AppRoutes.camera);
+    if (result == null) return;
+    final capture = result as ({String path, bool isVideo});
+    if (capture.path.isEmpty) return;
+    if (capture.isVideo) {
+      await _saveVideoFromPath(capture.path, _tipoVideoDesde(tipo),
+          saveToGallery: true);
+    } else {
+      await _addImagen(capture.path, tipo, saveToGallery: true);
+    }
+  }
+
+  /// Mapea el tipo de foto (antes/después) al tipo de vídeo equivalente para
+  /// los vídeos grabados desde la pantalla de cámara del tab Fotos.
+  TipoVideo _tipoVideoDesde(TipoFoto tipo) =>
+      tipo == TipoFoto.antes ? TipoVideo.antes : TipoVideo.despues;
+
+  /// Heurística por extensión para distinguir vídeos elegidos de la galería
+  /// (image_picker `pickMedia` devuelve foto o vídeo sin discriminar el tipo).
+  bool _isVideoPath(String path) {
+    const exts = {'mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', '3gp'};
+    return exts.contains(path.split('.').last.toLowerCase());
   }
 
   Future<_PickSource?> _showSourceDialog(TipoFoto tipo) async {
@@ -322,8 +385,8 @@ class SegmentoDetalleController extends MyGetxController {
       AlertDialog(
         title: Text(
           tipo == TipoFoto.antes
-              ? 'Capturar foto antes'
-              : 'Capturar foto después',
+              ? 'Capturar foto/vídeo antes'
+              : 'Capturar foto/vídeo después',
           style: const TextStyle(fontSize: 16),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -354,13 +417,16 @@ class SegmentoDetalleController extends MyGetxController {
     );
   }
 
-  Future<void> _addImagen(String localPath, TipoFoto tipo) async {
+  Future<void> _addImagen(
+    String localPath,
+    TipoFoto tipo, {
+    required bool saveToGallery,
+  }) async {
     final filename = localPath.split('/').last;
     final imagen = ImagenSegmentoEntity(
       actividadId: 0,
-      // FK por id remoto; A4 migrará a clientId de segmento (fuera de alcance).
-      // local-only: 0 hasta que el segmento sincronice y obtenga id remoto.
       segmentoId: segmento.id ?? 0,
+      segmentoClientId: segmento.clientId,
       tipoFoto: tipo,
       filename: filename,
       ruta: localPath,
@@ -369,12 +435,102 @@ class SegmentoDetalleController extends MyGetxController {
     try {
       await _imagenRepo.saveLocal(imagen);
       await _loadImagenes();
+      if (saveToGallery) await _saveToGallery(localPath, isVideo: false);
     } catch (e) {
       _showSnack(
         title: 'Error',
         message: 'No se ha podido guardar la foto: $e',
         isError: true,
       );
+    }
+  }
+
+  /// Copia la captura a la galería del dispositivo (best-effort). Un fallo de
+  /// galería no debe abortar el guardado local: se registra y se continúa.
+  Future<void> _saveToGallery(String path, {required bool isVideo}) async {
+    try {
+      if (isVideo) {
+        await Gal.putVideo(path);
+      } else {
+        await Gal.putImage(path);
+      }
+    } on GalException catch (e, st) {
+      _log.w('No se pudo guardar en galería (${e.type})',
+          error: e, stackTrace: st);
+    }
+  }
+
+  /// Confirma y elimina una foto (solo capturas locales no subidas).
+  Future<void> confirmDeleteImagen(ImagenSegmentoEntity imagen) async {
+    if (await _confirmDelete(isVideo: false)) await _deleteImagen(imagen);
+  }
+
+  /// Confirma y elimina un vídeo (solo capturas locales no subidas).
+  Future<void> confirmDeleteVideo(VideoSegmentoEntity video) async {
+    if (await _confirmDelete(isVideo: true)) await _deleteVideo(video);
+  }
+
+  Future<bool> _confirmDelete({required bool isVideo}) async {
+    final res = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text(isVideo ? 'Eliminar vídeo' : 'Eliminar foto'),
+        content: Text(
+          '¿Seguro que quieres eliminar ${isVideo ? 'el vídeo' : 'la foto'}? '
+          'Se borrará de la app y de la base de datos local.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<bool>(result: false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Get.back<bool>(result: true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    return res ?? false;
+  }
+
+  Future<void> _deleteImagen(ImagenSegmentoEntity imagen) async {
+    try {
+      await _imagenRepo.purgeLocal(imagen);
+      imagenes.removeWhere((i) => i.clientId == imagen.clientId);
+      await _deleteLocalFile(imagen.ruta);
+    } catch (e) {
+      _showSnack(
+        title: 'Error',
+        message: 'No se pudo eliminar la foto: $e',
+        isError: true,
+      );
+    }
+  }
+
+  Future<void> _deleteVideo(VideoSegmentoEntity video) async {
+    try {
+      await _videoRepo.purgeLocal(video);
+      videos.removeWhere((v) => v.clientId == video.clientId);
+      await _deleteLocalFile(video.ruta);
+    } catch (e) {
+      _showSnack(
+        title: 'Error',
+        message: 'No se pudo eliminar el vídeo: $e',
+        isError: true,
+      );
+    }
+  }
+
+  /// Borra el fichero de captura del almacenamiento de la app (best-effort).
+  Future<void> _deleteLocalFile(String path) async {
+    if (path.isEmpty) return;
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (e, st) {
+      _log.w('No se pudo borrar fichero local: $path',
+          error: e, stackTrace: st);
     }
   }
 

@@ -132,8 +132,9 @@ lib/
     │   ├── segmento_detalle_binding.dart
     │   ├── segmento_detalle_controller.dart
     │   └── edit_extremos/
-    ├── camera/                                    # Captura de fotos
-    │   └── camera_capture_page.dart
+    ├── camera/                                    # Captura de fotos/vídeos
+    │   ├── camera_capture_page.dart               # Selector Foto|Vídeo (vídeo sin audio)
+    │   └── video_player_page.dart                 # Reproductor pantalla completa (local)
     ├── forzar_envio/                              # Atajo "subir todo lo de esta entidad"
     │   ├── forzar_envio_page.dart
     │   ├── forzar_envio_binding.dart
@@ -337,6 +338,8 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `sqflite` | `^2.4.2` | SQLite local |
 | `image_picker` | `^1.2.1` | Galería |
 | `camera` | `^0.12.0+1` | Cámara |
+| `video_player` | `^2.11.1` | Reproducción de vídeo local |
+| `gal` | `^2.3.2` | Guardar fotos/vídeos en galería del dispositivo |
 | `photo_view` | `^0.15.0` | Zoom de fotos |
 | `cached_network_image` | `^3.4.1` | Cache de imágenes |
 | `connectivity_plus` | `^7.1.1` | Estado de red |

@@ -1,5 +1,136 @@
 # DEVLOG
 
+## 2026-07-09 — Feature: borrar de local al subir + descarga solo-nuevos (mata la duplicidad de media)
+
+**Modelo de dominio (responsable):** todo lo que se sube al backend pasa a un estado de revisión en la
+web y **desaparece de la app del operario**. Por eso el "problema de duplicidad de media" era **ficticio**:
+copia local y de nube nunca coexisten → no hay que deduplicar nada. La regla es: subir OK → borrar de local.
+
+**A) Purga tras subir (`lib/data/sync/purge_synced_segmento_usecase.dart`, NUEVO).** Tras el drain en la
+pantalla "enviar a nube", borra segmento + imágenes + vídeos + mensajes (fila + fichero local + job outbox)
+en **transacción atómica**, y **solo si TODO está sincronizado** (ningún job pending/syncing/rejected en el
+segmento ni en ningún dependiente). Si algo falló → no se borra nada de ese segmento (se conserva para
+reintento). Invariante clave contra pérdida de datos: el set de no-sincronizados se lee **fresco por
+segmento y después** de enumerar dependientes (un snapshot compartido en el batch podía juzgar "sincronizado"
+un ítem capturado a media pasada y borrarlo con su fichero). Cableado en `forzar_envio_controller` tras
+`enviarCloud`/`enviarAllCloud` (salvo `authExpired`).
+
+**B) Descarga solo-nuevos (`sincronizacion_controller`).** Quitado el **abort** por cambios pendientes: la
+descarga corre igual y avisa de forma **no bloqueante** (mismo mensaje). El pipeline de pull existente ya
+protege lo sucio (conflicto → avisa, no pisa) y refresca lo limpio (estado + media de nube embebida). Se
+descartó un intento de "add-only" en el fetcher que **congelaba los segmentos limpios** (habría bloqueado la
+llegada de media de nube) — el fetcher NO filtra filas locales.
+
+**Descartado por sobre-ingeniería (feedback del responsable):** un `SegmentoTombstoneStore` que el agente de
+fix metió para evitar que un segmento borrado "reapareciera" en la descarga. Contradecía el modelo (subido →
+sale del scope del operario, el backend no lo devuelve) y era permanente + sin límite. Eliminado. Ver memoria
+`feedback_no_overengineering`.
+
+**Verificación:** `flutter analyze` limpio; **457 tests pass** (purga: cascada completa + ficheros, y el caso
+crítico "un dependiente sin subir → NO borra NADA"; descarga con aviso no bloqueante; wiring de purga).
+
+## 2026-07-09 — Feature: media de nube (fotos + vídeos) en Antes/Después + reproducción de vídeo remoto
+
+**Objetivo:** los segmentos descargados de nube deben mostrar en Antes/Después TODO el media de
+nube (fotos **y** vídeos), fusionado con las capturas locales nuevas, y los vídeos de nube deben
+reproducirse. Dato clave del backend: **no hay tabla de vídeos** — la tabla `imagenes` guarda todo
+el media; un vídeo es una fila de `imagenes` cuyo `mime_type` es `video/*`. Los vídeos de nube ya
+llegan embebidos en `segmento.imagenes[]`.
+
+**Diseño (view-model normalizado, tras destruir el diseño en review adversarial):** en vez de un
+tercer subtipo del sealed (que codificaba dos ejes: clase de media × origen/entidad), un único
+`SegmentoMediaItem` (`lib/presentation/detalle/segmento_media_item.dart`) con `isVideo` +
+`remoteUrl?`/`localPath?` nullables. El widget ramifica solo por `isVideo`; nunca inspecciona la
+entidad backing. Escala a nuevos tipos de media con un campo, no un tipo.
+
+**Cambios (solo cliente — backend ya manda los vídeos):**
+- `segmento_media_item.dart` (NUEVO) — view-model con factories `.imagen`/`.remoteVideo`/`.localVideo`.
+- `segmento_detalle_controller.dart` — `_esVideo(ImagenSegmentoEntity)` (mime `video/*` + fallback
+  extensión probando **filename y url**, recortando querystring); `mediaPorTipo` fusiona 3 fuentes
+  (fotos nube+local, vídeos nube, vídeos locales) + dedup vídeo nube↔local por `clientId` (gana
+  local, reproduce offline) + orden `capturadaAt`. Borrado el sealed viejo.
+- `segmento_detalle_page.dart` — carrusel ramifica por `item.isVideo`; `_CarouselSlide`/`_VideoSlide`
+  toman `SegmentoMediaItem`; `_VideoSlide._open` reproduce fichero local, si no url remota, si no snack.
+- `video_player_page.dart` — constructor `VideoPlayerPage.network(url)` → `VideoPlayerController.networkUrl`.
+
+**Riesgos documentados (dependencias inherentes, no resolubles solo en cliente):**
+1. **Dedup local↔nube depende de que backend ecoe `client_id`.** Tras subir + pull, la copia de nube
+   llega en `imagenes[]`; se une a la local por `clientId`. Si backend no ecoa `client_id`, `fromJson`
+   acuña UUID nuevo → el mismo vídeo aparece 2 veces. Agravado por el remux mov→mp4 (cambia filename →
+   no sirve de fallback). Mismo riesgo latente que las fotos.
+2. **Auth de reproducción de vídeo-nube.** Se asume que la `url` se sirve como las imágenes (sin HMAC).
+   Si apunta al endpoint firmado `/videos/download/{id}.mp4`, el streaming rompe (HMAC exige firma
+   fresca ±5 min por range-request; `video_player` no re-firma). `VideoPlayerPage.network` admite
+   headers opcionales; verificar en runtime; si 401 → follow-up firmar/proxy.
+
+**Verificación:** review adversarial 3 lentes (workflow ultracode) → 0 críticos/mayores, 3 minores
+aplicados (`_esVideo` robusto + 2 tests). `flutter analyze` limpio; **436 tests pass** (11 en detalle:
+clasificación mime, fallback filename+url, dedup local-wins, orden, `onDelete` fotos y vídeos).
+
+## 2026-07-09 — Fix: fotos/vídeos antes/después se perdían al recrear la vista + botón Guardar fijo
+
+**Bug:** tras añadir media a los tabs Antes/Después, al navegar al listado/mapa y volver
+(o al recrear el controller por cualquier vía) las capturas desaparecían del carrusel,
+aunque seguían en SQLite. Causa raíz: la media local se enlazaba al segmento por el **id
+de nube** (`segmento_id` int, `= 0` mientras el segmento no está subido, que es el estado
+normal de trabajo de campo). Además `_loadImagenes`/`_loadVideos` hacían early-return
+cuando `segmento.id == null` y solo re-mostraban la lista remota embebida (vacía en campo).
+Resultado: capturas huérfanas bajo `segmento_id = 0` (colisionando entre segmentos) e
+invisibles tras cualquier recreación.
+
+**Fix (FK por id local = `clientId`):**
+- `imagen`/`video` entity: nuevo campo `segmentoClientId` (nullable) + enum + `toMap`/`fromMap`
+  + param constructor. `toJson` **sin tocar** (contrato backend FK-by-clientId sigue pendiente).
+- `imagen`/`video` local store: `schemaVersion 1→2`, migración escalonada (v1→v2 `ALTER TABLE
+  ADD COLUMN segmento_client_id` + índice). Fresh installs corren v0→v1→v2; DBs de dev en v1
+  reciben solo el ALTER.
+- repos: `getAllBySegmento(int)` → `getAllByClientId(String)` (`findWhere('segmento_client_id', …)`).
+- controller: capturas escriben `segmentoClientId: segmento.clientId`; lecturas por `clientId`
+  (fuera el early-return `id==null`); tras guardar, recarga siempre.
+- Nota: capturas hechas ANTES de esta migración (columna NULL) no reaparecen — app no está en
+  producción, dato de dev desechable, sin backfill (YAGNI).
+
+**UX botón Guardar:** movido a barra fija al fondo del tab Datos (fuera del scroll), full-width,
+solo visible en ese tab (Guardar solo persiste estado/tipo/descripción; fotos/vídeos/mensajes ya
+se guardan solos al capturar/enviar).
+
+**Verificación:** `flutter analyze` limpio; 35 tests pass (stores imagen/video con test de query
+por `clientId` + migración escalonada 0→1→2, repos, controller detalle).
+
+## 2026-07-04 — Rediseño UI pantalla Sincronización (datos maestros)
+
+**Motivo:** la pantalla usaba Material genérico (una Card, 6 ListTiles idénticas,
+botón por fila + "Descargar todo") mientras el resto del módulo usa el lenguaje
+visual de `app_theme.dart`. Desentonaba y no daba lectura de "¿estoy listo para
+campo?".
+
+**Cambios (solo presentación):** reescritura de `sincronizacion_page.dart` adoptando
+`AppColors`/`AppTextStyles`/`AppSpacing` y el patrón de la hermana `forzar_envio`
+(AppBar verde-claro + subrayado). Nueva **tarjeta-resumen "listo para campo"**: chip
+de conectividad, barra segmentada (una pastilla por ítem coloreada por estado),
+conteo simple `N de M al día`, acción primaria `Descargar todo`/`Actualizar todo` o
+`Cancelar` mientras trabaja, y banner de error inline. Lista de ítems agrupada con
+icono de estado, meta en una línea limpia (adiós al `\n`) y acción por icono
+(↓ descargar / ↻ re-descargar).
+
+**Alcance (con sign-off):** navegación **sin cambios** (única salida = flecha
+atrás→login); controller y `sync_models.dart` **intactos** — `readiness` derivado en
+el widget. Descartado: distinción esencial/opcional, botón "ir a segmentos", tokens
+`AppColors.error/warning` (tocaría el tema compartido — follow-up).
+
+**Reviews (ultracode, 2 agentes en paralelo):**
+- Dart/Flutter: 2 bugs reales — `_readiness` contaba filas en `error`/`downloading`
+  como "al día" si tenían `lastDownloadAt` (→ "Listo" verde con una fila fallando);
+  `rows` vacío al arranque mostraba "Faltan 0 descargas". Ambos corregidos (estado
+  `Cargando…`, `done` exige `success || (idle && lastDownloadAt)`).
+- UX: contraste WCAG del headline ámbar/naranja (→ `#E65100`/`orange.shade900`),
+  touch target del CTA (46→48dp), `Semantics` en barra segmentada y progreso de fila,
+  microcopy de reintento en el banner, layout-shift del trailing (40→48).
+
+**Ficheros:** `lib/presentation/sincronizacion/sincronizacion_page.dart` (reescrito).
+
+**Verificación:** `dart analyze` limpio. Pendiente: correr app y validar visual en vivo.
+
 ## 2026-07-01 — Fix: master-data (gasoductos/pks/hitos) no descargaba (barra 0/N, sin datos)
 
 **Síntoma:** en la página de sincronización, gasoductos "colgaba minutos", pks/hitos
@@ -332,3 +463,90 @@ No se fuerza el patrón donde no aporta.
 `sync.dart`, `sincronizacion_controller.dart`, `sincronizacion_page.dart`.
 
 **Verificación:** `flutter analyze` limpio; `pull_coordinator_test` (15) + `sincronizacion` (9) verdes.
+
+---
+
+## 2026-07-09 — Fix: cámara no abría (crash en `Get.toNamed`)
+
+**Síntoma:** pulsar "Cámara" en el diálogo de captura (`SegmentoDetalleController.capturarFoto`)
+no abría la cámara. El overflow de 3.7px del `DropdownButtonFormField` (page:348) era ruido
+cosmético no relacionado.
+
+**Causa real:** `Get.toNamed<String?>(AppRoutes.camera)` →
+`type 'GetPageRoute<dynamic>' is not a subtype of type 'Route<String?>?' in type cast`.
+GetX construye SIEMPRE la ruta como `GetPageRoute<dynamic>`; Flutter (`_routeNamed<String?>`)
+hace `route as Route<String?>?` y, por invarianza de genéricos, `Route<dynamic>` no es
+`Route<String?>` → excepción **antes de navegar**. El error se veía solo en logcat
+(`E/flutter`), no en runtime errors del DTD.
+
+**Lección (gotcha reutilizable):** nunca parametrizar `Get.toNamed<T>` con un `T` no-dynamic
+distinto del que GetX usa al construir la ruta. Navegar sin tipo (o `<dynamic>`) y castear el
+`result`: `final r = await Get.toNamed<dynamic>(route); path = r as String?;`.
+
+**Ficheros:** `segmento_detalle_controller.dart` (línea 313). `flutter analyze` limpio.
+
+---
+
+## 2026-07-09 — Feature: toggle Foto/Vídeo en la pantalla de cámara
+
+**Síntoma:** tras el fix anterior, al elegir "Cámara" no había forma de elegir entre tomar
+foto o grabar vídeo. La `CameraCapturePage` era solo-foto (un disparador, `takePicture()`);
+el vídeo solo se grababa desde el tab Vídeos con la grabadora nativa (`pickVideo`).
+
+**Decisión (con sign-off del usuario):** selector **Foto | Vídeo** dentro de la propia
+pantalla de cámara (feel nativo), no un sub-diálogo.
+
+**Cambios:**
+- `camera_capture_page.dart`: modo `_CaptureMode {photo, video}`, `_ModeSelector` FOTO|VÍDEO,
+  disparador que en vídeo hace `startVideoRecording`/`stopVideoRecording` (badge REC, corte
+  auto a 3 min como la grabadora nativa). El micrófono solo se activa al entrar en modo vídeo
+  (re-crea el `CameraController` con `enableAudio:true`; evita el prompt de audio al que solo
+  hace fotos). Devuelve `({String path, bool isVideo})` (antes `String?`).
+- `segmento_detalle_controller.dart`: `capturarFoto` interpreta el nuevo record y guarda como
+  imagen o vídeo según el modo; `capturarVideo` (grabadora nativa) y la rama de vídeo de cámara
+  comparten `_saveVideoFromPath` (DRY). `_tipoVideoDesde` mapea `TipoFoto`→`TipoVideo`. Un vídeo
+  grabado desde el tab Fotos aparece en el tab Vídeos (antes/después preservado).
+
+**Permisos:** ya declarados — Android `CAMERA`+`RECORD_AUDIO`, iOS `NSCameraUsageDescription`+
+`NSMicrophoneUsageDescription`. Sin cambios nativos.
+
+**Ficheros:** `camera_capture_page.dart` (reescrito), `segmento_detalle_controller.dart`.
+`flutter analyze` limpio (2 items, 0 issues). Pendiente: prueba en dispositivo real
+(cámara no verificable en analyzer).
+
+## 2026-07-09 — Vídeo mudo + fusión foto/vídeo en tabs Antes/Después + guardar en galería
+
+**Feedback del usuario (3 puntos, con sign-off):** (1) el vídeo debe grabarse SIN audio;
+(2) al grabar vídeo desde el tab foto "Antes" no aparecía nada allí (iba al tab "Vídeo antes");
+(3) las capturas no aparecían en la galería del dispositivo.
+
+**Decisiones (validadas con el usuario):**
+- Eliminar los tabs "Vídeo antes/desp.". Solo quedan "Antes" y "Después", que ahora muestran
+  **fotos Y vídeos mezclados** en el mismo carrusel (ordenados por `capturadaAt`).
+- Vídeo del carrusel: slide con póster negro + play → reproductor a pantalla completa in-app.
+- Guardar toda captura de cámara (foto y vídeo) también en la galería del dispositivo.
+
+**Cambios:**
+- `camera_capture_page.dart`: `enableAudio: false` SIEMPRE (antes se recreaba el controlador con
+  `enableAudio:true` al entrar en vídeo). `_setMode` ya no recrea el controlador → **vídeo mudo**.
+  Nota: `image_picker.pickVideo` (grabadora nativa) graba con audio y no permite desactivarlo →
+  por eso todo el vídeo pasa por el paquete `camera`.
+- `segmento_detalle_controller.dart`: `capturarFoto`→`capturarMedia`; `imagenesPorTipo`+
+  `videosPorTipo`→`mediaPorTipo` (lista fusionada `SegmentoMediaItem {ImagenMediaItem|VideoMediaItem}`,
+  sealed, ordenada por captura). Nuevo `_saveToGallery` (paquete `gal`, best-effort, `GalException`
+  se loguea sin abortar). Cámara→galería; galería-pick→no (ya está). Eliminado `capturarVideo`
+  (grabadora nativa con audio, ya no se usa).
+- `segmento_detalle_page.dart`: 6→4 tabs; `_ImagenesCarousel`→`_MediaCarousel` (switch sobre el
+  sealed: imagen→`_CarouselSlide`, vídeo→`_VideoSlide`). Eliminados `_VideosTab`/`_VideoTile`.
+- `video_player_page.dart` (nuevo): reproductor `video_player` a pantalla completa para fichero
+  local; los vídeos ya subidos (sin fichero local) muestran aviso (playback remoto pendiente de
+  `download_url` del backend).
+
+**Deps:** `video_player: ^2.11.1`, `gal: ^2.3.2`.
+
+**Nativos:** Android `WRITE_EXTERNAL_STORAGE` maxSdk 28→29 (gal). iOS: −`NSMicrophoneUsageDescription`
+(ya no se graba audio) +`NSPhotoLibraryAddUsageDescription` (gal). `RECORD_AUDIO` Android se deja
+(lo aporta el plugin `camera` vía merge; con `enableAudio:false` no se solicita al usuario).
+
+**`flutter analyze lib` → 0 issues.** Pendiente: prueba en dispositivo real (cámara/galería no
+verificables en analyzer).

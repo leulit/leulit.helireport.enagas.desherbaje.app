@@ -196,8 +196,10 @@ class OutboxQueue {
   Future<void> removeForEntity({
     required String entityType,
     required String clientId,
+    DatabaseExecutor? txn,
   }) async {
-    await _db.delete(
+    final executor = txn ?? _db;
+    await executor.delete(
       _table,
       where: 'entity_type = ? AND client_id = ?',
       whereArgs: [entityType, clientId],

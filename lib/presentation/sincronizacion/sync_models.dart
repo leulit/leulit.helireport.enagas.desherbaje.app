@@ -66,6 +66,11 @@ class MasterDataRow {
   /// caché local en lugar de hacer un fetch de red real.
   final bool servedFromCache;
 
+  /// Aviso no bloqueante que acompaña a una fila `success` (p.ej. hay cambios
+  /// locales pendientes de subir aunque la descarga haya ido bien). `null`
+  /// cuando no hay aviso.
+  final String? warningMessage;
+
   const MasterDataRow({
     required this.kind,
     this.status = MasterDataStatus.idle,
@@ -74,6 +79,7 @@ class MasterDataRow {
     this.progress,
     this.progressLabel,
     this.servedFromCache = false,
+    this.warningMessage,
   });
 
   MasterDataRow copyWith({
@@ -83,11 +89,13 @@ class MasterDataRow {
     double? progress,
     String? progressLabel,
     bool? servedFromCache,
+    String? warningMessage,
     bool clearError = false,
     bool clearLastDownloadAt = false,
     bool clearProgress = false,
     bool clearProgressLabel = false,
     bool clearServedFromCache = false,
+    bool clearWarning = false,
   }) {
     return MasterDataRow(
       kind: kind,
@@ -103,6 +111,8 @@ class MasterDataRow {
       servedFromCache: clearServedFromCache
           ? false
           : (servedFromCache ?? this.servedFromCache),
+      warningMessage:
+          clearWarning ? null : (warningMessage ?? this.warningMessage),
     );
   }
 }

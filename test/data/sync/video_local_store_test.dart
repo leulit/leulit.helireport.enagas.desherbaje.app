@@ -9,7 +9,10 @@ import 'package:helireport_desherbaje/domain/entities/video_segmento_entity.dart
 Future<Database> _openDb() async {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
-  return openDatabase(inMemoryDatabasePath, version: 1);
+  // singleInstance: false — otherwise sqflite_ffi caches connections by path
+  // and reopening `inMemoryDatabasePath` within the same test run returns the
+  // SAME underlying database, leaking schema state between tests.
+  return openDatabase(inMemoryDatabasePath, version: 1, singleInstance: false);
 }
 
 VideoSegmentoEntity _vid({
@@ -18,12 +21,14 @@ VideoSegmentoEntity _vid({
   TipoVideo tipo = TipoVideo.antes,
   DateTime? capturadaAt,
   int uploadOffset = 0,
+  String? segmentoClientId,
 }) {
   final ts = capturadaAt ?? DateTime.utc(2026, 1, 1);
   return VideoSegmentoEntity(
     clientId: clientId,
     actividadId: 0,
     segmentoId: segmentoId,
+    segmentoClientId: segmentoClientId,
     tipoVideo: tipo,
     filename: '$clientId.mp4',
     ruta: '/tmp/$clientId.mp4',
@@ -38,7 +43,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = VideoLocalStore(db);
-    await store.migrate(db, 0, 1);
+    await store.migrate(db, 0, 2);
   });
 
   tearDown(() async => db.close());
@@ -48,8 +53,8 @@ void main() {
       expect(store.entityType, equals('video'));
     });
 
-    test('schemaVersion is 1', () {
-      expect(store.schemaVersion, equals(1));
+    test('schemaVersion is 2', () {
+      expect(store.schemaVersion, equals(2));
     });
 
     test('upload_offset column exists after migration', () async {
@@ -232,6 +237,48 @@ void main() {
     test('always returns null', () async {
       final result = await store.findByRemoteId('123');
       expect(result, isNull);
+    });
+  });
+
+  group('findWhere by segmento_client_id', () {
+    test('returns videos for matching segmento_client_id', () async {
+      await store.upsert(
+          _vid(clientId: 'v-a', segmentoId: 0, segmentoClientId: 'seg-A'));
+      await store.upsert(
+          _vid(clientId: 'v-b', segmentoId: 0, segmentoClientId: 'seg-A'));
+      await store.upsert(
+          _vid(clientId: 'v-c', segmentoId: 0, segmentoClientId: 'seg-B'));
+
+      final result = await store.findWhere('segmento_client_id', 'seg-A');
+      expect(result.length, equals(2));
+      final ids = result.map((v) => v.clientId).toSet();
+      expect(ids, containsAll(['v-a', 'v-b']));
+    });
+
+    test('returns empty list when no row matches', () async {
+      await store.upsert(_vid(
+          clientId: 'v-x', segmentoId: 0, segmentoClientId: 'seg-known'));
+      final result =
+          await store.findWhere('segmento_client_id', 'seg-unknown');
+      expect(result, isEmpty);
+    });
+  });
+
+  group('stepwise migration 0→1→2', () {
+    test('column is usable after migrating in two steps', () async {
+      final freshDb = await _openDb();
+      final freshStore = VideoLocalStore(freshDb);
+      await freshStore.migrate(freshDb, 0, 1);
+      await freshStore.migrate(freshDb, 1, 2);
+
+      await freshStore.upsert(_vid(
+          clientId: 'step-a', segmentoId: 0, segmentoClientId: 'seg-step'));
+      final result =
+          await freshStore.findWhere('segmento_client_id', 'seg-step');
+      expect(result.length, equals(1));
+      expect(result.first.clientId, equals('step-a'));
+
+      await freshDb.close();
     });
   });
 }

@@ -27,6 +27,7 @@ enum ImagenSegmentoFieldNames {
   clientId('client_id'),
   actividadId('actividad_id'),
   segmentoId('segmento_id'),
+  segmentoClientId('segmento_client_id'),
   tipoFoto('tipo_foto'),
   filename('filename'),
   ruta('ruta'),
@@ -60,6 +61,7 @@ class ImagenSegmentoEntity implements Syncable {
     required this.ruta,
     required this.capturadaAt,
     String? clientId,
+    this.segmentoClientId,
   }) : _clientId = clientId ?? const Uuid().v4();
 
   /// Identificador remoto asignado por el backend tras la subida.
@@ -71,6 +73,12 @@ class ImagenSegmentoEntity implements Syncable {
 
   int actividadId;
   int segmentoId;
+
+  /// `clientId` (UUID local) del segmento propietario de esta captura. Es el
+  /// vínculo estable local: `segmentoId` (remoto) vale 0 mientras el
+  /// segmento no ha sincronizado, así que las lecturas locales deben filtrar
+  /// por este campo, no por `segmentoId`.
+  String? segmentoClientId;
   TipoFoto tipoFoto;
   String filename;
 
@@ -111,8 +119,7 @@ class ImagenSegmentoEntity implements Syncable {
   String? get remoteId => id?.toString();
 
   @override
-  DateTime get updatedAt =>
-      updatedAtRemote ?? subidaAt ?? capturadaAt;
+  DateTime get updatedAt => updatedAtRemote ?? subidaAt ?? capturadaAt;
 
   // ──────────────────────────── JSON (backend) ────────────────────────────
 
@@ -128,38 +135,61 @@ class ImagenSegmentoEntity implements Syncable {
     }
 
     final entity = ImagenSegmentoEntity(
-      actividadId: readJsonDataUtil<int>(json, ImagenSegmentoFieldNames.actividadId.value, 0),
-      segmentoId:  readJsonDataUtil<int>(json, ImagenSegmentoFieldNames.segmentoId.value, 0),
-      tipoFoto:    TipoFoto.fromString(readJsonDataUtil<String?>(json, ImagenSegmentoFieldNames.tipoFoto.value, null)),
-      filename:    readJsonDataUtil<String>(json, ImagenSegmentoFieldNames.filename.value, ''),
-      ruta:        readJsonDataUtil<String>(json, ImagenSegmentoFieldNames.ruta.value, ''),
-      capturadaAt: parseDate(ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
-      clientId:    readJsonDataUtil<String?>(json, ImagenSegmentoFieldNames.clientId.value, null),
+      actividadId: readJsonDataUtil<int>(
+          json, ImagenSegmentoFieldNames.actividadId.value, 0),
+      segmentoId: readJsonDataUtil<int>(
+          json, ImagenSegmentoFieldNames.segmentoId.value, 0),
+      tipoFoto: TipoFoto.fromString(readJsonDataUtil<String?>(
+          json, ImagenSegmentoFieldNames.tipoFoto.value, null)),
+      filename: readJsonDataUtil<String>(
+          json, ImagenSegmentoFieldNames.filename.value, ''),
+      ruta: readJsonDataUtil<String>(
+          json, ImagenSegmentoFieldNames.ruta.value, ''),
+      capturadaAt:
+          parseDate(ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId: readJsonDataUtil<String?>(
+          json, ImagenSegmentoFieldNames.clientId.value, null),
     );
 
-    entity.id           = readJsonDataUtil<int?>(json, ImagenSegmentoFieldNames.id.value, null);
-    entity.url          = readJsonDataUtil<String?>(json, ImagenSegmentoFieldNames.url.value, null);
-    entity.mimeType     = readJsonDataUtil<String>(json, ImagenSegmentoFieldNames.mimeType.value, 'image/jpeg');
-    entity.tamanyoBytes = readJsonDataUtil<int?>(json, ImagenSegmentoFieldNames.tamanyoBytes.value, null);
-    entity.latitud       = (readJsonDataUtil<num?>(json, ImagenSegmentoFieldNames.latitud.value, null))?.toDouble();
-    entity.longitud      = (readJsonDataUtil<num?>(json, ImagenSegmentoFieldNames.longitud.value, null))?.toDouble();
-    entity.fixedLatitud  = (readJsonDataUtil<num?>(json, ImagenSegmentoFieldNames.fixedLatitud.value, null))?.toDouble();
-    entity.fixedLongitud = (readJsonDataUtil<num?>(json, ImagenSegmentoFieldNames.fixedLongitud.value, null))?.toDouble();
-    entity.subidaPor     = readJsonDataUtil<int?>(json, ImagenSegmentoFieldNames.subidaPor.value, null);
+    entity.id =
+        readJsonDataUtil<int?>(json, ImagenSegmentoFieldNames.id.value, null);
+    entity.url = readJsonDataUtil<String?>(
+        json, ImagenSegmentoFieldNames.url.value, null);
+    entity.mimeType = readJsonDataUtil<String>(
+        json, ImagenSegmentoFieldNames.mimeType.value, 'image/jpeg');
+    entity.tamanyoBytes = readJsonDataUtil<int?>(
+        json, ImagenSegmentoFieldNames.tamanyoBytes.value, null);
+    entity.latitud = (readJsonDataUtil<num?>(
+            json, ImagenSegmentoFieldNames.latitud.value, null))
+        ?.toDouble();
+    entity.longitud = (readJsonDataUtil<num?>(
+            json, ImagenSegmentoFieldNames.longitud.value, null))
+        ?.toDouble();
+    entity.fixedLatitud = (readJsonDataUtil<num?>(
+            json, ImagenSegmentoFieldNames.fixedLatitud.value, null))
+        ?.toDouble();
+    entity.fixedLongitud = (readJsonDataUtil<num?>(
+            json, ImagenSegmentoFieldNames.fixedLongitud.value, null))
+        ?.toDouble();
+    entity.subidaPor = readJsonDataUtil<int?>(
+        json, ImagenSegmentoFieldNames.subidaPor.value, null);
 
     try {
       final subidaRaw = json[ImagenSegmentoFieldNames.subidaAt.value];
-      if (subidaRaw != null) entity.subidaAt = DateTime.parse(subidaRaw.toString());
+      if (subidaRaw != null)
+        entity.subidaAt = DateTime.parse(subidaRaw.toString());
     } catch (_) {}
 
     try {
       final createdRaw = json[ImagenSegmentoFieldNames.createdAt.value];
-      if (createdRaw != null) entity.createdAt = DateTime.parse(createdRaw.toString());
+      if (createdRaw != null)
+        entity.createdAt = DateTime.parse(createdRaw.toString());
     } catch (_) {}
 
     try {
       final updatedRaw = json[ImagenSegmentoFieldNames.updatedAt.value];
-      if (updatedRaw != null) entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
+      if (updatedRaw != null)
+        entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
     } catch (_) {}
 
     return entity;
@@ -181,7 +211,8 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.longitud.value: longitud,
         ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
         ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
-        ImagenSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        ImagenSegmentoFieldNames.capturadaAt.value:
+            capturadaAt.toIso8601String(),
         ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
         ImagenSegmentoFieldNames.subidaPor.value: subidaPor,
       };
@@ -195,6 +226,7 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.clientId.value: clientId,
         ImagenSegmentoFieldNames.actividadId.value: actividadId,
         ImagenSegmentoFieldNames.segmentoId.value: segmentoId,
+        ImagenSegmentoFieldNames.segmentoClientId.value: segmentoClientId,
         ImagenSegmentoFieldNames.tipoFoto.value: tipoFoto.valor,
         ImagenSegmentoFieldNames.filename.value: filename,
         ImagenSegmentoFieldNames.ruta.value: ruta,
@@ -205,11 +237,13 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.longitud.value: longitud,
         ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
         ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
-        ImagenSegmentoFieldNames.capturadaAt.value: capturadaAt.toIso8601String(),
+        ImagenSegmentoFieldNames.capturadaAt.value:
+            capturadaAt.toIso8601String(),
         ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
         ImagenSegmentoFieldNames.subidaPor.value: subidaPor,
         ImagenSegmentoFieldNames.createdAt.value: createdAt?.toIso8601String(),
-        ImagenSegmentoFieldNames.updatedAt.value: updatedAtRemote?.toIso8601String(),
+        ImagenSegmentoFieldNames.updatedAt.value:
+            updatedAtRemote?.toIso8601String(),
         ImagenSegmentoFieldNames.needsSync.value: needsSync ? 1 : 0,
       };
 
@@ -227,27 +261,42 @@ class ImagenSegmentoEntity implements Syncable {
     }
 
     final entity = ImagenSegmentoEntity(
-      actividadId: (row[ImagenSegmentoFieldNames.actividadId.value] as int?) ?? 0,
-      segmentoId:  (row[ImagenSegmentoFieldNames.segmentoId.value] as int?) ?? 0,
-      tipoFoto:    TipoFoto.fromString(row[ImagenSegmentoFieldNames.tipoFoto.value] as String?),
-      filename:    (row[ImagenSegmentoFieldNames.filename.value] as String?) ?? '',
-      ruta:        (row[ImagenSegmentoFieldNames.ruta.value] as String?) ?? '',
-      capturadaAt: parseDateOr(ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
-      clientId:    row[ImagenSegmentoFieldNames.clientId.value] as String?,
+      actividadId:
+          (row[ImagenSegmentoFieldNames.actividadId.value] as int?) ?? 0,
+      segmentoId: (row[ImagenSegmentoFieldNames.segmentoId.value] as int?) ?? 0,
+      tipoFoto: TipoFoto.fromString(
+          row[ImagenSegmentoFieldNames.tipoFoto.value] as String?),
+      filename: (row[ImagenSegmentoFieldNames.filename.value] as String?) ?? '',
+      ruta: (row[ImagenSegmentoFieldNames.ruta.value] as String?) ?? '',
+      capturadaAt: parseDateOr(
+          ImagenSegmentoFieldNames.capturadaAt.value, DateTime.now()),
+      clientId: row[ImagenSegmentoFieldNames.clientId.value] as String?,
     );
 
-    entity.id            = row[ImagenSegmentoFieldNames.id.value] as int?;
-    entity.url           = row[ImagenSegmentoFieldNames.url.value] as String?;
-    entity.mimeType      = (row[ImagenSegmentoFieldNames.mimeType.value] as String?) ?? 'image/jpeg';
-    entity.tamanyoBytes  = row[ImagenSegmentoFieldNames.tamanyoBytes.value] as int?;
-    entity.latitud       = (row[ImagenSegmentoFieldNames.latitud.value] as num?)?.toDouble();
-    entity.longitud      = (row[ImagenSegmentoFieldNames.longitud.value] as num?)?.toDouble();
-    entity.fixedLatitud  = (row[ImagenSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
-    entity.fixedLongitud = (row[ImagenSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
-    entity.subidaPor     = row[ImagenSegmentoFieldNames.subidaPor.value] as int?;
-    entity.subidaAt        = parseDateNullable(ImagenSegmentoFieldNames.subidaAt.value);
-    entity.createdAt       = parseDateNullable(ImagenSegmentoFieldNames.createdAt.value);
-    entity.updatedAtRemote = parseDateNullable(ImagenSegmentoFieldNames.updatedAt.value);
+    entity.id = row[ImagenSegmentoFieldNames.id.value] as int?;
+    entity.url = row[ImagenSegmentoFieldNames.url.value] as String?;
+    entity.mimeType =
+        (row[ImagenSegmentoFieldNames.mimeType.value] as String?) ??
+            'image/jpeg';
+    entity.tamanyoBytes =
+        row[ImagenSegmentoFieldNames.tamanyoBytes.value] as int?;
+    entity.latitud =
+        (row[ImagenSegmentoFieldNames.latitud.value] as num?)?.toDouble();
+    entity.longitud =
+        (row[ImagenSegmentoFieldNames.longitud.value] as num?)?.toDouble();
+    entity.fixedLatitud =
+        (row[ImagenSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
+    entity.fixedLongitud =
+        (row[ImagenSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
+    entity.subidaPor = row[ImagenSegmentoFieldNames.subidaPor.value] as int?;
+    entity.subidaAt =
+        parseDateNullable(ImagenSegmentoFieldNames.subidaAt.value);
+    entity.createdAt =
+        parseDateNullable(ImagenSegmentoFieldNames.createdAt.value);
+    entity.updatedAtRemote =
+        parseDateNullable(ImagenSegmentoFieldNames.updatedAt.value);
+    entity.segmentoClientId =
+        row[ImagenSegmentoFieldNames.segmentoClientId.value] as String?;
 
     return entity;
   }
@@ -256,6 +305,7 @@ class ImagenSegmentoEntity implements Syncable {
     int? id,
     int? actividadId,
     int? segmentoId,
+    String? segmentoClientId,
     TipoFoto? tipoFoto,
     String? filename,
     String? ruta,
@@ -272,24 +322,25 @@ class ImagenSegmentoEntity implements Syncable {
   }) {
     final e = ImagenSegmentoEntity(
       actividadId: actividadId ?? this.actividadId,
-      segmentoId:  segmentoId  ?? this.segmentoId,
-      tipoFoto:    tipoFoto    ?? this.tipoFoto,
-      filename:    filename    ?? this.filename,
-      ruta:        ruta        ?? this.ruta,
+      segmentoId: segmentoId ?? this.segmentoId,
+      tipoFoto: tipoFoto ?? this.tipoFoto,
+      filename: filename ?? this.filename,
+      ruta: ruta ?? this.ruta,
       capturadaAt: capturadaAt ?? this.capturadaAt,
-      clientId:    clientId,
+      clientId: clientId,
+      segmentoClientId: segmentoClientId ?? this.segmentoClientId,
     );
-    e.id           = id           ?? this.id;
-    e.url          = url          ?? this.url;
-    e.mimeType     = mimeType     ?? this.mimeType;
+    e.id = id ?? this.id;
+    e.url = url ?? this.url;
+    e.mimeType = mimeType ?? this.mimeType;
     e.tamanyoBytes = tamanyoBytes ?? this.tamanyoBytes;
-    e.latitud       = latitud       ?? this.latitud;
-    e.longitud      = longitud      ?? this.longitud;
-    e.fixedLatitud  = fixedLatitud  ?? this.fixedLatitud;
+    e.latitud = latitud ?? this.latitud;
+    e.longitud = longitud ?? this.longitud;
+    e.fixedLatitud = fixedLatitud ?? this.fixedLatitud;
     e.fixedLongitud = fixedLongitud ?? this.fixedLongitud;
-    e.subidaAt      = subidaAt      ?? this.subidaAt;
-    e.subidaPor     = subidaPor     ?? this.subidaPor;
-    e.createdAt     = createdAt;
+    e.subidaAt = subidaAt ?? this.subidaAt;
+    e.subidaPor = subidaPor ?? this.subidaPor;
+    e.createdAt = createdAt;
     e.updatedAtRemote = updatedAtRemote;
     return e;
   }

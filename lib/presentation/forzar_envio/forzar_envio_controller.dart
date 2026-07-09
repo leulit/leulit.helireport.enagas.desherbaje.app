@@ -6,6 +6,7 @@ import '../../core/result/data_result.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/engine/sync_engine.dart';
 import '../../data/repository/auth_repository_impl.dart';
+import '../../data/sync/purge_synced_segmento_usecase.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repository/auth_repository.dart';
@@ -21,12 +22,15 @@ class ForzarEnvioController extends MyGetxController {
     this._engine,
     this._connectivity, {
     AuthRepository? authRepository,
-  }) : _authRepo = authRepository ?? AuthRepositoryImpl();
+    PurgeSyncedSegmentoUseCase? purgeUseCase,
+  })  : _authRepo = authRepository ?? AuthRepositoryImpl(),
+        _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase();
 
   final GetSegmentosUseCase _useCase;
   final SyncEngine _engine;
   final ConnectivityService _connectivity;
   final AuthRepository _authRepo;
+  final PurgeSyncedSegmentoUseCase _purge;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -171,6 +175,13 @@ class ForzarEnvioController extends MyGetxController {
           'rechazados=${combined.rejected} conflictos=${combined.conflicts}',
         );
       }
+
+      // Tras un drenado limpio (sin caducidad de sesión), borra el segmento y
+      // sus dependientes SOLO si TODO quedó sincronizado. Si algo sigue
+      // pendiente, no borra nada. Nunca purgar tras un authExpired.
+      if (!combined.authExpired) {
+        await _purge.purgeIfFullySynced(segmento);
+      }
     } catch (e, st) {
       lastError.value = e.toString();
       AppLog.e('ForzarEnvioController.enviarCloud', error: e, stackTrace: st);
@@ -220,6 +231,12 @@ class ForzarEnvioController extends MyGetxController {
           'ForzarEnvioController.enviarAllCloud: '
           'rechazados=${combined.rejected} conflictos=${combined.conflicts}',
         );
+      }
+
+      // Purga en lote: instantánea de la lista antes de mutar; una sola lectura
+      // de sets pendientes dentro. Nunca purgar tras un authExpired.
+      if (!combined.authExpired) {
+        await _purge.purgeAllFullySynced(List.of(segmentos));
       }
     } catch (e, st) {
       lastError.value = e.toString();

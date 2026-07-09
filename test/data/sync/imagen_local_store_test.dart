@@ -9,19 +9,24 @@ import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dar
 Future<Database> _openDb() async {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
-  return openDatabase(inMemoryDatabasePath, version: 1);
+  // singleInstance: false — otherwise sqflite_ffi caches connections by path
+  // and reopening `inMemoryDatabasePath` within the same test run returns the
+  // SAME underlying database, leaking schema state between tests.
+  return openDatabase(inMemoryDatabasePath, version: 1, singleInstance: false);
 }
 
 ImagenSegmentoEntity _img({
   required String clientId,
   required int segmentoId,
   DateTime? capturadaAt,
+  String? segmentoClientId,
 }) {
   final ts = capturadaAt ?? DateTime.utc(2025, 1, 1);
   return ImagenSegmentoEntity(
     clientId: clientId,
     actividadId: 0,
     segmentoId: segmentoId,
+    segmentoClientId: segmentoClientId,
     tipoFoto: TipoFoto.antes,
     filename: '$clientId.jpg',
     ruta: '/tmp/$clientId.jpg',
@@ -36,7 +41,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = ImagenLocalStore(db);
-    await store.migrate(db, 0, 1);
+    await store.migrate(db, 0, 2);
   });
 
   tearDown(() async => db.close());
@@ -69,6 +74,48 @@ void main() {
       final result = await store.findWhere('segmento_id', 5);
       expect(result.first.clientId, equals('new'));
       expect(result.last.clientId, equals('old'));
+    });
+  });
+
+  group('findWhere by segmento_client_id', () {
+    test('returns imagenes for matching segmento_client_id', () async {
+      await store.upsert(_img(
+          clientId: 'img-a', segmentoId: 0, segmentoClientId: 'seg-A'));
+      await store.upsert(_img(
+          clientId: 'img-b', segmentoId: 0, segmentoClientId: 'seg-A'));
+      await store.upsert(_img(
+          clientId: 'img-c', segmentoId: 0, segmentoClientId: 'seg-B'));
+
+      final result = await store.findWhere('segmento_client_id', 'seg-A');
+      expect(result.length, equals(2));
+      final ids = result.map((i) => i.clientId).toSet();
+      expect(ids, containsAll(['img-a', 'img-b']));
+    });
+
+    test('returns empty list when no row matches', () async {
+      await store.upsert(_img(
+          clientId: 'img-x', segmentoId: 0, segmentoClientId: 'seg-known'));
+      final result =
+          await store.findWhere('segmento_client_id', 'seg-unknown');
+      expect(result, isEmpty);
+    });
+  });
+
+  group('stepwise migration 0→1→2', () {
+    test('column is usable after migrating in two steps', () async {
+      final freshDb = await _openDb();
+      final freshStore = ImagenLocalStore(freshDb);
+      await freshStore.migrate(freshDb, 0, 1);
+      await freshStore.migrate(freshDb, 1, 2);
+
+      await freshStore.upsert(_img(
+          clientId: 'step-a', segmentoId: 0, segmentoClientId: 'seg-step'));
+      final result =
+          await freshStore.findWhere('segmento_client_id', 'seg-step');
+      expect(result.length, equals(1));
+      expect(result.first.clientId, equals('step-a'));
+
+      await freshDb.close();
     });
   });
 }

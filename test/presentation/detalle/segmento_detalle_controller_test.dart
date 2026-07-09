@@ -124,6 +124,55 @@ SegmentoDetalleController _buildController({
   return ctrl;
 }
 
+/// Cloud/local imagen row for mediaPorTipo tests. [mimeType]/[url] drive the
+/// video classification; [subida] toggles isSubida via a non-null subidaAt.
+ImagenSegmentoEntity _imagen({
+  required String clientId,
+  required DateTime capturadaAt,
+  TipoFoto tipo = TipoFoto.antes,
+  String mimeType = 'image/jpeg',
+  String? url,
+  String ruta = '',
+  bool subida = false,
+  String filename = 'file.jpg',
+}) {
+  final e = ImagenSegmentoEntity(
+    actividadId: 0,
+    segmentoId: 0,
+    tipoFoto: tipo,
+    filename: filename,
+    ruta: ruta,
+    capturadaAt: capturadaAt,
+    clientId: clientId,
+  );
+  e.mimeType = mimeType;
+  e.url = url;
+  if (subida) e.subidaAt = DateTime(2026, 1, 1);
+  return e;
+}
+
+/// Local video capture (offline-playable) for mediaPorTipo tests.
+VideoSegmentoEntity _localVideo({
+  required String clientId,
+  required DateTime capturadaAt,
+  TipoVideo tipo = TipoVideo.antes,
+  String ruta = '/tmp/local.mp4',
+  String filename = 'local.mp4',
+  bool subida = false,
+}) {
+  final e = VideoSegmentoEntity(
+    actividadId: 0,
+    segmentoId: 0,
+    tipoVideo: tipo,
+    filename: filename,
+    ruta: ruta,
+    capturadaAt: capturadaAt,
+    clientId: clientId,
+  );
+  if (subida) e.subidaAt = DateTime(2026, 1, 1);
+  return e;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -341,4 +390,210 @@ void main() {
       verify(() => mockOfflineSegmento.create(any())).called(1);
     },
   );
+
+  // ─── mediaPorTipo: clasificación foto/vídeo, dedup, orden, onDelete ───────
+
+  group('mediaPorTipo', () {
+    SegmentoDetalleController buildCtrl() => _buildController(
+          segmento: _makeSegmento(id: 1),
+          segmentoRepo: segmentoRepo,
+          imagenRepo: imagenRepo,
+          videoRepo: videoRepo,
+          mensajeRepo: mensajeRepo,
+        );
+
+    testWidgets(
+      '(1) clasifica imagen mime video/mp4 como vídeo y foto normal como no-vídeo',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'vid',
+            capturadaAt: DateTime(2026, 1, 1),
+            mimeType: 'video/mp4',
+            url: 'https://x/v.mp4',
+          ),
+          _imagen(
+            clientId: 'pho',
+            capturadaAt: DateTime(2026, 1, 2),
+            mimeType: 'image/jpeg',
+            url: 'https://x/p.jpg',
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.firstWhere((m) => m.clientId == 'vid').isVideo, isTrue);
+        expect(items.firstWhere((m) => m.clientId == 'pho').isVideo, isFalse);
+      },
+    );
+
+    testWidgets(
+      '(2) fallback por extensión: mime image/jpeg pero url .mov → vídeo',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'stale',
+            capturadaAt: DateTime(2026, 1, 1),
+            mimeType: 'image/jpeg',
+            url: 'https://x/clip.mov',
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.single.isVideo, isTrue);
+      },
+    );
+
+    testWidgets(
+      '(3) dedup: vídeo nube + vídeo local con mismo clientId → gana el local',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'dup',
+            capturadaAt: DateTime(2026, 1, 1),
+            mimeType: 'video/mp4',
+            url: 'https://x/dup.mp4',
+            subida: true,
+          ),
+        ]);
+        ctrl.videos.assignAll([
+          _localVideo(
+            clientId: 'dup',
+            capturadaAt: DateTime(2026, 1, 1),
+            ruta: '/tmp/dup.mp4',
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        final dups = items.where((m) => m.clientId == 'dup').toList();
+        expect(dups.length, 1);
+        expect(dups.single.localPath, '/tmp/dup.mp4');
+        expect(dups.single.isSubida, isFalse);
+      },
+    );
+
+    testWidgets(
+      '(4) ordena por capturadaAt ascendente (fotos y vídeos entremezclados)',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'c',
+            capturadaAt: DateTime(2026, 1, 3),
+            url: 'https://x/c.jpg',
+          ),
+          _imagen(
+            clientId: 'a',
+            capturadaAt: DateTime(2026, 1, 1),
+            url: 'https://x/a.jpg',
+          ),
+        ]);
+        ctrl.videos.assignAll([
+          _localVideo(clientId: 'b', capturadaAt: DateTime(2026, 1, 2)),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.map((m) => m.clientId).toList(), ['a', 'b', 'c']);
+      },
+    );
+
+    testWidgets(
+      '(5) onDelete: foto subida → null; foto local no subida → no-null',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'cloud',
+            capturadaAt: DateTime(2026, 1, 1),
+            url: 'https://x/cloud.jpg',
+            subida: true,
+          ),
+          _imagen(
+            clientId: 'local',
+            capturadaAt: DateTime(2026, 1, 2),
+            ruta: '/tmp/local.jpg',
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.firstWhere((m) => m.clientId == 'cloud').onDelete, isNull);
+        expect(
+            items.firstWhere((m) => m.clientId == 'local').onDelete, isNotNull);
+      },
+    );
+
+    testWidgets(
+      '(6) fallback por extensión vía filename (url vacía) → vídeo',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        // Fila legacy: sin mime fiable, url extensionless (endpoint de
+        // descarga firmado), pero filename lleva la extensión correcta.
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'legacy',
+            capturadaAt: DateTime(2026, 1, 1),
+            mimeType: 'image/jpeg',
+            url: null,
+            filename: 'obra_antes.mp4',
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.single.isVideo, isTrue);
+      },
+    );
+
+    testWidgets(
+      '(7) onDelete vídeos: nube → null; local no subido → no-null; local subido → null',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final ctrl = buildCtrl();
+        ctrl.imagenes.assignAll([
+          _imagen(
+            clientId: 'cloudvid',
+            capturadaAt: DateTime(2026, 1, 1),
+            mimeType: 'video/mp4',
+            url: 'https://x/cloud.mp4',
+            subida: true,
+          ),
+        ]);
+        ctrl.videos.assignAll([
+          _localVideo(clientId: 'locnew', capturadaAt: DateTime(2026, 1, 2)),
+          _localVideo(
+            clientId: 'locup',
+            capturadaAt: DateTime(2026, 1, 3),
+            subida: true,
+          ),
+        ]);
+
+        final items = ctrl.mediaPorTipo(TipoFoto.antes);
+        expect(items.firstWhere((m) => m.clientId == 'cloudvid').onDelete, isNull);
+        expect(
+            items.firstWhere((m) => m.clientId == 'locnew').onDelete, isNotNull);
+        expect(items.firstWhere((m) => m.clientId == 'locup').onDelete, isNull);
+      },
+    );
+  });
 }
