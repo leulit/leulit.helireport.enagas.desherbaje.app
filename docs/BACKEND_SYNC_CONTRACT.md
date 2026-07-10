@@ -124,6 +124,7 @@ client_id=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
 segmento_client_id=550e8400-e29b-41d4-a716-446655440000
 tipo_foto=antes
 capturada_at=2026-04-25T11:05:30.000Z
+gis_json={"type":"FeatureCollection","features":[...]}
 file=@imagen.jpg
 ```
 
@@ -139,6 +140,19 @@ file=@imagen.jpg
 La app **garantiza** que envía las entidades en orden topológico: primero las que no dependen de nadie, luego las que dependen. Para Segmento → Imagen, primero sube todos los segmentos pendientes, después las imágenes. Esto reduce los 422 por orden.
 
 Pero el backend **no debe asumir orden**: si llega una imagen con `segmento_client_id` desconocido, devuelve 422 explicativo y el cliente reintentará después.
+
+### 4.3 Campo `gis_json` (GeoJSON) en foto y vídeo
+
+**Cambio 2026-07-10.** La media capturada con la cámara de la app viaja georreferenciada en un campo nuevo **`gis_json`** (string GeoJSON). Aplica al payload de **foto** (`POST /api/imagenes`) y de **vídeo** (subida TUS-like — ver `docs/BACKEND_VIDEO_CONTRACT.md`, se envía en el Init).
+
+- Top-level siempre `FeatureCollection`. Orden de coordenadas GeoJSON estándar **`[lon, lat]`** (¡no `[lat, lon]`!).
+- **Foto:** geometría `Point` `[lon, lat, alt]`; rumbo y extras (`heading`, `heading_accuracy`, `gps_heading`, `accuracy_m`, `altitude_m`, `speed_mps`, `captured_at`) en `properties` (`kind: "photo"`).
+- **Vídeo:** geometría `LineString` con **coordenada custom** `[lon, lat, alt, heading_deg, t_epoch_ms]` por vértice (1 muestra/seg); `properties` lleva `coord_format`, `sample_interval_s`, `started_at`, `ended_at` (`kind: "video"`). Con 1 muestra degrada a `Point`.
+- Ambos incluyen en `properties`: `kind`, `user_id`, `os`, `os_version`, `device_model`, `app_version`.
+- **`gis_json` puede llegar `null`** (permiso de ubicación denegado, sin fix GPS, o media de galería). El backend debe aceptarlo como opcional y no rechazar el upload por su ausencia.
+- El backend puede persistirlo tal cual (columna JSON/text) o indexar la geometría; el cliente no espera transformación.
+
+> **Eliminado del payload de foto y vídeo:** `latitud`, `longitud`, `fixed_latitud`, `fixed_longitud`. Ninguno se poblaba; toda la georreferenciación de captura pasa ahora por `gis_json`.
 
 ---
 

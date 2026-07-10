@@ -19,7 +19,7 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
   String get entityType => 'imagen';
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
@@ -61,6 +61,61 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
     if (from < 2 && to >= 2) {
       await db.execute(
         'ALTER TABLE $_table ADD COLUMN segmento_client_id TEXT',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_segclient '
+        'ON $_table(segmento_client_id)',
+      );
+    }
+    if (from < 3 && to >= 3) {
+      // Drop latitud/longitud/fixed_latitud/fixed_longitud y añade gis_json.
+      // SQLite DROP COLUMN no es fiable en Android viejo → table-rebuild.
+      await db.execute('''
+        CREATE TABLE ${_table}_new (
+          client_id          TEXT PRIMARY KEY,
+          id                 INTEGER,
+          actividad_id       INTEGER NOT NULL DEFAULT 0,
+          segmento_id        INTEGER NOT NULL,
+          tipo_foto          TEXT NOT NULL,
+          filename           TEXT NOT NULL,
+          ruta               TEXT NOT NULL,
+          url                TEXT,
+          mime_type          TEXT NOT NULL DEFAULT 'image/jpeg',
+          tamanyo_bytes      INTEGER,
+          capturada_at       TEXT NOT NULL,
+          subida_at          TEXT,
+          subida_por         INTEGER,
+          created_at         TEXT,
+          updated_at         TEXT,
+          synced_at          TEXT,
+          needs_sync         INTEGER NOT NULL DEFAULT 1,
+          segmento_client_id TEXT,
+          gis_json           TEXT
+        )
+      ''');
+      await db.execute('''
+        INSERT INTO ${_table}_new (
+          client_id, id, actividad_id, segmento_id, tipo_foto, filename,
+          ruta, url, mime_type, tamanyo_bytes, capturada_at, subida_at,
+          subida_por, created_at, updated_at, synced_at, needs_sync,
+          segmento_client_id
+        )
+        SELECT
+          client_id, id, actividad_id, segmento_id, tipo_foto, filename,
+          ruta, url, mime_type, tamanyo_bytes, capturada_at, subida_at,
+          subida_por, created_at, updated_at, synced_at, needs_sync,
+          segmento_client_id
+        FROM $_table
+      ''');
+      await db.execute('DROP TABLE $_table');
+      await db.execute('ALTER TABLE ${_table}_new RENAME TO $_table');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_seg '
+        'ON $_table(segmento_id)',
+      );
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
+        'ON $_table(id) WHERE id IS NOT NULL',
       );
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_${_table}_segclient '

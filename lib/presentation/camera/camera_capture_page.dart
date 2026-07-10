@@ -5,13 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/gis/media_gis_recorder.dart';
 
 /// Modo de captura de la pantalla de cámara.
 enum _CaptureMode { photo, video }
 
 /// Pantalla de captura con cámara nativa (paquete `camera`) y selector
-/// Foto | Vídeo. Devuelve un registro `({String path, bool isVideo})` vía
-/// `Get.back`; `null` si el usuario cancela.
+/// Foto | Vídeo. Devuelve un registro `({String path, bool isVideo, Object? gis})`
+/// vía `Get.back`; `null` si el usuario cancela. `gis` es un `MediaGisSample?`
+/// para foto y una `List<MediaGisSample>` para vídeo.
 class CameraCapturePage extends StatefulWidget {
   const CameraCapturePage({super.key});
 
@@ -30,6 +32,9 @@ class _CameraCapturePageState extends State<CameraCapturePage>
   /// Corte de grabación a 3 min, igual que la grabadora nativa previa.
   Timer? _maxDurationTimer;
 
+  /// Grabador GIS independiente: geolocaliza fotos y trackea vídeos.
+  final MediaGisRecorder _gis = MediaGisRecorder();
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +46,7 @@ class _CameraCapturePageState extends State<CameraCapturePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _maxDurationTimer?.cancel();
+    _gis.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -78,6 +84,13 @@ class _CameraCapturePageState extends State<CameraCapturePage>
         await controller.dispose();
         return;
       }
+      // Arranca los streams GIS tras inicializar la cámara. Si el permiso
+      // se deniega, el grabador entra en modo sin-GIS sin lanzar.
+      await _gis.start();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       setState(() {
         _controller = controller;
         _error = null;
@@ -111,7 +124,12 @@ class _CameraCapturePageState extends State<CameraCapturePage>
     setState(() => _isCapturing = true);
     try {
       final file = await c.takePicture();
-      if (mounted) Get.back<Object?>(result: (path: file.path, isVideo: false));
+      final MediaGisSample? gis = _gis.snapshotPhoto();
+      if (mounted) {
+        Get.back<Object?>(
+          result: (path: file.path, isVideo: false, gis: gis),
+        );
+      }
     } catch (e) {
       if (mounted) {
         Get.snackbar('Error', 'No se pudo capturar la foto: $e');
@@ -124,6 +142,7 @@ class _CameraCapturePageState extends State<CameraCapturePage>
     try {
       await c.startVideoRecording();
       if (!mounted) return;
+      _gis.startTrack();
       setState(() => _isRecording = true);
       _maxDurationTimer =
           Timer(const Duration(minutes: 3), () => _stopVideo(c));
@@ -137,9 +156,14 @@ class _CameraCapturePageState extends State<CameraCapturePage>
     _isRecording = false; // guard inmediato: el timer y el tap no re-entran
     _maxDurationTimer?.cancel();
     _maxDurationTimer = null;
+    final List<MediaGisSample> track = _gis.stopTrack();
     try {
       final file = await c.stopVideoRecording();
-      if (mounted) Get.back<Object?>(result: (path: file.path, isVideo: true));
+      if (mounted) {
+        Get.back<Object?>(
+          result: (path: file.path, isVideo: true, gis: track),
+        );
+      }
     } catch (e) {
       if (mounted) {
         Get.snackbar('Error', 'No se pudo detener la grabación: $e');

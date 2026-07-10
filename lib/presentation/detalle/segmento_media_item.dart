@@ -19,6 +19,7 @@ class SegmentoMediaItem {
   final String clientId;
   final DateTime capturadaAt;
   final bool isSubida;
+  final String? gisJson; // raw GeoJSON de la captura (posición/rumbo o traza)
   final VoidCallback? onDelete; // null => not deletable (cloud or already uploaded)
 
   const SegmentoMediaItem({
@@ -30,6 +31,7 @@ class SegmentoMediaItem {
     required this.isSubida,
     this.remoteUrl,
     this.localPath,
+    this.gisJson,
     this.onDelete,
   });
 
@@ -43,6 +45,7 @@ class SegmentoMediaItem {
         isSubida: i.isSubida,
         remoteUrl: (i.url != null && i.url!.isNotEmpty) ? i.url : null,
         localPath: i.ruta.isNotEmpty ? i.ruta : null,
+        gisJson: i.gisJson,
         onDelete: onDelete,
       );
 
@@ -57,6 +60,7 @@ class SegmentoMediaItem {
         isSubida: true,
         remoteUrl: (i.url != null && i.url!.isNotEmpty) ? i.url : null,
         localPath: i.ruta.isNotEmpty ? i.ruta : null,
+        gisJson: i.gisJson,
         onDelete: null,
       );
 
@@ -71,6 +75,7 @@ class SegmentoMediaItem {
       isSubida: v.isSubida,
       remoteUrl: (v.url != null && v.url!.isNotEmpty) ? v.url : null,
       localPath: v.ruta.isNotEmpty ? v.ruta : null,
+      gisJson: v.gisJson,
       onDelete: onDelete,
     );
   }

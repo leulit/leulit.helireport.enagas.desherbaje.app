@@ -66,8 +66,7 @@ void main() {
       v.id = 99;
       v.mimeType = 'video/quicktime';
       v.tamanyoBytes = 50000000;
-      v.latitud = 40.416;
-      v.longitud = -3.703;
+      v.gisJson = '{"type":"FeatureCollection","features":[]}';
 
       final map = v.toMap();
       final restored = VideoSegmentoEntity.fromMap(map);
@@ -78,8 +77,7 @@ void main() {
       expect(restored.tipoVideo, equals(TipoVideo.antes));
       expect(restored.mimeType, equals('video/quicktime'));
       expect(restored.tamanyoBytes, equals(50000000));
-      expect(restored.latitud, closeTo(40.416, 1e-6));
-      expect(restored.longitud, closeTo(-3.703, 1e-6));
+      expect(restored.gisJson, equals('{"type":"FeatureCollection","features":[]}'));
       expect(restored.uploadOffset, equals(1234567));
     });
 
@@ -133,6 +131,7 @@ void main() {
       original.id = 7;
       original.url = 'https://example.com/video.mp4';
       original.tamanyoBytes = 12345;
+      original.gisJson = '{"type":"FeatureCollection","features":[]}';
 
       final json = original.toJson();
       final restored = VideoSegmentoEntity.fromJson(
@@ -143,6 +142,10 @@ void main() {
       expect(restored.id, equals(7));
       expect(restored.url, equals('https://example.com/video.mp4'));
       expect(restored.tamanyoBytes, equals(12345));
+      expect(
+        restored.gisJson,
+        equals('{"type":"FeatureCollection","features":[]}'),
+      );
       // uploadOffset always 0 from JSON (field does not exist in payload)
       expect(restored.uploadOffset, equals(0));
     });

@@ -43,7 +43,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = VideoLocalStore(db);
-    await store.migrate(db, 0, 2);
+    await store.migrate(db, 0, 3);
   });
 
   tearDown(() async => db.close());
@@ -53,8 +53,8 @@ void main() {
       expect(store.entityType, equals('video'));
     });
 
-    test('schemaVersion is 2', () {
-      expect(store.schemaVersion, equals(2));
+    test('schemaVersion is 3', () {
+      expect(store.schemaVersion, equals(3));
     });
 
     test('upload_offset column exists after migration', () async {
@@ -117,6 +117,18 @@ void main() {
 
       final found = await store.findByClientId('vid-b');
       expect(found!.tamanyoBytes, equals(99999));
+    });
+
+    test('gis_json round-trips through the store', () async {
+      final v = _vid(clientId: 'vid-gis', segmentoId: 5)
+        ..gisJson = '{"type":"FeatureCollection","features":[]}';
+      await store.upsert(v);
+
+      final found = await store.findByClientId('vid-gis');
+      expect(
+        found!.gisJson,
+        equals('{"type":"FeatureCollection","features":[]}'),
+      );
     });
   });
 
@@ -264,19 +276,25 @@ void main() {
     });
   });
 
-  group('stepwise migration 0→1→2', () {
-    test('column is usable after migrating in two steps', () async {
+  group('stepwise migration 0→1→2→3', () {
+    test('column is usable after migrating step by step', () async {
       final freshDb = await _openDb();
       final freshStore = VideoLocalStore(freshDb);
       await freshStore.migrate(freshDb, 0, 1);
       await freshStore.migrate(freshDb, 1, 2);
+      await freshStore.migrate(freshDb, 2, 3);
 
       await freshStore.upsert(_vid(
-          clientId: 'step-a', segmentoId: 0, segmentoClientId: 'seg-step'));
+          clientId: 'step-a', segmentoId: 0, segmentoClientId: 'seg-step')
+        ..gisJson = '{"type":"FeatureCollection","features":[]}');
       final result =
           await freshStore.findWhere('segmento_client_id', 'seg-step');
       expect(result.length, equals(1));
       expect(result.first.clientId, equals('step-a'));
+      expect(
+        result.first.gisJson,
+        equals('{"type":"FeatureCollection","features":[]}'),
+      );
 
       await freshDb.close();
     });

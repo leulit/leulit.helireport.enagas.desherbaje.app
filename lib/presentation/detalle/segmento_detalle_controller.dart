@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import 'package:logger/logger.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
+import '../../core/app_typed_actions.dart';
+import '../../core/gis/capture_meta.dart';
+import '../../core/gis/media_gis_geojson.dart';
+import '../../core/gis/media_gis_recorder.dart';
 import '../../core/my_getx_controller.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../data/model/mensaje_entity.dart';
@@ -56,6 +61,9 @@ class SegmentoDetalleController extends MyGetxController {
   /// Controlador del mapa, expuesto para que los botones +/- de zoom puedan
   /// invocar `mapController.move`.
   final mapController = MapController();
+
+  final _alignEnDispositivo = StreamController<double?>.broadcast();
+  Stream<double?> get alignEnDispositivoStream => _alignEnDispositivo.stream;
 
   final estado = Rx<EstadoActividad>(EstadoActividad.propuesta);
   final tipoActividad = Rx<TipoActividad>(TipoActividad.desherbajeSelectivo);
@@ -110,12 +118,27 @@ class SegmentoDetalleController extends MyGetxController {
     _loadVideos();
     _loadMensajes();
     _ensureGasoductos();
+
+    onTypedAction<void>(AppTypedActions.guardarRequested, (_) => guardar());
+    onTypedAction<void>(
+        AppTypedActions.editarExtremosRequested, (_) => abrirEdicionExtremos());
+    onTypedAction<TipoFoto>(AppTypedActions.capturaRequested, (event) {
+      final tipo = event.data;
+      if (tipo != null) capturarMedia(tipo);
+    });
+    onTypedAction<void>(AppTypedActions.centrarEnDispositivoRequested,
+        (_) => _centrarEnDispositivo());
+    onTypedAction<LatLngBounds>(AppTypedActions.mediaGisBoundsRequested,
+        (event) => _fitMediaBounds(event.data));
+    addWorker(ever<bool>(
+        isSaving, (v) => AppTypedActions.savingChanged.dispatch(data: v)));
   }
 
   @override
   void onClose() {
     textMensajeController.dispose();
     mensajesScrollController.dispose();
+    _alignEnDispositivo.close();
     super.onClose();
   }
 
@@ -270,6 +293,25 @@ class SegmentoDetalleController extends MyGetxController {
     ));
   }
 
+  /// Recentra el mapa en la posición actual del dispositivo empujando el zoom
+  /// actual al [alignEnDispositivoStream] que consume la capa de ubicación.
+  void _centrarEnDispositivo() {
+    _alignEnDispositivo.add(mapController.camera.zoom);
+  }
+
+  /// Ajusta la cámara del mapa embebido para encuadrar los bounds de la
+  /// georreferencia de la media activa (emitidos por `MediaGisLayer`) con
+  /// margen amplio. `maxZoom` acota el acercamiento cuando el bounds es un
+  /// único punto (foto sin traza).
+  void _fitMediaBounds(LatLngBounds? bounds) {
+    if (bounds == null) return;
+    mapController.fitCamera(CameraFit.bounds(
+      bounds: bounds,
+      padding: const EdgeInsets.all(80),
+      maxZoom: 17,
+    ));
+  }
+
   void zoomIn() {
     final cam = mapController.camera;
     mapController.move(cam.center, (cam.zoom + 1).clamp(5, 20));
@@ -291,7 +333,7 @@ class SegmentoDetalleController extends MyGetxController {
   /// outbox. Reusada por la grabadora nativa (tab Vídeos) y por la pantalla
   /// de cámara con toggle foto/vídeo (tab Fotos).
   Future<void> _saveVideoFromPath(String path, TipoVideo tipo,
-      {required bool saveToGallery}) async {
+      {required bool saveToGallery, List<MediaGisSample> gis = const []}) async {
     try {
       final file = File(path);
       final tamanyoBytes = await file.length();
@@ -304,6 +346,10 @@ class SegmentoDetalleController extends MyGetxController {
         _ => 'video/mp4',
       };
 
+      final meta = await captureMeta();
+      final gisJson =
+          buildVideoGeoJson(gis, userId: user.value?.id, meta: meta);
+
       final video = VideoSegmentoEntity(
         actividadId: 0,
         segmentoId: segmento.id ?? 0,
@@ -314,7 +360,8 @@ class SegmentoDetalleController extends MyGetxController {
         capturadaAt: DateTime.now(),
       )
         ..mimeType = mimeType
-        ..tamanyoBytes = tamanyoBytes;
+        ..tamanyoBytes = tamanyoBytes
+        ..gisJson = gisJson;
 
       await _videoRepo.saveLocal(video);
       await _loadVideos();
@@ -341,6 +388,7 @@ class SegmentoDetalleController extends MyGetxController {
     if (source == null) return;
 
     if (source == _PickSource.gallery) {
+      // Media elegida de galería: sin GIS (no hay fix de captura en tiempo real).
       final xFile = await _picker.pickMedia(imageQuality: 85);
       final path = xFile?.path;
       if (path == null || path.isEmpty) return;
@@ -348,23 +396,27 @@ class SegmentoDetalleController extends MyGetxController {
         await _saveVideoFromPath(path, _tipoVideoDesde(tipo),
             saveToGallery: false);
       } else {
-        await _addImagen(path, tipo, saveToGallery: false);
+        await _addImagen(path, tipo, saveToGallery: false, gis: null);
       }
       return;
     }
 
     // Cámara: pantalla propia con toggle foto/vídeo. Devuelve
-    // `({String path, bool isVideo})` o null si el usuario cancela.
+    // `({String path, bool isVideo, Object? gis})` o null si el usuario cancela.
+    // `gis` es MediaGisSample? para foto y List<MediaGisSample> para vídeo.
     // GetX construye GetPageRoute<dynamic>; navegar dynamic y castear el result.
     final result = await Get.toNamed<dynamic>(AppRoutes.camera);
     if (result == null) return;
-    final capture = result as ({String path, bool isVideo});
+    final capture = result as ({String path, bool isVideo, Object? gis});
     if (capture.path.isEmpty) return;
     if (capture.isVideo) {
+      final gis =
+          (capture.gis as List<MediaGisSample>?) ?? const <MediaGisSample>[];
       await _saveVideoFromPath(capture.path, _tipoVideoDesde(tipo),
-          saveToGallery: true);
+          saveToGallery: true, gis: gis);
     } else {
-      await _addImagen(capture.path, tipo, saveToGallery: true);
+      await _addImagen(capture.path, tipo,
+          saveToGallery: true, gis: capture.gis as MediaGisSample?);
     }
   }
 
@@ -421,8 +473,11 @@ class SegmentoDetalleController extends MyGetxController {
     String localPath,
     TipoFoto tipo, {
     required bool saveToGallery,
+    required MediaGisSample? gis,
   }) async {
     final filename = localPath.split('/').last;
+    final meta = await captureMeta();
+    final gisJson = buildPhotoGeoJson(gis, userId: user.value?.id, meta: meta);
     final imagen = ImagenSegmentoEntity(
       actividadId: 0,
       segmentoId: segmento.id ?? 0,
@@ -431,7 +486,7 @@ class SegmentoDetalleController extends MyGetxController {
       filename: filename,
       ruta: localPath,
       capturadaAt: DateTime.now(),
-    );
+    )..gisJson = gisJson;
     try {
       await _imagenRepo.saveLocal(imagen);
       await _loadImagenes();

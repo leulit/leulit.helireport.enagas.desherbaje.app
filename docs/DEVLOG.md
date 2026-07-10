@@ -1,5 +1,60 @@
 # DEVLOG
 
+## 2026-07-10 — Feature: GIS en captura de foto/vídeo (`gis_json` GeoJSON por media)
+
+**Objetivo:** al capturar foto o grabar vídeo desde la cámara propia de la app, registrar
+**automáticamente** (sin aprobación del usuario) la posición y el rumbo del dispositivo y persistirlo
+como GeoJSON en una columna nueva `gis_json` por media, para enviarlo al backend. Foto → un punto
+(lat, lon, alt) + rumbo en el instante del disparo. Vídeo → el track completo a **1 muestra/seg**
+durante toda la grabación. Si falta permiso de ubicación o no hay fix, la captura **no se bloquea**:
+la media se guarda con `gis_json = null`. Media de galería → sin GIS. Diseño:
+`docs/superpowers/specs/2026-07-10-media-gis-capture-design.md`.
+
+**Esquema `gis_json` (top-level siempre `FeatureCollection`, orden GeoJSON `[lon, lat]`):**
+- **Foto:** `Point` `[lon, lat, alt]`; `heading`/`heading_accuracy`/`gps_heading`/`accuracy_m`/
+  `altitude_m`/`speed_mps`/`captured_at` en `properties` (`kind: "photo"`).
+- **Vídeo:** `LineString` con **coordenada custom** `[lon, lat, alt, heading_deg, t_epoch_ms]` por
+  vértice (evita arrays paralelos gigantes); `properties` lleva `coord_format`, `sample_interval_s: 1`,
+  `started_at`/`ended_at` (`kind: "video"`). Degradación: 0 muestras → `gis_json` null; 1 muestra →
+  geometría `Point` (kind sigue `"video"`); ≥2 → `LineString`.
+- Ambos incluyen en `properties`: `kind`, `user_id`, `os`, `os_version`, `device_model`, `app_version`.
+
+**Componentes nuevos (`lib/core/gis/`):**
+- `media_gis_recorder.dart` — `MediaGisSample` (value type: lat/lon/alt/headingDeg/headingAccuracy/
+  gpsHeading/accuracyM/speedMps/tsUtc) + `MediaGisRecorder` (Dart plano, ciclo de vida = página de
+  cámara). `start()` pide permiso `whileInUse` y abre streams propios de `geolocator` (1 s) +
+  `flutter_rotation_sensor` (azimuth); `snapshotPhoto()` → muestra única; `startTrack()`/`stopTrack()`
+  → `Timer.periodic(1s)` que acumula muestras. **Independiente** del `GpsBackgroundService`
+  (work-track de jornada): streams separados, coexisten. Permiso denegado → modo "sin GIS", nunca lanza.
+- `media_gis_geojson.dart` — funciones **puras** (sin IO): `buildPhotoGeoJson(sample, {userId, meta})`
+  y `buildVideoGeoJson(samples, {userId, meta})`; devuelven `null` sin muestra útil.
+- `capture_meta.dart` — `CaptureMeta` (`os`/`os_version`/`device_model` vía `device_info_plus` +
+  `app_version` vía `package_info_plus`) con `Future<CaptureMeta> captureMeta()` **memoizado**.
+
+**Cambios de captura y detalle:**
+- `camera_capture_page.dart` — instancia y `start()` del recorder en `_initCamera`; foto →
+  `snapshotPhoto()`, vídeo → `startTrack()`/`stopTrack()`; `dispose()` limpia. Retorno de `Get.back`
+  ampliado a `({String path, bool isVideo, Object? gis})` (`gis` = `MediaGisSample?` en foto,
+  `List<MediaGisSample>` en vídeo).
+- `segmento_detalle_controller.dart` — construye `gis_json` con el builder (`user.value?.id` +
+  `captureMeta()`) y lo setea en `entity.gisJson` antes de `saveLocal`. Rama galería → null.
+
+**Entidades y almacén:**
+- `ImagenSegmentoEntity` y `VideoSegmentoEntity`: **eliminados** `latitud`, `longitud`, `fixedLatitud`,
+  `fixedLongitud` (ninguno se poblaba) + **añadido** `String? gisJson` (enum `gis_json`), en
+  `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`. `toJson` envía `gis_json` al backend.
+- `ImagenLocalStore` / `VideoLocalStore`: `schemaVersion 2 → 3`. Bloque nuevo `from < 3` con
+  **table-rebuild** (`CREATE <t>_new` sin lat/lon + `gis_json TEXT` → `INSERT … SELECT` cols comunes →
+  `DROP` → `RENAME` → recrear índices `seg`/`remote`/`segclient`), porque SQLite antiguo de Android no
+  garantiza `DROP COLUMN`. App no está en producción → sin backfill, DBs de dev migran limpio.
+
+**Deps nuevas (`pubspec.yaml`):** `flutter_rotation_sensor: ^0.3.0` (rumbo por azimuth, funciona
+parado; sustituye a `flutter_compass` roto en AGP 8 sin `namespace`), `device_info_plus: ^13.2.0`,
+`package_info_plus: ^10.2.0`. Sin permisos nuevos ni cambios de manifest/Info.plist (`whileInUse` basta).
+
+**Contrato backend:** `gis_json` (GeoJSON) se añade al payload de foto y vídeo; `latitud/longitud/
+fixed_*` se eliminan de ambos. Documentado en `docs/BACKEND_SYNC_CONTRACT.md`.
+
 ## 2026-07-09 — Feature: borrar de local al subir + descarga solo-nuevos (mata la duplicidad de media)
 
 **Modelo de dominio (responsable):** todo lo que se sube al backend pasa a un estado de revisión en la
@@ -550,3 +605,69 @@ pantalla de cámara (feel nativo), no un sub-diálogo.
 
 **`flutter analyze lib` → 0 issues.** Pendiente: prueba en dispositivo real (cámara/galería no
 verificables en analyzer).
+
+## 2026-07-10 — Georreferencia de la media activa en el mapa (Antes/Después)
+
+Nuevo layer de `flutter_map` que dibuja la posición/rumbo (foto) o traza (vídeo) de la captura
+visible en el carrusel Antes/Después, sobre el mapa de `_MapaSegmento`.
+
+- `core/gis/media_gis_map_geometry.dart` (nuevo): parseo puro del `gis_json` (GeoJSON) —
+  `parsePhotoGis` (Point + `properties.heading`/`gps_heading`), `parseVideoGis` (LineString o
+  Point → lista de `LatLng`) — y geometría de flecha (`destinationPoint` great-circle,
+  `arrowGeometry` asta+cabeza en V). Sin IO ni widgets; 11 tests en
+  `test/core/gis/media_gis_map_geometry_test.dart`.
+- `core/app_typed_actions.dart`: nuevo `TypedAction<MediaGisActivada>` `mediaGisActivada` +
+  payload `MediaGisActivada {gisJson, tipo, clientId, isVideo}`. `gisJson` null o `clientId`
+  vacío → el layer limpia.
+- `segmento_media_item.dart`: `SegmentoMediaItem` gana `gisJson` (mapeado desde
+  `ImagenSegmentoEntity`/`VideoSegmentoEntity`, ya lo traían).
+- `segmento_detalle_page.dart` (`_MediaCarouselState`): dispatch de `mediaGisActivada` gateado a
+  la pestaña visible vía `TabController` (`DefaultTabController.of(context)`, índices Antes=2/
+  Después=3) — evita que el carrusel oculto (el `TabBarView` construye las 4 pestañas) pise el
+  evento de la visible. Dispatch en el flanco de entrada a la pestaña y en cada `onPageChanged`.
+- `presentation/detalle/media_gis_layer.dart` (nuevo): `MediaGisLayer` (StatefulWidget, hijo de
+  `FlutterMap`) + `MediaGisLayerController` (controller plano, no GetX; `RxList` de
+  `Marker`/`Polyline`). Foto → marker + flecha roja de dirección (si trae rumbo); vídeo → polyline
+  azul de traza + marker de inicio. Insertado en `_MapaSegmento` tras el polyline del segmento
+  destacado.
+
+**`flutter analyze` → 0 issues. `flutter test test/core/gis/...` → 11/11 pass.**
+
+### Incrementos del mismo día — encuadre automático, banda de dirección de vídeo, marker circular, migración a `ValueNotifier`
+
+- **Encuadre automático del mapa:** nuevo `AppTypedActions.mediaGisBoundsRequested` —
+  `TypedAction<LatLngBounds>` (bounds de `flutter_map`), emitido por `MediaGisLayerController`
+  cuando calcula geometría para la media activa. `SegmentoDetalleController._fitMediaBounds` lo
+  escucha y llama `mapController.fitCamera(CameraFit.bounds(bounds, padding:
+  EdgeInsets.all(80), maxZoom: 17))` — encuadra la georreferencia con margen amplio sin que el
+  usuario tenga que buscarla en el mapa.
+- **Fix primer acceso al carrusel:** en `_MediaCarouselState` (`segmento_detalle_page.dart`), un
+  tap directo de pestaña (0→2/3) mueve el `TabController.index` antes de que el `State` monte, así
+  que `_onTab` se pierde el flanco de subida y el mapa no se actualiza la primera vez. Se añade un
+  dispatch inicial post-frame cuando el carrusel monta ya activo.
+- **Marker de foto/vídeo rediseñado:** círculo de color de 18px con borde blanco (mismo estilo que
+  `MyCurrentLocationLayer`) en vez de un `Icon` grande. Color foto = rojo, color vídeo = morado
+  (`deepPurpleAccent`) — elegido para no confundirse con el marker azul de ubicación actual.
+- **Banda de dirección de cámara (vídeo):** `media_gis_map_geometry.dart` gana `VideoVertex`
+  (punto + rumbo), `parseVideoTrack` (parsea `[lon,lat,alt,heading_deg,t]` conservando el rumbo por
+  vértice) y `directionBandPolygon` (offsetea cada vértice del track ≈22 m hacia su rumbo de
+  cámara, cierra el anillo `[track…, offset invertido]`; vértices sin rumbo heredan el del vecino;
+  vacío si <2 vértices o sin rumbo alguno). Se pinta como `PolygonLayer` morado semitransparente
+  **debajo** de la polyline del track — área rellena que muestra hacia dónde apuntó la cámara a lo
+  largo de todo el recorrido. `parseVideoGis` pasa a ser un wrapper fino sobre `parseVideoTrack`.
+- **Reactividad migrada de GetX a `ValueNotifier`:** `MediaGisLayer` (ahora `GetView`,
+  `StatelessWidget`) renderiza con primitivas Flutter — `MediaGisLayerController` expone un único
+  `ValueNotifier<MediaGisGeometry>` (snapshot inmutable: polígonos + polylines + markers) y el
+  widget usa `ValueListenableBuilder` (sin `Obx`, un solo rebuild para las tres capas). El
+  controller sigue siendo `MyGetxController` solo para DI + ciclo de vida `onTypedAction`
+  (`onClose` libera el notifier). Dirección de proyecto: código reactivo nuevo usa
+  `ValueNotifier`/`ValueListenableBuilder`, migrando gradualmente fuera de GetX (el
+  `GetxController` se mantiene por ahora).
+- Ficheros nuevos/tocados: `core/gis/media_gis_map_geometry.dart`,
+  `presentation/detalle/media_gis_layer.dart`, `segmento_detalle_page.dart`,
+  `segmento_detalle_controller.dart`, `segmento_detalle_binding.dart` (`lazyPut
+  MediaGisLayerController`), `core/app_typed_actions.dart`,
+  `test/core/gis/media_gis_map_geometry_test.dart` (+tests de `parseVideoTrack`/
+  `directionBandPolygon`).
+
+**Compila limpio, `flutter analyze` → 0 issues, 17/17 tests unitarios pasan.**

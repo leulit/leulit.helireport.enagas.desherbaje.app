@@ -160,8 +160,8 @@ void main() {
     vidStore = VideoLocalStore(db);
     msgStore = MensajeLocalStore(db);
     await segStore.migrate(db, 0, 1);
-    await imgStore.migrate(db, 0, 2);
-    await vidStore.migrate(db, 0, 2);
+    await imgStore.migrate(db, 0, 3);
+    await vidStore.migrate(db, 0, 3);
     await msgStore.migrate(db, 0, 1);
 
     outbox = OutboxQueue(db);

@@ -11,11 +11,13 @@ import 'package:intl/intl.dart';
 import '../../core/api_endpoints.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
+import '../../core/app_typed_actions.dart';
 import '../../core/extensions.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
+import 'media_gis_layer.dart';
 import 'segmento_detalle_controller.dart';
 import 'segmento_media_item.dart';
 import '../camera/video_player_page.dart';
@@ -32,6 +34,7 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
         body: Column(
           children: [
             Expanded(child: _PanelDatosTabs(controller: controller)),
+            const _GuardarBar(),
             const Divider(height: 1, color: Color(0xFFA5D6A7)),
             Expanded(child: _MapaSegmento(controller: controller)),
           ],
@@ -189,14 +192,11 @@ class _DatosTab extends StatelessWidget {
         : '${s.longitud.toStringAsFixed(0)} m';
     final superficieText = '${s.superficie.toStringWithComma(decimals: 0)} m²';
 
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -285,45 +285,118 @@ class _DatosTab extends StatelessWidget {
                     contentPadding: const EdgeInsets.all(12),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        _GuardarBar(controller: controller),
-      ],
+        ],
+      ),
     );
   }
 }
 
-/// Barra inferior fija con el botón "Guardar", pinneada bajo el `Expanded`
-/// scrollable de `_DatosTab` para que sea siempre visible sin hacer scroll.
-class _GuardarBar extends StatelessWidget {
-  final SegmentoDetalleController controller;
-  const _GuardarBar({required this.controller});
+/// Barra de acciones global bajo el panel de tabs, visible en los 4 tabs.
+/// Autónoma: no depende del controller. Lee el tab activo de
+/// [DefaultTabController] y emite TypedActions; el controller las escucha.
+class _GuardarBar extends StatefulWidget {
+  const _GuardarBar();
+
+  @override
+  State<_GuardarBar> createState() => _GuardarBarState();
+}
+
+class _GuardarBarState extends State<_GuardarBar> {
+  TabController? _tab;
+  int _index = 0;
+  bool _saving = false;
+  String? _savingHandlerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _savingHandlerId = AppTypedActions.savingChanged.on((event) {
+      if (mounted) setState(() => _saving = event.data ?? false);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final t = DefaultTabController.of(context);
+    if (t != _tab) {
+      _tab?.removeListener(_onTab);
+      _tab = t;
+      _index = t.index;
+      _tab?.addListener(_onTab);
+    }
+  }
+
+  void _onTab() {
+    final t = _tab;
+    if (t == null || t.index == _index) return;
+    if (mounted) setState(() => _index = t.index);
+  }
+
+  @override
+  void dispose() {
+    _tab?.removeListener(_onTab);
+    final id = _savingHandlerId;
+    if (id != null) AppTypedActions.savingChanged.off(id);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final showMedia = _index == 2 || _index == 3;
+    final showExtremos = _index == 0;
+    final tipo = _index == 3 ? TipoFoto.despues : TipoFoto.antes;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey.shade200)),
       ),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: Obx(() => ElevatedButton.icon(
-              onPressed: controller.isSaving.value ? null : controller.guardar,
-              icon: controller.isSaving.value
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.check, size: 18),
-              label: const Text('Guardar'),
-            )),
+      child: Row(
+        children: [
+          _guardarButton(),
+          if (showExtremos) ...[
+            const SizedBox(width: 8),
+            Expanded(child: _extremosButton()),
+          ],
+          if (showMedia) ...[
+            const SizedBox(width: 8),
+            Expanded(child: _mediaButton(tipo)),
+          ],
+        ],
       ),
+    );
+  }
+
+  Widget _guardarButton() {
+    return ElevatedButton.icon(
+      onPressed:
+          _saving ? null : () => AppTypedActions.guardarRequested.dispatch(),
+      icon: _saving
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            )
+          : const Icon(Icons.check, size: 18),
+      label: const Text('Guardar'),
+    );
+  }
+
+  Widget _extremosButton() {
+    return ElevatedButton.icon(
+      onPressed: () => AppTypedActions.editarExtremosRequested.dispatch(),
+      icon: const Icon(Icons.edit_location_alt_outlined, size: 18),
+      label: const Text('Editar extremos', maxLines: 1),
+    );
+  }
+
+  Widget _mediaButton(TipoFoto tipo) {
+    return ElevatedButton.icon(
+      onPressed: () => AppTypedActions.capturaRequested.dispatch(data: tipo),
+      icon: const Icon(Icons.add_a_photo, size: 18),
+      label: const Text('Foto/vídeo', maxLines: 1),
     );
   }
 }
@@ -620,10 +693,68 @@ class _MediaCarouselState extends State<_MediaCarousel> {
   late final PageController _pageController = PageController();
   int _current = 0;
 
+  /// TabController de la página; se usa para gatear el dispatch de GIS a la
+  /// pestaña visible (Antes=2 / Después=3). Sin gate, la pestaña oculta —que
+  /// el TabBarView también construye— pisaría el evento de la visible.
+  TabController? _tab;
+  bool _wasActive = false;
+
+  int get _myTabIndex => widget.tipo == TipoFoto.antes ? 2 : 3;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final t = DefaultTabController.of(context);
+    if (t != _tab) {
+      _tab?.removeListener(_onTab);
+      _tab = t;
+      _wasActive = t.index == _myTabIndex;
+      _tab?.addListener(_onTab);
+      // Montaje ya-activo (tap directo 0→2/3): el índice del TabController
+      // salta antes de que este State se monte, así que `_onTab` no ve el
+      // flanco de subida. Disparo inicial post-frame para encuadrar el mapa
+      // con la primera media al acceder por primera vez a la pestaña.
+      if (_wasActive) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tab?.index == _myTabIndex) _dispatchActive();
+        });
+      }
+    }
+  }
+
+  /// Al entrar en esta pestaña (flanco a activa) emite el GIS de la media
+  /// visible. Solo en el flanco de subida para no re-emitir en cada notify.
+  void _onTab() {
+    final t = _tab;
+    if (t == null) return;
+    final isActive = t.index == _myTabIndex;
+    if (isActive && !_wasActive) _dispatchActive();
+    _wasActive = isActive;
+  }
+
   @override
   void dispose() {
+    _tab?.removeListener(_onTab);
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Emite [AppTypedActions.mediaGisActivada] con el `gis_json` de la media
+  /// activa (índice [_current]) de este [TipoFoto]. gis_json null si la media
+  /// no tiene GIS; clientId vacío si no hay media. Solo debe llamarse cuando
+  /// esta pestaña es la visible.
+  void _dispatchActive() {
+    final media = widget.controller.mediaPorTipo(widget.tipo);
+    final i = _current;
+    final item = (i >= 0 && i < media.length) ? media[i] : null;
+    AppTypedActions.mediaGisActivada.dispatch(
+      data: MediaGisActivada(
+        gisJson: item?.gisJson,
+        tipo: widget.tipo,
+        clientId: item?.clientId ?? '',
+        isVideo: item?.isVideo ?? false,
+      ),
+    );
   }
 
   @override
@@ -647,7 +778,10 @@ class _MediaCarouselState extends State<_MediaCarousel> {
                 PageView.builder(
                   controller: _pageController,
                   itemCount: media.length,
-                  onPageChanged: (i) => setState(() => _current = i),
+                  onPageChanged: (i) {
+                    setState(() => _current = i);
+                    if (_tab?.index == _myTabIndex) _dispatchActive();
+                  },
                   itemBuilder: (_, i) {
                     final item = media[i];
                     return item.isVideo
@@ -677,21 +811,6 @@ class _MediaCarouselState extends State<_MediaCarousel> {
               ],
             );
           }),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => widget.controller.capturarMedia(widget.tipo),
-              icon: const Icon(Icons.add_a_photo),
-              label: Text(
-                esAntes
-                    ? 'Añadir foto/vídeo antes'
-                    : 'Añadir foto/vídeo después',
-              ),
-            ),
-          ),
         ),
       ],
     );
@@ -981,7 +1100,11 @@ class _MapaSegmento extends StatelessWidget {
             Obx(() => PolylineLayer(
                   polylines: [controller.highlightedSegment.value],
                 )),
-            MyCurrentLocationLayer(),
+            // Georreferencia de la media activa en el carrusel (foto/vídeo).
+            const MediaGisLayer(),
+            MyCurrentLocationLayer(
+              alignPositionStream: controller.alignEnDispositivoStream,
+            ),
           ],
         ),
         Positioned(
@@ -998,26 +1121,12 @@ class _MapaSegmento extends StatelessWidget {
             elevation: 3,
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              onTap: controller.abrirEdicionExtremos,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.edit_location_alt_outlined,
-                        size: 18, color: AppColors.moduleGreen),
-                    SizedBox(width: 6),
-                    Text(
-                      'Editar extremos',
-                      style: TextStyle(
-                        color: AppColors.moduleGreen,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
+              onTap: () =>
+                  AppTypedActions.centrarEnDispositivoRequested.dispatch(),
+              child: const Padding(
+                padding: EdgeInsets.all(10),
+                child: Icon(Icons.my_location,
+                    size: 22, color: AppColors.moduleGreen),
               ),
             ),
           ),

@@ -20,6 +20,7 @@ ImagenSegmentoEntity _img({
   required int segmentoId,
   DateTime? capturadaAt,
   String? segmentoClientId,
+  String? gisJson,
 }) {
   final ts = capturadaAt ?? DateTime.utc(2025, 1, 1);
   return ImagenSegmentoEntity(
@@ -31,7 +32,7 @@ ImagenSegmentoEntity _img({
     filename: '$clientId.jpg',
     ruta: '/tmp/$clientId.jpg',
     capturadaAt: ts,
-  );
+  )..gisJson = gisJson;
 }
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = ImagenLocalStore(db);
-    await store.migrate(db, 0, 2);
+    await store.migrate(db, 0, 3);
   });
 
   tearDown(() async => db.close());
@@ -75,6 +76,21 @@ void main() {
       expect(result.first.clientId, equals('new'));
       expect(result.last.clientId, equals('old'));
     });
+
+    test('gis_json round-trips through the store', () async {
+      await store.upsert(_img(
+        clientId: 'img-gis',
+        segmentoId: 10,
+        gisJson: '{"type":"FeatureCollection","features":[]}',
+      ));
+
+      final result = await store.findWhere('segmento_id', 10);
+      expect(result.length, equals(1));
+      expect(
+        result.first.gisJson,
+        equals('{"type":"FeatureCollection","features":[]}'),
+      );
+    });
   });
 
   group('findWhere by segmento_client_id', () {
@@ -101,19 +117,28 @@ void main() {
     });
   });
 
-  group('stepwise migration 0→1→2', () {
-    test('column is usable after migrating in two steps', () async {
+  group('stepwise migration 0→1→2→3', () {
+    test('column is usable after migrating step by step', () async {
       final freshDb = await _openDb();
       final freshStore = ImagenLocalStore(freshDb);
       await freshStore.migrate(freshDb, 0, 1);
       await freshStore.migrate(freshDb, 1, 2);
+      await freshStore.migrate(freshDb, 2, 3);
 
       await freshStore.upsert(_img(
-          clientId: 'step-a', segmentoId: 0, segmentoClientId: 'seg-step'));
+        clientId: 'step-a',
+        segmentoId: 0,
+        segmentoClientId: 'seg-step',
+        gisJson: '{"type":"FeatureCollection","features":[]}',
+      ));
       final result =
           await freshStore.findWhere('segmento_client_id', 'seg-step');
       expect(result.length, equals(1));
       expect(result.first.clientId, equals('step-a'));
+      expect(
+        result.first.gisJson,
+        equals('{"type":"FeatureCollection","features":[]}'),
+      );
 
       await freshDb.close();
     });

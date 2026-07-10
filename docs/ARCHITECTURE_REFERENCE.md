@@ -21,6 +21,11 @@ lib/
 │   ├── api_endpoints.dart                         # URLs externas y endpoints del backend
 │   ├── my_getx_controller.dart                    # Base controller con TypedAction lifecycle
 │   ├── result/data_result.dart                    # Either<Failure, T> del proyecto
+│   ├── gis/                                        # GIS de captura de media (foto/vídeo)
+│   │   ├── media_gis_recorder.dart                # MediaGisSample + MediaGisRecorder (streams propios geolocator 1s + flutter_rotation_sensor); independiente del GpsBackgroundService
+│   │   ├── media_gis_geojson.dart                 # Puro/sin IO: buildPhotoGeoJson / buildVideoGeoJson → FeatureCollection (null sin muestra)
+│   │   ├── capture_meta.dart                       # CaptureMeta (device_info_plus + package_info_plus); captureMeta() memoizado
+│   │   └── media_gis_map_geometry.dart             # Puro/sin IO: parsePhotoGis/parseVideoGis (lee gis_json) + destinationPoint/arrowGeometry (flecha) + VideoVertex/parseVideoTrack (rumbo por vértice)/directionBandPolygon (banda de dirección de cámara del vídeo) para pintar en el mapa
 │   ├── services/
 │   │   ├── api_security_service.dart              # Generación headers HMAC — dos esquemas: legacy (x-flutter-*, segundos, nonce) y vídeo (X-HMAC-Signature, ms, sin nonce)
 │   │   ├── auth_expiration_handler.dart           # Listener global de SyncActions.authExpired
@@ -131,6 +136,8 @@ lib/
     │   ├── segmento_detalle_page.dart
     │   ├── segmento_detalle_binding.dart
     │   ├── segmento_detalle_controller.dart
+    │   ├── segmento_media_item.dart                # SegmentoMediaItem: view-model unificado foto/vídeo (incluye gisJson)
+    │   ├── media_gis_layer.dart                    # MediaGisLayer (GetView<MediaGisLayerController>, sin Obx) + MediaGisLayerController: ValueNotifier<MediaGisGeometry> (polígonos/polylines/markers) pintado con ValueListenableBuilder; georreferencia de la media activa del carrusel + banda de dirección de vídeo + dispatch de mediaGisBoundsRequested
     │   └── edit_extremos/
     ├── camera/                                    # Captura de fotos/vídeos
     │   ├── camera_capture_page.dart               # Selector Foto|Vídeo (vídeo sin audio)
@@ -211,7 +218,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 | `tipoFoto` | `TipoFoto` | antes, despues |
 | `filename`, `ruta`, `url` | `String` | local/remote |
 | `mimeType`, `tamanyoBytes` | | |
-| `latitud`, `longitud`, `fixedLatitud`, `fixedLongitud` | `double?` | |
+| `gisJson` | `String?` | GeoJSON `FeatureCollection` de captura (`Point` + rumbo). `null` si sin fix/permiso o galería. Enviado al backend en `toJson` como `gis_json` |
 | `capturadaAt`, `subidaAt`, `createdAt`, `updatedAtRemote` | `DateTime?` | |
 | `subidaPor` | `int?` | |
 
@@ -227,7 +234,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 | `mimeType` | `String` | `video/mp4` (default), `video/quicktime` |
 | `tamanyoBytes` | `int?` | |
 | `uploadOffset` | `int` | Último byte confirmado (SQLite only, excluido de `toJson()`) |
-| `latitud`, `longitud` | `double?` | |
+| `gisJson` | `String?` | GeoJSON `FeatureCollection` de captura (`LineString` 1 muestra/seg con coord custom `[lon,lat,alt,heading_deg,t_epoch_ms]`; degrada a `Point` con 1 muestra). `null` si sin fix/permiso o galería. Enviado al backend en `toJson` como `gis_json` |
 | `capturadaAt` | `DateTime` | |
 | `subidaAt`, `createdAt`, `updatedAtRemote` | `DateTime?` | |
 
@@ -351,6 +358,9 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `permission_handler` | `^12.0.1` | Permisos runtime |
 | `intl` | `^0.20.2` | Fechas/i18n |
 | `geolocator` | `^14.0.2` | GPS stream (foreground + iOS background) |
+| `flutter_rotation_sensor` | `^0.3.0` | Rumbo (azimuth) para GIS de captura; funciona parado |
+| `device_info_plus` | `^13.2.0` | `os`/`os_version`/`device_model` en `gis_json` (CaptureMeta) |
+| `package_info_plus` | `^10.2.0` | `app_version` en `gis_json` (CaptureMeta) |
 | `flutter_foreground_task` | `^9.2.2` | Foreground service Android para GPS |
 | `leulit_flutter_actionmanager` | `^5.6.0` | TypedAction bus entre capas |
 | `leulit_pipeline_pattern` | path | TaskPipeline para flujos secuenciales async |

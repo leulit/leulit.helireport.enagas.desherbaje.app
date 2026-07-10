@@ -34,10 +34,7 @@ enum ImagenSegmentoFieldNames {
   url('url'),
   mimeType('mime_type'),
   tamanyoBytes('tamanyo_bytes'),
-  latitud('latitud'),
-  longitud('longitud'),
-  fixedLatitud('fixed_latitud'),
-  fixedLongitud('fixed_longitud'),
+  gisJson('gis_json'),
   capturadaAt('capturada_at'),
   subidaAt('subida_at'),
   subidaPor('subida_por'),
@@ -88,10 +85,10 @@ class ImagenSegmentoEntity implements Syncable {
   String? url;
   String mimeType = 'image/jpeg';
   int? tamanyoBytes;
-  double? latitud;
-  double? longitud;
-  double? fixedLatitud;
-  double? fixedLongitud;
+
+  /// GeoJSON FeatureCollection con la geolocalización de la captura (posición,
+  /// rumbo y metadatos de dispositivo). Null si la captura se hizo sin GPS.
+  String? gisJson;
   DateTime capturadaAt;
   DateTime? subidaAt;
   int? subidaPor;
@@ -159,37 +156,30 @@ class ImagenSegmentoEntity implements Syncable {
         json, ImagenSegmentoFieldNames.mimeType.value, 'image/jpeg');
     entity.tamanyoBytes = readJsonDataUtil<int?>(
         json, ImagenSegmentoFieldNames.tamanyoBytes.value, null);
-    entity.latitud = (readJsonDataUtil<num?>(
-            json, ImagenSegmentoFieldNames.latitud.value, null))
-        ?.toDouble();
-    entity.longitud = (readJsonDataUtil<num?>(
-            json, ImagenSegmentoFieldNames.longitud.value, null))
-        ?.toDouble();
-    entity.fixedLatitud = (readJsonDataUtil<num?>(
-            json, ImagenSegmentoFieldNames.fixedLatitud.value, null))
-        ?.toDouble();
-    entity.fixedLongitud = (readJsonDataUtil<num?>(
-            json, ImagenSegmentoFieldNames.fixedLongitud.value, null))
-        ?.toDouble();
+    entity.gisJson = readJsonDataUtil<String?>(
+        json, ImagenSegmentoFieldNames.gisJson.value, null);
     entity.subidaPor = readJsonDataUtil<int?>(
         json, ImagenSegmentoFieldNames.subidaPor.value, null);
 
     try {
       final subidaRaw = json[ImagenSegmentoFieldNames.subidaAt.value];
-      if (subidaRaw != null)
+      if (subidaRaw != null) {
         entity.subidaAt = DateTime.parse(subidaRaw.toString());
+      }
     } catch (_) {}
 
     try {
       final createdRaw = json[ImagenSegmentoFieldNames.createdAt.value];
-      if (createdRaw != null)
+      if (createdRaw != null) {
         entity.createdAt = DateTime.parse(createdRaw.toString());
+      }
     } catch (_) {}
 
     try {
       final updatedRaw = json[ImagenSegmentoFieldNames.updatedAt.value];
-      if (updatedRaw != null)
+      if (updatedRaw != null) {
         entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
+      }
     } catch (_) {}
 
     return entity;
@@ -207,10 +197,7 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.url.value: url,
         ImagenSegmentoFieldNames.mimeType.value: mimeType,
         ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
-        ImagenSegmentoFieldNames.latitud.value: latitud,
-        ImagenSegmentoFieldNames.longitud.value: longitud,
-        ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
-        ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        ImagenSegmentoFieldNames.gisJson.value: gisJson,
         ImagenSegmentoFieldNames.capturadaAt.value:
             capturadaAt.toIso8601String(),
         ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
@@ -233,10 +220,7 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.url.value: url,
         ImagenSegmentoFieldNames.mimeType.value: mimeType,
         ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
-        ImagenSegmentoFieldNames.latitud.value: latitud,
-        ImagenSegmentoFieldNames.longitud.value: longitud,
-        ImagenSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
-        ImagenSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        ImagenSegmentoFieldNames.gisJson.value: gisJson,
         ImagenSegmentoFieldNames.capturadaAt.value:
             capturadaAt.toIso8601String(),
         ImagenSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
@@ -280,14 +264,7 @@ class ImagenSegmentoEntity implements Syncable {
             'image/jpeg';
     entity.tamanyoBytes =
         row[ImagenSegmentoFieldNames.tamanyoBytes.value] as int?;
-    entity.latitud =
-        (row[ImagenSegmentoFieldNames.latitud.value] as num?)?.toDouble();
-    entity.longitud =
-        (row[ImagenSegmentoFieldNames.longitud.value] as num?)?.toDouble();
-    entity.fixedLatitud =
-        (row[ImagenSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
-    entity.fixedLongitud =
-        (row[ImagenSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
+    entity.gisJson = row[ImagenSegmentoFieldNames.gisJson.value] as String?;
     entity.subidaPor = row[ImagenSegmentoFieldNames.subidaPor.value] as int?;
     entity.subidaAt =
         parseDateNullable(ImagenSegmentoFieldNames.subidaAt.value);
@@ -312,10 +289,7 @@ class ImagenSegmentoEntity implements Syncable {
     String? url,
     String? mimeType,
     int? tamanyoBytes,
-    double? latitud,
-    double? longitud,
-    double? fixedLatitud,
-    double? fixedLongitud,
+    String? gisJson,
     DateTime? capturadaAt,
     DateTime? subidaAt,
     int? subidaPor,
@@ -334,10 +308,7 @@ class ImagenSegmentoEntity implements Syncable {
     e.url = url ?? this.url;
     e.mimeType = mimeType ?? this.mimeType;
     e.tamanyoBytes = tamanyoBytes ?? this.tamanyoBytes;
-    e.latitud = latitud ?? this.latitud;
-    e.longitud = longitud ?? this.longitud;
-    e.fixedLatitud = fixedLatitud ?? this.fixedLatitud;
-    e.fixedLongitud = fixedLongitud ?? this.fixedLongitud;
+    e.gisJson = gisJson ?? this.gisJson;
     e.subidaAt = subidaAt ?? this.subidaAt;
     e.subidaPor = subidaPor ?? this.subidaPor;
     e.createdAt = createdAt;

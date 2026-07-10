@@ -34,10 +34,7 @@ enum VideoSegmentoFieldNames {
   url('url'),
   mimeType('mime_type'),
   tamanyoBytes('tamanyo_bytes'),
-  latitud('latitud'),
-  longitud('longitud'),
-  fixedLatitud('fixed_latitud'),
-  fixedLongitud('fixed_longitud'),
+  gisJson('gis_json'),
   capturadaAt('capturada_at'),
   subidaAt('subida_at'),
   subidaPor('subida_por'),
@@ -98,10 +95,11 @@ class VideoSegmentoEntity implements Syncable {
   String? url;
   String mimeType = 'video/mp4';
   int? tamanyoBytes;
-  double? latitud;
-  double? longitud;
-  double? fixedLatitud;
-  double? fixedLongitud;
+
+  /// GeoJSON FeatureCollection con la traza de geolocalización del vídeo
+  /// (LineString con posición, rumbo y timestamp por vértice, muestreado a 1s).
+  /// Null si la captura se hizo sin GPS.
+  String? gisJson;
   DateTime capturadaAt;
   DateTime? subidaAt;
   int? subidaPor;
@@ -184,37 +182,30 @@ class VideoSegmentoEntity implements Syncable {
         json, VideoSegmentoFieldNames.mimeType.value, 'video/mp4');
     entity.tamanyoBytes = readJsonDataUtil<int?>(
         json, VideoSegmentoFieldNames.tamanyoBytes.value, null);
-    entity.latitud = (readJsonDataUtil<num?>(
-            json, VideoSegmentoFieldNames.latitud.value, null))
-        ?.toDouble();
-    entity.longitud = (readJsonDataUtil<num?>(
-            json, VideoSegmentoFieldNames.longitud.value, null))
-        ?.toDouble();
-    entity.fixedLatitud = (readJsonDataUtil<num?>(
-            json, VideoSegmentoFieldNames.fixedLatitud.value, null))
-        ?.toDouble();
-    entity.fixedLongitud = (readJsonDataUtil<num?>(
-            json, VideoSegmentoFieldNames.fixedLongitud.value, null))
-        ?.toDouble();
+    entity.gisJson = readJsonDataUtil<String?>(
+        json, VideoSegmentoFieldNames.gisJson.value, null);
     entity.subidaPor = readJsonDataUtil<int?>(
         json, VideoSegmentoFieldNames.subidaPor.value, null);
 
     try {
       final subidaRaw = json[VideoSegmentoFieldNames.subidaAt.value];
-      if (subidaRaw != null)
+      if (subidaRaw != null) {
         entity.subidaAt = DateTime.parse(subidaRaw.toString());
+      }
     } catch (_) {}
 
     try {
       final createdRaw = json[VideoSegmentoFieldNames.createdAt.value];
-      if (createdRaw != null)
+      if (createdRaw != null) {
         entity.createdAt = DateTime.parse(createdRaw.toString());
+      }
     } catch (_) {}
 
     try {
       final updatedRaw = json[VideoSegmentoFieldNames.updatedAt.value];
-      if (updatedRaw != null)
+      if (updatedRaw != null) {
         entity.updatedAtRemote = DateTime.parse(updatedRaw.toString());
+      }
     } catch (_) {}
 
     return entity;
@@ -234,10 +225,7 @@ class VideoSegmentoEntity implements Syncable {
         VideoSegmentoFieldNames.url.value: url,
         VideoSegmentoFieldNames.mimeType.value: mimeType,
         VideoSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
-        VideoSegmentoFieldNames.latitud.value: latitud,
-        VideoSegmentoFieldNames.longitud.value: longitud,
-        VideoSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
-        VideoSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        VideoSegmentoFieldNames.gisJson.value: gisJson,
         VideoSegmentoFieldNames.capturadaAt.value:
             capturadaAt.toIso8601String(),
         VideoSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
@@ -260,10 +248,7 @@ class VideoSegmentoEntity implements Syncable {
         VideoSegmentoFieldNames.url.value: url,
         VideoSegmentoFieldNames.mimeType.value: mimeType,
         VideoSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
-        VideoSegmentoFieldNames.latitud.value: latitud,
-        VideoSegmentoFieldNames.longitud.value: longitud,
-        VideoSegmentoFieldNames.fixedLatitud.value: fixedLatitud,
-        VideoSegmentoFieldNames.fixedLongitud.value: fixedLongitud,
+        VideoSegmentoFieldNames.gisJson.value: gisJson,
         VideoSegmentoFieldNames.capturadaAt.value:
             capturadaAt.toIso8601String(),
         VideoSegmentoFieldNames.subidaAt.value: subidaAt?.toIso8601String(),
@@ -308,14 +293,7 @@ class VideoSegmentoEntity implements Syncable {
         (row[VideoSegmentoFieldNames.mimeType.value] as String?) ?? 'video/mp4';
     entity.tamanyoBytes =
         row[VideoSegmentoFieldNames.tamanyoBytes.value] as int?;
-    entity.latitud =
-        (row[VideoSegmentoFieldNames.latitud.value] as num?)?.toDouble();
-    entity.longitud =
-        (row[VideoSegmentoFieldNames.longitud.value] as num?)?.toDouble();
-    entity.fixedLatitud =
-        (row[VideoSegmentoFieldNames.fixedLatitud.value] as num?)?.toDouble();
-    entity.fixedLongitud =
-        (row[VideoSegmentoFieldNames.fixedLongitud.value] as num?)?.toDouble();
+    entity.gisJson = row[VideoSegmentoFieldNames.gisJson.value] as String?;
     entity.subidaPor = row[VideoSegmentoFieldNames.subidaPor.value] as int?;
     entity.subidaAt = parseDateNullable(VideoSegmentoFieldNames.subidaAt.value);
     entity.createdAt =
@@ -342,10 +320,7 @@ class VideoSegmentoEntity implements Syncable {
     String? url,
     String? mimeType,
     int? tamanyoBytes,
-    double? latitud,
-    double? longitud,
-    double? fixedLatitud,
-    double? fixedLongitud,
+    String? gisJson,
     DateTime? capturadaAt,
     DateTime? subidaAt,
     int? subidaPor,
@@ -366,10 +341,7 @@ class VideoSegmentoEntity implements Syncable {
     e.url = url ?? this.url;
     e.mimeType = mimeType ?? this.mimeType;
     e.tamanyoBytes = tamanyoBytes ?? this.tamanyoBytes;
-    e.latitud = latitud ?? this.latitud;
-    e.longitud = longitud ?? this.longitud;
-    e.fixedLatitud = fixedLatitud ?? this.fixedLatitud;
-    e.fixedLongitud = fixedLongitud ?? this.fixedLongitud;
+    e.gisJson = gisJson ?? this.gisJson;
     e.subidaAt = subidaAt ?? this.subidaAt;
     e.subidaPor = subidaPor ?? this.subidaPor;
     e.createdAt = createdAt;
