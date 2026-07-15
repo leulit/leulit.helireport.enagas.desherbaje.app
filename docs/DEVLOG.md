@@ -671,3 +671,54 @@ visible en el carrusel Antes/Después, sobre el mapa de `_MapaSegmento`.
   `directionBandPolygon`).
 
 **Compila limpio, `flutter analyze` → 0 issues, 17/17 tests unitarios pasan.**
+
+## 2026-07-10 — Fix: 2ª foto quedaba sin GIS (`gis_json` null, mapa en blanco)
+
+**Síntoma:** la 1ª foto (antes/después) se georreferenciaba bien; la 2ª guardaba `gis_json` null
+sin error y el mapa de detalle no pintaba nada. El vídeo no se veía afectado.
+
+**Causa raíz:** `MediaGisRecorder.snapshotPhoto()` leía `_lastPosition` de forma instantánea, sin
+fallback. `_lastPosition` sólo lo rellena el listener de `Geolocator.getPositionStream()`, que en
+Android es un **broadcast cacheado y compartido por proceso**. La página de detalle monta siempre
+`CurrentLocationLayer` (`MyCurrentLocationLayer`), que mantiene ese stream vivo. En la 2ª captura el
+recorder se suscribe **tarde** a un broadcast en marcha, y un broadcast no reentrega su último valor
+a un suscriptor tardío → `_lastPosition` seguía null al disparar → `snapshotPhoto()==null` →
+`buildPhotoGeoJson(null)` devuelve null → se persiste null (fielmente; la persistencia no era el
+problema). El vídeo es inmune porque `startTrack` muestrea 1/seg durante segundos → ≥1 muestra.
+
+**Fix:** `snapshotPhoto()` pasa a `async`: si el stream aún no tiene fix, cae a
+`getLastKnownPosition()` (instantáneo) y, si hace falta, a un `getCurrentPosition(timeout 4s)`, y
+**loguea** (sin éxito silencioso). Nuevo flag `_locationGranted` para no intentar el fallback sin
+permiso. `camera_capture_page._takePhoto` ahora `await _gis.snapshotPhoto()` (el obturador ya
+mostraba spinner durante la espera). Ficheros: `core/gis/media_gis_recorder.dart`,
+`presentation/camera/camera_capture_page.dart`. `flutter analyze` → 0 issues.
+
+Diagnóstico corroborado por workflow multi-agente (3 lentes: captura/persistencia/render + verify
+adversarial): persistencia y render exonerados; causa en la captura GIS.
+
+## 2026-07-10 — `gis_json`: propiedad `source` (cámara vs galería)
+
+Se añade a `properties` del `gis_json` (foto y vídeo) una propiedad **`source`** con valores
+`"camera"` | `"gallery"`, para distinguir media capturada con la cámara de la app de la elegida de
+la galería del dispositivo. Nuevo `enum MediaSource { camera, gallery }` (`media_gis_geojson.dart`,
+`wireValue` = string).
+
+**Cambio de contrato:** `buildPhotoGeoJson`/`buildVideoGeoJson` pasan de `String?` a `String` — ahora
+**emiten siempre** un FeatureCollection. Sin muestra útil (galería, o captura sin fix GPS) el
+`Feature` lleva **`geometry: null`** y las properties con `kind` + `source` + meta. Antes esa media
+guardaba `gis_json = null` (indistinguible de "cámara sin fix"); ahora el origen se conoce siempre.
+Los parsers (`parsePhotoGis`/`parseVideoTrack`) ya toleraban `geometry: null` → sin cambios.
+`_addImagen`/`_saveVideoFromPath` reciben `required MediaSource source`; los 4 call sites de
+`capturarMedia` pasan cámara/galería. Tests de `media_gis_geojson_test.dart` actualizados (9/9).
+`flutter analyze` → 0 issues.
+
+> **Backend:** el `gis_json` ahora puede llegar con `geometry: null` y siempre trae
+> `properties.source`. Reflejar en `docs/BACKEND_SYNC_CONTRACT.md` al cerrar la migración.
+
+## 2026-07-10 — Editar extremos solo en estado "contratista"
+
+El botón **Editar extremos** (tab detalle) se muestra solo cuando `segmento.estado ==
+EstadoActividad.contratista` — el estado en que el operario de campo trabaja la tarea. Gate sobre el
+estado **persistido** del segmento (no el dropdown editable sin guardar). `_GuardarBar` sigue
+autónomo; lee el estado vía `Get.find<SegmentoDetalleController>()`. Fichero:
+`segmento_detalle_page.dart`.

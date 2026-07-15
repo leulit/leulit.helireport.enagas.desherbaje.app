@@ -8,6 +8,7 @@ usage() {
 Usage: ./build-android.sh [options]
 
 Options:
+  --bump        Increment pubspec version (odometer rule) before building.
   --clean       Run flutter clean before building.
   --skip-apk    Skip generating the release APK.
   --skip-aab    Skip generating the release App Bundle.
@@ -18,9 +19,14 @@ EOF
 CLEAN=false
 BUILD_APK=true
 BUILD_AAB=true
+BUMP=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --bump)
+      BUMP=true
+      shift
+      ;;
     --clean)
       CLEAN=true
       shift
@@ -67,6 +73,10 @@ fi
 if [ -z "$HMAC_SECRET" ]; then
   echo "Error: HMAC_SECRET no encontrado en .env" >&2
   exit 1
+fi
+
+if [[ "$BUMP" == true ]]; then
+  "$SCRIPT_DIR/bump-version.sh"
 fi
 
 if [[ "$CLEAN" == true ]]; then

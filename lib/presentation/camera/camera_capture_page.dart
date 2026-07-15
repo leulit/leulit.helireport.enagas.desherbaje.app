@@ -124,7 +124,7 @@ class _CameraCapturePageState extends State<CameraCapturePage>
     setState(() => _isCapturing = true);
     try {
       final file = await c.takePicture();
-      final MediaGisSample? gis = _gis.snapshotPhoto();
+      final MediaGisSample? gis = await _gis.snapshotPhoto();
       if (mounted) {
         Get.back<Object?>(
           result: (path: file.path, isVideo: false, gis: gis),

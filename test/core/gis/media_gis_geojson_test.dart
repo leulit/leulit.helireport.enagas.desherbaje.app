@@ -40,14 +40,23 @@ void main() {
   final t1 = DateTime.utc(2026, 7, 10, 9, 12, 34);
 
   group('buildPhotoGeoJson', () {
-    test('null sample → null', () {
-      expect(buildPhotoGeoJson(null, userId: 42, meta: _meta), isNull);
+    test('foto sin sample (galería) emite geometry null + source gallery', () {
+      final json = buildPhotoGeoJson(null,
+          userId: 42, meta: _meta, source: MediaSource.gallery);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final feature =
+          (decoded['features'] as List).first as Map<String, dynamic>;
+      final props = feature['properties'] as Map<String, dynamic>;
+
+      expect(feature['geometry'], isNull);
+      expect(props['kind'], 'photo');
+      expect(props['source'], 'gallery');
     });
 
     test('builds a FeatureCollection with a Point in [lon, lat, alt] order', () {
-      final json = buildPhotoGeoJson(_sample(ts: t0), userId: 42, meta: _meta);
-      expect(json, isNotNull);
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final json = buildPhotoGeoJson(_sample(ts: t0),
+          userId: 42, meta: _meta, source: MediaSource.camera);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
 
       expect(decoded['type'], 'FeatureCollection');
       final features = decoded['features'] as List;
@@ -64,13 +73,15 @@ void main() {
       expect(coords[2], 650.0);
     });
 
-    test('properties carry kind + meta + user_id', () {
-      final json = buildPhotoGeoJson(_sample(ts: t0), userId: 42, meta: _meta);
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+    test('properties carry kind + source + meta + user_id', () {
+      final json = buildPhotoGeoJson(_sample(ts: t0),
+          userId: 42, meta: _meta, source: MediaSource.camera);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final props = ((decoded['features'] as List).first
           as Map<String, dynamic>)['properties'] as Map<String, dynamic>;
 
       expect(props['kind'], 'photo');
+      expect(props['source'], 'camera');
       expect(props['user_id'], 42);
       expect(props['os'], 'android');
       expect(props['os_version'], '14');
@@ -81,9 +92,9 @@ void main() {
     });
 
     test('omits alt from coordinates when null → [lon, lat]', () {
-      final json =
-          buildPhotoGeoJson(_sample(alt: null, ts: t0), userId: 1, meta: _meta);
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final json = buildPhotoGeoJson(_sample(alt: null, ts: t0),
+          userId: 1, meta: _meta, source: MediaSource.camera);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final coords = (((decoded['features'] as List).first
               as Map<String, dynamic>)['geometry']
           as Map<String, dynamic>)['coordinates'] as List;
@@ -93,9 +104,9 @@ void main() {
     });
 
     test('null user_id is allowed and serialized as null', () {
-      final json =
-          buildPhotoGeoJson(_sample(ts: t0), userId: null, meta: _meta);
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final json = buildPhotoGeoJson(_sample(ts: t0),
+          userId: null, meta: _meta, source: MediaSource.camera);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final props = ((decoded['features'] as List).first
           as Map<String, dynamic>)['properties'] as Map<String, dynamic>;
       expect(props.containsKey('user_id'), isTrue);
@@ -104,8 +115,17 @@ void main() {
   });
 
   group('buildVideoGeoJson', () {
-    test('degrade: 0 samples → null', () {
-      expect(buildVideoGeoJson(const [], userId: 42, meta: _meta), isNull);
+    test('degrade: 0 samples (galería) → geometry null + source gallery', () {
+      final json = buildVideoGeoJson(const [],
+          userId: 42, meta: _meta, source: MediaSource.gallery);
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final feature =
+          (decoded['features'] as List).first as Map<String, dynamic>;
+      final props = feature['properties'] as Map<String, dynamic>;
+
+      expect(feature['geometry'], isNull);
+      expect(props['kind'], 'video');
+      expect(props['source'], 'gallery');
     });
 
     test('degrade: 1 sample → Point geometry, kind stays "video"', () {
@@ -113,8 +133,9 @@ void main() {
         [_sample(ts: t0)],
         userId: 42,
         meta: _meta,
+        source: MediaSource.camera,
       );
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final feature =
           (decoded['features'] as List).first as Map<String, dynamic>;
       final geometry = feature['geometry'] as Map<String, dynamic>;
@@ -136,8 +157,9 @@ void main() {
         ],
         userId: 42,
         meta: _meta,
+        source: MediaSource.camera,
       );
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final feature =
           (decoded['features'] as List).first as Map<String, dynamic>;
       final geometry = feature['geometry'] as Map<String, dynamic>;
@@ -166,8 +188,9 @@ void main() {
         [_sample(ts: t0), _sample(ts: t1)],
         userId: 7,
         meta: _meta,
+        source: MediaSource.camera,
       );
-      final decoded = jsonDecode(json!) as Map<String, dynamic>;
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
       final props = ((decoded['features'] as List).first
           as Map<String, dynamic>)['properties'] as Map<String, dynamic>;
 

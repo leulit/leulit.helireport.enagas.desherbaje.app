@@ -333,7 +333,9 @@ class SegmentoDetalleController extends MyGetxController {
   /// outbox. Reusada por la grabadora nativa (tab Vídeos) y por la pantalla
   /// de cámara con toggle foto/vídeo (tab Fotos).
   Future<void> _saveVideoFromPath(String path, TipoVideo tipo,
-      {required bool saveToGallery, List<MediaGisSample> gis = const []}) async {
+      {required bool saveToGallery,
+      List<MediaGisSample> gis = const [],
+      required MediaSource source}) async {
     try {
       final file = File(path);
       final tamanyoBytes = await file.length();
@@ -347,8 +349,8 @@ class SegmentoDetalleController extends MyGetxController {
       };
 
       final meta = await captureMeta();
-      final gisJson =
-          buildVideoGeoJson(gis, userId: user.value?.id, meta: meta);
+      final gisJson = buildVideoGeoJson(gis,
+          userId: user.value?.id, meta: meta, source: source);
 
       final video = VideoSegmentoEntity(
         actividadId: 0,
@@ -394,9 +396,10 @@ class SegmentoDetalleController extends MyGetxController {
       if (path == null || path.isEmpty) return;
       if (_isVideoPath(path)) {
         await _saveVideoFromPath(path, _tipoVideoDesde(tipo),
-            saveToGallery: false);
+            saveToGallery: false, source: MediaSource.gallery);
       } else {
-        await _addImagen(path, tipo, saveToGallery: false, gis: null);
+        await _addImagen(path, tipo,
+            saveToGallery: false, gis: null, source: MediaSource.gallery);
       }
       return;
     }
@@ -413,10 +416,12 @@ class SegmentoDetalleController extends MyGetxController {
       final gis =
           (capture.gis as List<MediaGisSample>?) ?? const <MediaGisSample>[];
       await _saveVideoFromPath(capture.path, _tipoVideoDesde(tipo),
-          saveToGallery: true, gis: gis);
+          saveToGallery: true, gis: gis, source: MediaSource.camera);
     } else {
       await _addImagen(capture.path, tipo,
-          saveToGallery: true, gis: capture.gis as MediaGisSample?);
+          saveToGallery: true,
+          gis: capture.gis as MediaGisSample?,
+          source: MediaSource.camera);
     }
   }
 
@@ -474,10 +479,12 @@ class SegmentoDetalleController extends MyGetxController {
     TipoFoto tipo, {
     required bool saveToGallery,
     required MediaGisSample? gis,
+    required MediaSource source,
   }) async {
     final filename = localPath.split('/').last;
     final meta = await captureMeta();
-    final gisJson = buildPhotoGeoJson(gis, userId: user.value?.id, meta: meta);
+    final gisJson = buildPhotoGeoJson(gis,
+        userId: user.value?.id, meta: meta, source: source);
     final imagen = ImagenSegmentoEntity(
       actividadId: 0,
       segmentoId: segmento.id ?? 0,

@@ -6,26 +6,42 @@ import 'media_gis_recorder.dart';
 /// Builders **puros** (sin IO) del `gis_json` (GeoJSON) por media.
 ///
 /// GeoJSON usa orden **`[lon, lat]`** (+ alt). El top-level SIEMPRE es un
-/// `FeatureCollection`. Devuelven `null` cuando no hay muestra útil.
+/// `FeatureCollection`. Siempre devuelven un `String` (FeatureCollection);
+/// `geometry` es `null` cuando no hay muestra útil (p.ej. media de galería).
 
-/// Construye el GeoJSON de una **foto**: `Point [lon, lat, alt]` + rumbo y
-/// extras en `properties`. `null` si [sample] es null.
-String? buildPhotoGeoJson(
+/// Origen de una media: capturada por la cámara de la app o elegida de la
+/// galería del dispositivo. Se serializa en `properties.source` del gis_json.
+enum MediaSource {
+  camera('camera'),
+  gallery('gallery');
+
+  const MediaSource(this.wireValue);
+
+  /// Valor tal cual viaja en el gis_json / backend.
+  final String wireValue;
+}
+
+/// Construye el GeoJSON de una **foto**. Con [sample] → `Point [lon, lat, alt]`
+/// + rumbo/extras; sin sample (galería o captura sin fix) → `geometry: null`.
+/// Siempre incluye `kind`, `source` y la meta en `properties`.
+String buildPhotoGeoJson(
   MediaGisSample? sample, {
   required int? userId,
   required CaptureMeta meta,
+  required MediaSource source,
 }) {
-  if (sample == null) return null;
-
   final properties = <String, dynamic>{
     'kind': 'photo',
-    'heading': sample.headingDeg,
-    'heading_accuracy': sample.headingAccuracy,
-    'gps_heading': sample.gpsHeading,
-    'accuracy_m': sample.accuracyM,
-    'altitude_m': sample.alt,
-    'speed_mps': sample.speedMps,
-    'captured_at': sample.tsUtc.toIso8601String(),
+    'source': source.wireValue,
+    if (sample != null) ...<String, dynamic>{
+      'heading': sample.headingDeg,
+      'heading_accuracy': sample.headingAccuracy,
+      'gps_heading': sample.gpsHeading,
+      'accuracy_m': sample.accuracyM,
+      'altitude_m': sample.alt,
+      'speed_mps': sample.speedMps,
+      'captured_at': sample.tsUtc.toIso8601String(),
+    },
     ..._metaProps(userId, meta),
   };
 
@@ -34,10 +50,12 @@ String? buildPhotoGeoJson(
     'features': [
       <String, dynamic>{
         'type': 'Feature',
-        'geometry': <String, dynamic>{
-          'type': 'Point',
-          'coordinates': _pointCoords(sample),
-        },
+        'geometry': sample == null
+            ? null
+            : <String, dynamic>{
+                'type': 'Point',
+                'coordinates': _pointCoords(sample),
+              },
         'properties': properties,
       },
     ],
@@ -46,29 +64,31 @@ String? buildPhotoGeoJson(
   return jsonEncode(featureCollection);
 }
 
-/// Construye el GeoJSON de un **vídeo**: `LineString` con coordenada custom
-/// `[lon, lat, alt, heading_deg, t_epoch_ms]` por vértice.
-///
-/// Degradación (D10): 0 muestras → `null`; 1 muestra → geometría `Point`
-/// (property `kind` sigue `"video"`); ≥2 → `LineString`.
-String? buildVideoGeoJson(
+/// Construye el GeoJSON de un **vídeo**. ≥2 muestras → `LineString`; 1 → `Point`;
+/// 0 (galería / sin fix) → `geometry: null`. Siempre incluye `kind`, `source` y
+/// meta. Coordenada custom `[lon, lat, alt, heading_deg, t_epoch_ms]` por vértice.
+String buildVideoGeoJson(
   List<MediaGisSample> samples, {
   required int? userId,
   required CaptureMeta meta,
+  required MediaSource source,
 }) {
-  if (samples.isEmpty) return null;
-
   final properties = <String, dynamic>{
     'kind': 'video',
-    'coord_format': const ['lon', 'lat', 'alt', 'heading_deg', 't_epoch_ms'],
-    'sample_interval_s': 1,
-    'started_at': samples.first.tsUtc.toIso8601String(),
-    'ended_at': samples.last.tsUtc.toIso8601String(),
+    'source': source.wireValue,
+    if (samples.isNotEmpty) ...<String, dynamic>{
+      'coord_format': const ['lon', 'lat', 'alt', 'heading_deg', 't_epoch_ms'],
+      'sample_interval_s': 1,
+      'started_at': samples.first.tsUtc.toIso8601String(),
+      'ended_at': samples.last.tsUtc.toIso8601String(),
+    },
     ..._metaProps(userId, meta),
   };
 
-  final Map<String, dynamic> geometry;
-  if (samples.length == 1) {
+  final Map<String, dynamic>? geometry;
+  if (samples.isEmpty) {
+    geometry = null;
+  } else if (samples.length == 1) {
     geometry = <String, dynamic>{
       'type': 'Point',
       'coordinates': _videoCoord(samples.first),

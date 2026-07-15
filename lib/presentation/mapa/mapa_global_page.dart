@@ -144,6 +144,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               MyCurrentLocationLayer(
                 alignDirectionOnUpdate: AlignOnUpdate.always,
                 alignPositionOnUpdate: AlignOnUpdate.always,
+                alignPositionStream: controller.alignPositionStream,
               ),
               ...buildLinesCutMapLayers(controller.linesCut),
               const MapCompass.cupertino(
@@ -163,11 +164,6 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
           ),
           Positioned(
             bottom: 40,
-            right: 58,
-            child: _ZoomControls(controller: controller),
-          ),
-          Positioned(
-            bottom: 40,
             left: 10,
             child: LinesCutModeButton(
               controller: controller.linesCut,
@@ -184,6 +180,24 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
             bottom: 96,
             right: 10,
             child: _PksLoadStatus(),
+          ),
+          Positioned(
+            bottom: 48,
+            right: 58,
+            child: Material(
+              color: Colors.white,
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: controller.centerOnMyLocation,
+                child: const Padding(
+                  padding: EdgeInsets.all(9),
+                  child: Icon(Icons.my_location,
+                      size: 22, color: AppColors.moduleGreen),
+                ),
+              ),
+            ),
           ),
           const Positioned(
             top: 64,
@@ -390,71 +404,6 @@ class _FilterDropdown<T> extends StatelessWidget {
             );
           }),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Zoom controls ────────────────────────────────────────────────────────────
-
-class _ZoomControls extends StatelessWidget {
-  final MapaGlobalController controller;
-
-  const _ZoomControls({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ZoomButton(icon: Icons.add, onTap: controller.zoomIn, isTop: true),
-          Container(height: 1, color: Colors.grey.shade200),
-          _ZoomButton(
-              icon: Icons.remove, onTap: controller.zoomOut, isTop: false),
-        ],
-      ),
-    );
-  }
-}
-
-class _ZoomButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isTop;
-
-  const _ZoomButton({
-    required this.icon,
-    required this.onTap,
-    required this.isTop,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.vertical(
-        top: isTop ? const Radius.circular(8) : Radius.zero,
-        bottom: isTop ? Radius.zero : const Radius.circular(8),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.vertical(
-          top: isTop ? const Radius.circular(8) : Radius.zero,
-          bottom: isTop ? Radius.zero : const Radius.circular(8),
-        ),
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(icon, size: 20, color: AppColors.moduleGreen),
-        ),
       ),
     );
   }

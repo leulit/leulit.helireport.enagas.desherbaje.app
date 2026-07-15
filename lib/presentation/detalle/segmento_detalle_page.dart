@@ -344,7 +344,11 @@ class _GuardarBarState extends State<_GuardarBar> {
   @override
   Widget build(BuildContext context) {
     final showMedia = _index == 2 || _index == 3;
-    final showExtremos = _index == 0;
+    // Editar extremos (geometría) solo cuando el segmento está en "contratista":
+    // es el estado en el que el operario de campo trabaja la tarea.
+    final showExtremos = _index == 0 &&
+        Get.find<SegmentoDetalleController>().segmento.estado ==
+            EstadoActividad.contratista;
     final tipo = _index == 3 ? TipoFoto.despues : TipoFoto.antes;
     return Container(
       decoration: BoxDecoration(
@@ -1109,11 +1113,6 @@ class _MapaSegmento extends StatelessWidget {
         ),
         Positioned(
           bottom: 12,
-          right: 12,
-          child: _ZoomControls(controller: controller),
-        ),
-        Positioned(
-          bottom: 12,
           left: 12,
           child: Material(
             color: Colors.white,
@@ -1132,76 +1131,6 @@ class _MapaSegmento extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ZoomControls extends StatelessWidget {
-  final SegmentoDetalleController controller;
-  const _ZoomControls({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ZoomButton(
-            icon: Icons.add,
-            onTap: controller.zoomIn,
-            isTop: true,
-          ),
-          Container(height: 1, color: Colors.grey.shade200),
-          _ZoomButton(
-            icon: Icons.remove,
-            onTap: controller.zoomOut,
-            isTop: false,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ZoomButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isTop;
-
-  const _ZoomButton({
-    required this.icon,
-    required this.onTap,
-    required this.isTop,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = isTop
-        ? const BorderRadius.vertical(top: Radius.circular(8))
-        : const BorderRadius.vertical(bottom: Radius.circular(8));
-    return Material(
-      color: Colors.transparent,
-      borderRadius: radius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, size: 22, color: AppColors.moduleGreen),
-        ),
-      ),
     );
   }
 }

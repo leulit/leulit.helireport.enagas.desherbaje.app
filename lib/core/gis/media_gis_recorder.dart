@@ -80,6 +80,7 @@ class MediaGisRecorder {
   List<MediaGisSample>? _track;
 
   bool _started = false;
+  bool _locationGranted = false;
 
   /// Pide permiso `whileInUse` y abre los streams de posición y orientación.
   /// Nunca lanza: si el permiso se deniega, queda en modo sin-GIS.
@@ -101,6 +102,7 @@ class MediaGisRecorder {
     }
 
     final granted = await _ensurePermissions();
+    _locationGranted = granted;
     if (!granted) {
       AppLog.w('MediaGisRecorder: permiso de ubicación denegado → modo sin-GIS');
       return;
@@ -119,9 +121,27 @@ class MediaGisRecorder {
     }
   }
 
-  /// Últimos valores como una única muestra. `null` si aún no hay fix GPS
-  /// (o permiso denegado).
-  MediaGisSample? snapshotPhoto() => _buildSample();
+  /// Últimos valores como una única muestra. Si el stream aún no entregó fix
+  /// (carrera con el obturador; en Android `getPositionStream` es un broadcast
+  /// compartido por proceso que NO reentrega su último valor a un suscriptor
+  /// tardío —el mapa de detalle mantiene ese stream vivo—), cae a
+  /// `getLastKnownPosition` y, si hace falta, a un `getCurrentPosition` puntual.
+  /// `null` sólo si no hay ubicación disponible (permiso denegado o sin fix).
+  Future<MediaGisSample?> snapshotPhoto() async {
+    final immediate = _buildSample();
+    if (immediate != null) return immediate;
+    if (!_locationGranted) return null;
+    try {
+      _lastPosition = await Geolocator.getLastKnownPosition();
+      _lastPosition ??= await Geolocator.getCurrentPosition(
+        locationSettings: _locationSettings(),
+      ).timeout(const Duration(seconds: 4));
+    } catch (e, s) {
+      AppLog.w('MediaGisRecorder: snapshotPhoto sin fix de GPS disponible',
+          error: e, stackTrace: s);
+    }
+    return _buildSample();
+  }
 
   /// Arranca la recolección de muestras (1/seg) para un vídeo.
   void startTrack() {

@@ -25,6 +25,15 @@ import 'lines_cut/lines_cut_dialog.dart';
 class MapaGlobalController extends GetxController {
   final mapController = MapController();
 
+  /// Empuja un zoom para recentrar el marcador de ubicación en la posición
+  /// actual del dispositivo (botón "mi ubicación").
+  final _alignPositionCtrl = StreamController<double?>.broadcast();
+  Stream<double?> get alignPositionStream => _alignPositionCtrl.stream;
+
+  /// Recentra el mapa en la posición GPS actual manteniendo el zoom.
+  void centerOnMyLocation() =>
+      _alignPositionCtrl.add(mapController.camera.zoom);
+
   late final LinesCutController linesCut;
 
   final gasoductosPolylines = <Polyline>[].obs;
@@ -95,6 +104,7 @@ class MapaGlobalController extends GetxController {
   @override
   void onClose() {
     _saveDebounce?.cancel();
+    _alignPositionCtrl.close();
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
