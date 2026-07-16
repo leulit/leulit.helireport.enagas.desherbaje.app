@@ -52,9 +52,10 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
         body: body,
         headers: await bearerAuthHeader(_storage),
       );
-      if (!response.isSuccess) {
+      if (!response.isSuccess || bodyIndicatesError(response.data)) {
+        final msg = bodyErrorMessage(response.data);
         return SyncUnrecoverable<MensajeSegmentoEntity>(
-          'HTTP ${response.statusCode}',
+          msg ?? 'HTTP ${response.statusCode}',
           statusCode: response.statusCode,
         );
       }

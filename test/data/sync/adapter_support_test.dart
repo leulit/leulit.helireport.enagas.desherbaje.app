@@ -117,4 +117,59 @@ void main() {
       expect(result!['Authorization'], equals('Bearer custom-token'));
     });
   });
+
+  // ─── bodyIndicatesError ────────────────────────────────────────────────────
+
+  group('bodyIndicatesError', () {
+    test('false for non-map / null', () {
+      expect(bodyIndicatesError(null), isFalse);
+      expect(bodyIndicatesError('x'), isFalse);
+      expect(bodyIndicatesError(42), isFalse);
+    });
+
+    test('false for a normal OK body', () {
+      expect(bodyIndicatesError({'id': 1, 'ok': true}), isFalse);
+      expect(bodyIndicatesError({'data': 'whatever'}), isFalse);
+    });
+
+    test('true when ok:false or success:false', () {
+      expect(bodyIndicatesError({'ok': false}), isTrue);
+      expect(bodyIndicatesError({'success': false}), isTrue);
+    });
+
+    test('true when error / error_message / errorMessage non-empty', () {
+      expect(bodyIndicatesError({'error': 'boom'}), isTrue);
+      expect(bodyIndicatesError({'error_message': 'boom'}), isTrue);
+      expect(bodyIndicatesError({'errorMessage': 'boom'}), isTrue);
+      expect(bodyIndicatesError({'error': {'code': 1}}), isTrue);
+      expect(bodyIndicatesError({'error': ['x']}), isTrue);
+    });
+
+    test('false when error present but empty', () {
+      expect(bodyIndicatesError({'error': ''}), isFalse);
+      expect(bodyIndicatesError({'error': const <String, dynamic>{}}), isFalse);
+      expect(bodyIndicatesError({'error': const []}), isFalse);
+    });
+  });
+
+  // ─── bodyErrorMessage ──────────────────────────────────────────────────────
+
+  group('bodyErrorMessage', () {
+    test('null for non-map / no error', () {
+      expect(bodyErrorMessage(null), isNull);
+      expect(bodyErrorMessage({'ok': true}), isNull);
+    });
+
+    test('returns string error', () {
+      expect(bodyErrorMessage({'error': 'boom'}), equals('boom'));
+      expect(bodyErrorMessage({'error_message': 'x'}), equals('x'));
+    });
+
+    test('returns nested error.message', () {
+      expect(
+        bodyErrorMessage({'error': {'message': 'nested'}}),
+        equals('nested'),
+      );
+    });
+  });
 }

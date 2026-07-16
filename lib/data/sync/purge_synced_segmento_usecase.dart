@@ -292,10 +292,12 @@ class PurgeSyncedSegmentoUseCase {
         },
         headers: await bearerAuthHeader(_storage),
       );
-      if (response.isSuccess) return true;
+      if (response.isSuccess && !bodyIndicatesError(response.data)) return true;
+      final msg = bodyErrorMessage(response.data);
       AppLog.w(
         'PurgeSyncedSegmentoUseCase: sync-complete rechazado '
-        '(segmento ${s.id}, HTTP ${response.statusCode}) — no se purga.',
+        '(segmento ${s.id}, HTTP ${response.statusCode}'
+        '${msg != null ? ', "$msg"' : ''}) — no se purga.',
       );
       return false;
     } on NetworkError catch (e, st) {

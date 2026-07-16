@@ -292,6 +292,35 @@ void main() {
       expect(deletedPaths, isEmpty);
     });
 
+    test('sync-complete HTTP 200 + body {ok:false} → finalizeFailed, nada borrado',
+        () async {
+      when(() => network.post(
+            any(),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+          )).thenAnswer(
+        (_) async => NetworkResponse<dynamic>(
+          statusCode: 200,
+          data: {'ok': false, 'error': 'segmento bloqueado'},
+        ),
+      );
+
+      final seg = _seg(clientId: 'seg-1', id: 42);
+      await segStore.upsert(seg);
+      await imgStore.upsert(
+          _img(clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/img1.jpg'));
+      await seedJob('segmento', 'seg-1');
+      await seedJob('imagen', 'img-1');
+
+      final outcome = await buildUseCase().purgeIfFullySynced(seg);
+
+      expect(outcome.status, PurgeStatus.finalizeFailed);
+      expect(await segStore.findByClientId('seg-1'), isNotNull);
+      expect(await imgStore.findByClientId('img-1'), isNotNull);
+      expect(await queueRowCount(), 2);
+      expect(deletedPaths, isEmpty);
+    });
+
     // (2) A segment with ANY unsynced dependent must be left COMPLETELY intact.
     for (final offender in const [
       ('imagen img-1 pending', 'imagen', 'img-1', SyncStatus.pending),

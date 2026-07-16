@@ -73,10 +73,10 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
         'tipovigilancia': 'VH',
         'usuariologged': usuario,
         'idusuariologged': userId,
-        'clientId': entity.clientId,
-        'actividadId': entity.actividadId.toString(),
-        'segmentoId': entity.segmentoId.toString(),
-        'tipoFoto': entity.tipoFoto.name,
+        'client_id': entity.clientId,
+        'actividad_id': entity.actividadId.toString(),
+        'segmento_id': entity.segmentoId.toString(),
+        'tipo_foto': entity.tipoFoto.name,
       };
 
       final files = <NetworkFile>[
@@ -95,9 +95,10 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
         headers: await bearerAuthHeader(_secureStorage),
       );
 
-      if (!response.isSuccess) {
+      if (!response.isSuccess || bodyIndicatesError(response.data)) {
+        final msg = bodyErrorMessage(response.data);
         return SyncUnrecoverable<ImagenSegmentoEntity>(
-          'Unexpected status: ${response.statusCode}',
+          msg ?? 'Unexpected status: ${response.statusCode}',
           statusCode: response.statusCode,
         );
       }

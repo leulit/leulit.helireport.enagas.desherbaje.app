@@ -72,14 +72,14 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
         headers: await bearerAuthHeader(_storage),
       );
 
-      if (response.isSuccess) {
+      if (response.isSuccess && !bodyIndicatesError(response.data)) {
         return SyncSuccess<SegmentoEntity>(remoteId: remoteId.toString());
       }
-      // 409 Conflict on push: currently mapped to SyncUnrecoverable (option b).
-      // A SyncConflict path will be added when the backend guarantees a 409
-      // response with the full conflicting entity body (BE-8).
+      // Fallo por status HTTP o por error de negocio en el body (HTTP 200 +
+      // `{ok:false}`/`error`). Ver convención en BACKEND_SEGMENTO_SYNC_ENDPOINTS.
+      final msg = bodyErrorMessage(response.data);
       return SyncUnrecoverable<SegmentoEntity>(
-        'HTTP ${response.statusCode}',
+        msg ?? 'HTTP ${response.statusCode}',
         statusCode: response.statusCode,
       );
     } on NetworkError catch (err) {

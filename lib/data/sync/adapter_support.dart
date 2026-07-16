@@ -43,3 +43,27 @@ int? extractRemoteIntId(
 /// Returns `null` when [remoteId] is `null` or not a valid integer string.
 int? parseRemoteId(String? remoteId) =>
     remoteId == null ? null : int.tryParse(remoteId);
+
+/// Convención backend: HTTP 200 + body que señala error de negocio
+/// (`{ok:false}` / `{success:false}` / `error`|`error_message` no vacío).
+/// Se usa ADEMÁS del status HTTP, nunca en su lugar.
+bool bodyIndicatesError(dynamic data) {
+  if (data is! Map) return false;
+  final m = data is Map<String, dynamic> ? data : data.cast<String, dynamic>();
+  if (m['ok'] == false || m['success'] == false) return true;
+  final err = m['error'] ?? m['error_message'] ?? m['errorMessage'];
+  if (err is String) return err.isNotEmpty;
+  if (err is Map) return err.isNotEmpty;
+  if (err is List) return err.isNotEmpty;
+  return false;
+}
+
+/// Mensaje legible del body de error, si lo hay.
+String? bodyErrorMessage(dynamic data) {
+  if (data is! Map) return null;
+  final m = data is Map<String, dynamic> ? data : data.cast<String, dynamic>();
+  final err = m['error'] ?? m['error_message'] ?? m['errorMessage'];
+  if (err is String && err.isNotEmpty) return err;
+  if (err is Map && err['message'] is String) return err['message'] as String;
+  return null;
+}

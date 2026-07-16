@@ -142,7 +142,7 @@ Solo **create**. HMAC-only (sin Bearer). Conversión MOV→MP4 **asíncrona** en
   "idusuariologged": 45
 }
 ```
-→ `201 { "upload_id": "...", "offset": 0, "segmento_id": 123 }`
+→ `201 { "uploadId": "...", "offset": 0, "segmentoId": 123 }` (la app parsea la respuesta en camelCase)
 
 **4.2 Estado** — `GET /videos/upload/{uploadId}`
 → `200 { uploadId, offset, totalBytes, mimeType, originalFilename, complete }`

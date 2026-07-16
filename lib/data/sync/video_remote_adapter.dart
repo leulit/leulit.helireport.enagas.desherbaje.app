@@ -10,6 +10,7 @@ import '../../core/sync/contracts/sync_job.dart' show SyncOperation;
 import '../../domain/entities/video_segmento_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
+import 'adapter_support.dart';
 import 'video_local_store.dart';
 
 /// Remote adapter for [VideoSegmentoEntity].
@@ -184,16 +185,22 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
     required int userId,
   }) async {
     final resp = await _network.initVideoUpload({
-      'originalFilename': entity.filename,
-      'totalBytes': totalBytes,
-      'mimeType': mimeType,
-      'clientId': entity.clientId,
-      'segmentoId': entity.segmentoId,
+      'original_filename': entity.filename,
+      'total_bytes': totalBytes,
+      'mime_type': mimeType,
+      'client_id': entity.clientId,
+      'segmento_id': entity.segmentoId,
       'usuariologged': usuario,
       'idusuariologged': userId,
     });
 
     final body = _asMap(resp.data);
+    if (bodyIndicatesError(resp.data)) {
+      throw NetworkError(
+        category: NetworkErrorCategory.unrecoverable,
+        message: bodyErrorMessage(resp.data) ?? 'Init de vídeo rechazado',
+      );
+    }
     final uploadId = body['uploadId'] as String?;
     if (uploadId == null || uploadId.isEmpty) {
       throw NetworkError(
