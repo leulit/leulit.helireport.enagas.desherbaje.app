@@ -15,12 +15,14 @@ Future<Database> _openDb() async {
 MensajeSegmentoEntity _msg({
   required String clientId,
   required int segmentoId,
+  String? segmentoClientId,
   DateTime? createdAt,
 }) {
   final ts = createdAt ?? DateTime.utc(2025, 1, 1);
   return MensajeSegmentoEntity(
     clientId: clientId,
     segmentoId: segmentoId,
+    segmentoClientId: segmentoClientId,
     mensaje: 'test message',
     createdAt: ts,
     updatedAt: ts,
@@ -34,7 +36,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = MensajeLocalStore(db);
-    await store.migrate(db, 0, 1);
+    await store.migrate(db, 0, store.schemaVersion);
   });
 
   tearDown(() async => db.close());
@@ -90,6 +92,84 @@ void main() {
         viaFindWhere.map((m) => m.clientId).toList(),
         equals(viaFindBySegmento.map((m) => m.clientId).toList()),
       );
+    });
+  });
+
+  group('segmento_client_id (v2)', () {
+    test('round-trips the segmento_client_id column', () async {
+      await store.upsert(_msg(
+        clientId: 'm1',
+        segmentoId: 0, // parent not synced yet
+        segmentoClientId: 'seg-uuid-1',
+      ));
+
+      final row = await store.findByClientId('m1');
+      expect(row, isNotNull);
+      expect(row!.segmentoClientId, equals('seg-uuid-1'));
+    });
+
+    test('findBySegmentoClientId filters by the local parent id', () async {
+      await store.upsert(
+          _msg(clientId: 'a', segmentoId: 0, segmentoClientId: 'seg-1'));
+      await store.upsert(
+          _msg(clientId: 'b', segmentoId: 0, segmentoClientId: 'seg-1'));
+      await store.upsert(
+          _msg(clientId: 'c', segmentoId: 0, segmentoClientId: 'seg-2'));
+
+      final result = await store.findBySegmentoClientId('seg-1');
+      expect(result.map((m) => m.clientId).toSet(), {'a', 'b'});
+    });
+  });
+
+  group('v1 → v2 migration', () {
+    test('adds segmento_client_id and preserves existing rows', () async {
+      // Isolated connection (singleInstance:false) so it does not share the
+      // shared in-memory DB that setUp already migrated to v2.
+      final db2 =
+          await openDatabase(inMemoryDatabasePath, singleInstance: false);
+      addTearDown(() async => db2.close());
+      const table = 'mensajes_segmento';
+
+      // Build the ORIGINAL v1 schema (no segmento_client_id) + one row.
+      await db2.execute('''
+        CREATE TABLE $table (
+          client_id    TEXT PRIMARY KEY,
+          id           INTEGER,
+          segmento_id  INTEGER NOT NULL,
+          mensaje      TEXT    NOT NULL,
+          enviado_por  INTEGER,
+          created_at   TEXT    NOT NULL,
+          updated_at   TEXT    NOT NULL,
+          synced_at    TEXT
+        )
+      ''');
+      await db2.insert(table, {
+        'client_id': 'legacy',
+        'id': 7,
+        'segmento_id': 3,
+        'mensaje': 'antiguo',
+        'created_at': '2025-01-01T00:00:00.000Z',
+        'updated_at': '2025-01-01T00:00:00.000Z',
+      });
+
+      // Run the actual v1 → v2 migration.
+      final store2 = MensajeLocalStore(db2);
+      await store2.migrate(db2, 1, 2);
+
+      // Existing row survives, new column present and null.
+      final legacy = await store2.findByClientId('legacy');
+      expect(legacy, isNotNull);
+      expect(legacy!.mensaje, equals('antiguo'));
+      expect(legacy.segmentoClientId, isNull);
+
+      // The new column is writable/queryable.
+      await store2.upsert(_msg(
+        clientId: 'nuevo',
+        segmentoId: 0,
+        segmentoClientId: 'seg-x',
+      ));
+      final byParent = await store2.findBySegmentoClientId('seg-x');
+      expect(byParent.map((m) => m.clientId), contains('nuevo'));
     });
   });
 }

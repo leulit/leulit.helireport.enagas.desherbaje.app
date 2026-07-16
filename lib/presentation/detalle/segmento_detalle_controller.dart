@@ -598,31 +598,32 @@ class SegmentoDetalleController extends MyGetxController {
 
   // ──────────────────────────── Mensajes — fetch / send ────────────────────
 
+  /// Offline-first, idéntico a [_loadImagenes]: los mensajes de nube viajan
+  /// embebidos en `segmento.mensajes[]` (pull); los nuevos viven en el store
+  /// local. Merge por `clientId`, ordenado cronológicamente ascendente.
   Future<void> _loadMensajes() async {
-    final segId = segmento.id;
-    if (segId == null) return;
-    isLoadingMensajes.value = true;
-    final result = await _mensajeRepo.mensajesBySegmento(id: segId);
-    if (result.isSuccess) {
-      mensajes.assignAll(result.dataOrNull ?? const <MensajeSegmentoEntity>[]);
-    }
-    isLoadingMensajes.value = false;
+    final remote = segmento.mensajes;
+    final local =
+        await _mensajeRepo.getAllBySegmentoClientId(segmento.clientId);
+    final extras =
+        local.where((l) => !remote.any((r) => r.clientId == l.clientId));
+    final all = [...remote, ...extras]
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    mensajes.assignAll(all);
   }
 
   Future<void> sendMensaje() async {
     final text = textMensajeController.text.trim();
     if (text.isEmpty || isSendingMensaje.value) return;
 
-    final segId = segmento.id;
-    if (segId == null) return;
-
     final me = user.value;
     final myId = me?.id ?? 0;
 
     // Insert optimista al principio (la lista se pinta con `reverse: true` →
-    // index 0 == último cronológico). Limpiamos el input antes de la red.
+    // index 0 == último cronológico). Limpiamos el input antes de persistir.
     final optimistic = MensajeSegmentoEntity(
-      segmentoId: segId,
+      segmentoId: segmento.id ?? 0,
+      segmentoClientId: segmento.clientId,
       mensaje: text,
       enviadoPor: myId,
     );
@@ -632,13 +633,16 @@ class SegmentoDetalleController extends MyGetxController {
 
     isSendingMensaje.value = true;
     final result = await _mensajeRepo.add(
-      segmentoId: segId,
+      segmentoId: segmento.id ?? 0,
+      segmentoClientId: segmento.clientId,
       mensaje: text,
       enviadoPor: myId,
     );
     if (result.isSuccess) {
+      // Reemplaza el placeholder por la entidad realmente persistida (mismo
+      // clientId que en el store) para que un reload posterior deduplique bien.
       final saved = result.dataOrNull;
-      if (saved != null && saved.id != null) {
+      if (saved != null) {
         mensajes[0] = saved;
       }
     }

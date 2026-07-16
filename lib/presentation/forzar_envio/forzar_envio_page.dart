@@ -44,23 +44,6 @@ class ForzarEnvioPage extends GetView<ForzarEnvioController> {
           tooltip: 'Volver',
           onPressed: Get.back,
         ),
-        title: Obx(() => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Forzar envío',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.moduleGreenText,
-                  ),
-                ),
-                Text(
-                  '${controller.filtradas.length} segmentos',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            )),
         actions: [
           IconButton(
             icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),

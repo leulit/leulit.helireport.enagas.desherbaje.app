@@ -1,8 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
 import '../../core/app_log.dart';
 import '../../core/sync/contracts/sync_job.dart';
@@ -11,6 +14,9 @@ import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/video_segmento_entity.dart';
 import '../model/mensaje_entity.dart';
+import '../network/network_error.dart';
+import '../network/network_service.dart';
+import 'adapter_support.dart';
 import 'imagen_local_store.dart';
 import 'mensaje_local_store.dart';
 import 'segmento_local_store.dart';
@@ -48,6 +54,10 @@ enum PurgeStatus {
   /// Segment has no remote id (never accepted by the backend) → by definition
   /// not synced; skipped without touching anything.
   skippedNoRemoteId,
+
+  /// Everything was synced, but the `sync-complete` finalize call to the
+  /// backend failed → nothing was deleted; retried on the next send.
+  finalizeFailed,
 }
 
 /// Outcome of [PurgeSyncedSegmentoUseCase.purgeIfFullySynced].
@@ -104,6 +114,8 @@ class PurgeSyncedSegmentoUseCase {
   final MensajeLocalStore _mensajeStore;
   final OutboxQueue _outbox;
   final LocalFileDeleter _deleteFile;
+  final NetworkService _network;
+  final FlutterSecureStorage _storage;
 
   PurgeSyncedSegmentoUseCase({
     Database? db,
@@ -113,13 +125,17 @@ class PurgeSyncedSegmentoUseCase {
     MensajeLocalStore? mensajeStore,
     OutboxQueue? outbox,
     LocalFileDeleter? deleteFile,
+    NetworkService? network,
+    FlutterSecureStorage secureStorage = const FlutterSecureStorage(),
   })  : _db = db ?? AppDI.database,
         _segmentoStore = segmentoStore ?? DI.get<SegmentoLocalStore>(),
         _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
         _videoStore = videoStore ?? DI.get<VideoLocalStore>(),
         _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>(),
         _outbox = outbox ?? AppDI.outboxQueue,
-        _deleteFile = deleteFile ?? _defaultDeleteFile;
+        _deleteFile = deleteFile ?? _defaultDeleteFile,
+        _network = network ?? AppDI.networkService,
+        _storage = secureStorage;
 
   /// Reads the union of pending + rejected + syncing (non-delete) outbox jobs
   /// per entity type. Read FRESH for every segment, always AFTER enumerating
@@ -176,7 +192,10 @@ class PurgeSyncedSegmentoUseCase {
         await _imagenStore.findWhere('segmento_client_id', s.clientId);
     final vids =
         await _videoStore.findWhere('segmento_client_id', s.clientId);
-    final msgs = await _mensajeStore.findBySegmento(s.id!);
+    // Mensajes por clientId del segmento (no por id remoto): un mensaje creado
+    // con el segmento aún sin subir tiene segmento_id 0 y quedaría huérfano.
+    final msgs =
+        await _mensajeStore.findWhere('segmento_client_id', s.clientId);
 
     // Read the unsynced sets AFTER enumerating dependents so a job enqueued
     // between the two reads (row+job are atomic in OfflineRepository.create) is
@@ -185,6 +204,15 @@ class PurgeSyncedSegmentoUseCase {
     final u = await readUnsyncedSets();
     if (!isFullySynced(s, imgs, vids, msgs, u)) {
       return const PurgeOutcome(status: PurgeStatus.keptUnsynced);
+    }
+
+    // Envío finalizado: informa al backend de que TODO el contenido del
+    // segmento (datos + imágenes + vídeos + mensajes) está subido, ANTES de
+    // borrar local. Si falla, no se borra nada y se reintenta en el próximo
+    // envío. Idempotente por id: reintentar sobre un segmento ya finalizado
+    // devuelve 2xx.
+    if (!await _notifySyncComplete(s)) {
+      return const PurgeOutcome(status: PurgeStatus.finalizeFailed);
     }
 
     // Atomic cascade: any failure rolls the whole thing back — never a
@@ -244,6 +272,41 @@ class PurgeSyncedSegmentoUseCase {
       mensajes: msgs.length,
       filesDeleted: deleted,
     );
+  }
+
+  /// POSTs `sync-complete` for [s]. Returns true on a 2xx response, false on
+  /// any non-success status or network error (so the caller keeps the segment
+  /// for a later retry). Idempotent server-side by segment id.
+  Future<bool> _notifySyncComplete(SegmentoEntity s) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final usuario = prefs.getString('user_usuario') ?? '';
+      final userId = prefs.getInt('user_id') ?? 0;
+      final response = await _network.post(
+        ApiEndpoints.segmentoSyncComplete(s.id!),
+        body: {
+          'client_id': s.clientId,
+          'segmento_id': s.id,
+          'usuariologged': usuario,
+          'idusuariologged': userId,
+        },
+        headers: await bearerAuthHeader(_storage),
+      );
+      if (response.isSuccess) return true;
+      AppLog.w(
+        'PurgeSyncedSegmentoUseCase: sync-complete rechazado '
+        '(segmento ${s.id}, HTTP ${response.statusCode}) — no se purga.',
+      );
+      return false;
+    } on NetworkError catch (e, st) {
+      AppLog.w(
+        'PurgeSyncedSegmentoUseCase: sync-complete falló por red '
+        '(segmento ${s.id}) — no se purga.',
+        error: e,
+        stackTrace: st,
+      );
+      return false;
+    }
   }
 
   /// Batch variant. Each segment is evaluated with its own FRESH unsynced-set

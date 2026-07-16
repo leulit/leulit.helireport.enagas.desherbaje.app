@@ -78,7 +78,10 @@ class SyncEngine {
   /// Termination is guaranteed by a [Set<int>] of already-processed job ids:
   /// even if [OutboxQueue.markPendingAgain] puts a retryable job back to
   /// `pending`, it will not be re-fetched within the same drain call.
-  Future<DrainSummary> drain({String? entityType}) async {
+  Future<DrainSummary> drain({
+    String? entityType,
+    Set<String>? onlyClientIds,
+  }) async {
     if (_isDraining) return const DrainSummary();
     _isDraining = true;
 
@@ -98,6 +101,7 @@ class SyncEngine {
         final batch = await _outbox.nextPending(
           entityType: entityType,
           limit: 100,
+          onlyClientIds: onlyClientIds,
         );
 
         // Filter out ids already processed in this drain to prevent infinite

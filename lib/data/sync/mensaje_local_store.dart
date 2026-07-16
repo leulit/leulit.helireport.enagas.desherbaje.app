@@ -14,21 +14,22 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
   String get entityType => 'mensaje';
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
-    if (from == 0 && to == 1) {
+    if (from == 0) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_table (
-          client_id    TEXT PRIMARY KEY,
-          id           INTEGER,
-          segmento_id  INTEGER NOT NULL,
-          mensaje      TEXT    NOT NULL,
-          enviado_por  INTEGER,
-          created_at   TEXT    NOT NULL,
-          updated_at   TEXT    NOT NULL,
-          synced_at    TEXT
+          client_id          TEXT PRIMARY KEY,
+          id                 INTEGER,
+          segmento_id        INTEGER NOT NULL,
+          segmento_client_id TEXT,
+          mensaje            TEXT    NOT NULL,
+          enviado_por        INTEGER,
+          created_at         TEXT    NOT NULL,
+          updated_at         TEXT    NOT NULL,
+          synced_at          TEXT
         )
       ''');
       await db.execute(
@@ -36,8 +37,23 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
         'ON $_table(segmento_id)',
       );
       await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_seg_client '
+        'ON $_table(segmento_client_id)',
+      );
+      await db.execute(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
         'ON $_table(id) WHERE id IS NOT NULL',
+      );
+    }
+    // v1 → v2: link mensajes to their owning segmento by local clientId so
+    // local reads survive an unsynced parent (segmento_id == 0).
+    if (from >= 1 && from < 2) {
+      await db.execute(
+        'ALTER TABLE $_table ADD COLUMN segmento_client_id TEXT',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_seg_client '
+        'ON $_table(segmento_client_id)',
       );
     }
   }
@@ -121,15 +137,23 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
     );
   }
 
-  /// Returns local mensajes for a given segmento (used as a fallback when
-  /// the network call to fetch fresh data fails offline).
+  /// Returns local mensajes for a given segmento by its remote id (legacy).
   Future<List<MensajeSegmentoEntity>> findBySegmento(int segmentoId) =>
       findWhere('segmento_id', segmentoId);
+
+  /// Returns local mensajes for a given segmento by its stable local clientId.
+  /// Preferred over [findBySegmento]: works even when the parent has not
+  /// synced yet (`segmento_id == 0`).
+  Future<List<MensajeSegmentoEntity>> findBySegmentoClientId(
+    String segmentoClientId,
+  ) =>
+      findWhere('segmento_client_id', segmentoClientId);
 
   Map<String, Object?> _entityToRow(MensajeSegmentoEntity e) => {
         'client_id': e.clientId,
         'id': e.id,
         'segmento_id': e.segmentoId,
+        'segmento_client_id': e.segmentoClientId,
         'mensaje': e.mensaje,
         'enviado_por': e.enviadoPor,
         'created_at': e.createdAt.toIso8601String(),
@@ -141,6 +165,7 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
       clientId: row['client_id'] as String,
       id: row['id'] as int?,
       segmentoId: (row['segmento_id'] as int?) ?? 0,
+      segmentoClientId: row['segmento_client_id'] as String?,
       mensaje: (row['mensaje'] as String?) ?? '',
       enviadoPor: row['enviado_por'] as int?,
       createdAt: DateTime.tryParse((row['created_at'] as String?) ?? '') ??

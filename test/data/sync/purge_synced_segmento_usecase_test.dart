@@ -7,12 +7,17 @@
 //  4. atomic rollback when a mid-cascade delete throws;
 //  5. batch purge purges only the fully-synced segment;
 //  6. the pure isFullySynced predicate.
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:helireport_desherbaje/core/sync/contracts/sync_job.dart';
 import 'package:helireport_desherbaje/core/sync/outbox/outbox_queue.dart';
 import 'package:helireport_desherbaje/data/model/mensaje_entity.dart';
+import 'package:helireport_desherbaje/data/network/network_response.dart';
+import 'package:helireport_desherbaje/data/network/network_service.dart';
 import 'package:helireport_desherbaje/data/sync/imagen_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
@@ -21,6 +26,10 @@ import 'package:helireport_desherbaje/data/sync/video_local_store.dart';
 import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/video_segmento_entity.dart';
+
+class _MockNetwork extends Mock implements NetworkService {}
+
+class _MockSecureStorage extends Mock implements FlutterSecureStorage {}
 
 const _syncQueueDdl = '''
   CREATE TABLE sync_queue (
@@ -94,14 +103,18 @@ VideoSegmentoEntity _vid({
 MensajeSegmentoEntity _msg({
   required String clientId,
   required int segmentoId,
+  String? segmentoClientId,
 }) =>
     MensajeSegmentoEntity(
       clientId: clientId,
       segmentoId: segmentoId,
+      segmentoClientId: segmentoClientId,
       mensaje: 'm $clientId',
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Database db;
   late SegmentoLocalStore segStore;
   late ImagenLocalStore imgStore;
@@ -109,6 +122,8 @@ void main() {
   late MensajeLocalStore msgStore;
   late OutboxQueue outbox;
   late List<String> deletedPaths;
+  late _MockNetwork network;
+  late _MockSecureStorage storage;
 
   Future<void> seedJob(
     String entityType,
@@ -147,6 +162,8 @@ void main() {
         mensajeStore: mensajeStore ?? msgStore,
         outbox: outbox,
         deleteFile: (p) async => deletedPaths.add(p),
+        network: network,
+        secureStorage: storage,
       );
 
   setUp(() async {
@@ -162,10 +179,26 @@ void main() {
     await segStore.migrate(db, 0, 1);
     await imgStore.migrate(db, 0, 3);
     await vidStore.migrate(db, 0, 3);
-    await msgStore.migrate(db, 0, 1);
+    await msgStore.migrate(db, 0, msgStore.schemaVersion);
 
     outbox = OutboxQueue(db);
     deletedPaths = <String>[];
+
+    // Identidad del operario para el body de sync-complete.
+    SharedPreferences.setMockInitialValues(
+        {'user_usuario': 'operario', 'user_id': 45});
+
+    // sync-complete succeeds by default; no bearer token needed.
+    network = _MockNetwork();
+    storage = _MockSecureStorage();
+    when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
+    when(() => network.post(
+          any(),
+          body: any(named: 'body'),
+          headers: any(named: 'headers'),
+        )).thenAnswer(
+      (_) async => NetworkResponse<dynamic>(statusCode: 200, data: null),
+    );
   });
 
   tearDown(() async => db.close());
@@ -180,7 +213,8 @@ void main() {
           _img(clientId: 'img-2', segmentoClientId: 'seg-1', ruta: '/tmp/img2.jpg'));
       await vidStore.upsert(
           _vid(clientId: 'vid-1', segmentoClientId: 'seg-1', ruta: '/tmp/vid1.mp4'));
-      await msgStore.upsert(_msg(clientId: 'msg-1', segmentoId: 42));
+      await msgStore
+          .upsert(_msg(clientId: 'msg-1', segmentoId: 42, segmentoClientId: 'seg-1'));
 
       await seedJob('segmento', 'seg-1');
       await seedJob('imagen', 'img-1');
@@ -210,6 +244,54 @@ void main() {
       expect(deletedPaths.length, 3);
     });
 
+    test('fires sync-complete (POST /sync-complete) before purging', () async {
+      final seg = _seg(clientId: 'seg-1', id: 42);
+      await segStore.upsert(seg);
+      await seedJob('segmento', 'seg-1');
+
+      final outcome = await buildUseCase().purgeIfFullySynced(seg);
+
+      expect(outcome.status, PurgeStatus.purged);
+      final captured = verify(() => network.post(
+            captureAny(),
+            body: captureAny(named: 'body'),
+            headers: any(named: 'headers'),
+          )).captured;
+      expect(captured[0] as String, contains('/segmentos/42/sync-complete'));
+      expect(captured[1], {
+        'client_id': 'seg-1',
+        'segmento_id': 42,
+        'usuariologged': 'operario',
+        'idusuariologged': 45,
+      });
+    });
+
+    test('sync-complete failure → finalizeFailed, nothing deleted', () async {
+      when(() => network.post(
+            any(),
+            body: any(named: 'body'),
+            headers: any(named: 'headers'),
+          )).thenAnswer(
+        (_) async => NetworkResponse<dynamic>(statusCode: 500, data: null),
+      );
+
+      final seg = _seg(clientId: 'seg-1', id: 42);
+      await segStore.upsert(seg);
+      await imgStore.upsert(
+          _img(clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/img1.jpg'));
+      await seedJob('segmento', 'seg-1');
+      await seedJob('imagen', 'img-1');
+
+      final outcome = await buildUseCase().purgeIfFullySynced(seg);
+
+      expect(outcome.status, PurgeStatus.finalizeFailed);
+      // Nothing deleted; kept for the next send.
+      expect(await segStore.findByClientId('seg-1'), isNotNull);
+      expect(await imgStore.findByClientId('img-1'), isNotNull);
+      expect(await queueRowCount(), 2);
+      expect(deletedPaths, isEmpty);
+    });
+
     // (2) A segment with ANY unsynced dependent must be left COMPLETELY intact.
     for (final offender in const [
       ('imagen img-1 pending', 'imagen', 'img-1', SyncStatus.pending),
@@ -226,7 +308,8 @@ void main() {
             _img(clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/img1.jpg'));
         await vidStore.upsert(
             _vid(clientId: 'vid-1', segmentoClientId: 'seg-1', ruta: '/tmp/vid1.mp4'));
-        await msgStore.upsert(_msg(clientId: 'msg-1', segmentoId: 42));
+        await msgStore
+          .upsert(_msg(clientId: 'msg-1', segmentoId: 42, segmentoClientId: 'seg-1'));
 
         // Every entity gets a job; the offender's is in a non-synced state.
         await seedJob('segmento', 'seg-1',
@@ -273,7 +356,8 @@ void main() {
           _img(clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/img1.jpg'));
       await vidStore.upsert(
           _vid(clientId: 'vid-1', segmentoClientId: 'seg-1', ruta: '/tmp/vid1.mp4'));
-      await msgStore.upsert(_msg(clientId: 'msg-1', segmentoId: 42));
+      await msgStore
+          .upsert(_msg(clientId: 'msg-1', segmentoId: 42, segmentoClientId: 'seg-1'));
 
       await seedJob('segmento', 'seg-1');
       await seedJob('imagen', 'img-1');
@@ -354,6 +438,8 @@ void main() {
         videoStore: vidStore,
         mensajeStore: msgStore,
         outbox: outbox,
+        network: network,
+        secureStorage: storage,
         deleteFile: (p) async {
           if (injected) return;
           injected = true;

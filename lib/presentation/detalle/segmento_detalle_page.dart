@@ -52,31 +52,6 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 2, color: const Color(0xFFA5D6A7)),
       ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            controller.segmento.id != null
-                ? 'Segmento #${controller.segmento.id}'
-                : 'Segmento',
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: AppColors.moduleGreenText,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          // Reactivo: cuando `user.value` se rellena tras `getCurrentUser()`,
-          // este Text se reconstruye automáticamente con el nombre legible.
-          Obx(() => Text(
-                controller.ctName,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )),
-        ],
-      ),
       actions: [
         IconButton(
           icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
@@ -513,18 +488,6 @@ class _MensajesTab extends StatelessWidget {
     return Obx(() {
       if (controller.isLoadingMensajes.value && controller.mensajes.isEmpty) {
         return const Center(child: CircularProgressIndicator());
-      }
-      if (controller.segmento.id == null) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Guarda el segmento para ver mensajes',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-          ),
-        );
       }
       final currentUserId = controller.user.value?.id ?? 0;
       return Column(

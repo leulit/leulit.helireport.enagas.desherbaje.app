@@ -23,24 +23,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
         leading: const Padding(
           padding: EdgeInsets.all(8.0),
           child: Icon(Icons.eco, color: AppColors.moduleGreen),
-        ),
-        title: Obx(() => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Segmentos',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.moduleGreenText,
-                  ),
-                ),
-                Text(
-                  '${controller.filtradas.length} segmentos',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            )),
+        ),        
         actions: [
           IconButton(
             icon: const Icon(Icons.map_outlined, color: AppColors.moduleGreen),

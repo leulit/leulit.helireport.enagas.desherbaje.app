@@ -1,6 +1,7 @@
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
 
 import '../../../domain/entities/segmento_entity.dart';
 import 'lines_cut_engine.dart';
@@ -8,6 +9,12 @@ import 'lines_cut_math.dart';
 import 'polyline_segment.dart';
 
 typedef VisiblePolylinesProvider = List<Polyline> Function();
+
+class LinesCutTypedActions {
+  static const String prefijo = 'lines_cut_';
+  static const TypedAction startCutAction = TypedAction('${prefijo}start_cut');
+  static const TypedAction endCutAction = TypedAction('${prefijo}end_cut');
+}
 
 /// Zoom mínimo requerido para que la feature se renderice y acepte taps.
 const double kLinesCutMinZoom = 14.0;

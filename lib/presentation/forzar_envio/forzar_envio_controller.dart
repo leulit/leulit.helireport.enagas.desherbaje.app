@@ -1,12 +1,16 @@
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
 import '../../core/app_log.dart';
 import '../../core/result/data_result.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/engine/sync_engine.dart';
 import '../../data/repository/auth_repository_impl.dart';
+import '../../data/sync/imagen_local_store.dart';
+import '../../data/sync/mensaje_local_store.dart';
 import '../../data/sync/purge_synced_segmento_usecase.dart';
+import '../../data/sync/video_local_store.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repository/auth_repository.dart';
@@ -23,14 +27,23 @@ class ForzarEnvioController extends MyGetxController {
     this._connectivity, {
     AuthRepository? authRepository,
     PurgeSyncedSegmentoUseCase? purgeUseCase,
+    ImagenLocalStore? imagenStore,
+    VideoLocalStore? videoStore,
+    MensajeLocalStore? mensajeStore,
   })  : _authRepo = authRepository ?? AuthRepositoryImpl(),
-        _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase();
+        _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase(),
+        _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
+        _videoStore = videoStore ?? DI.get<VideoLocalStore>(),
+        _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>();
 
   final GetSegmentosUseCase _useCase;
   final SyncEngine _engine;
   final ConnectivityService _connectivity;
   final AuthRepository _authRepo;
   final PurgeSyncedSegmentoUseCase _purge;
+  final ImagenLocalStore _imagenStore;
+  final VideoLocalStore _videoStore;
+  final MensajeLocalStore _mensajeStore;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -129,10 +142,54 @@ class ForzarEnvioController extends MyGetxController {
     }));
   }
 
-  /// Fuerza el envío a la nube de las entidades vinculadas a [segmento]:
-  /// segmento → imagen → mensaje (en ese orden). Cada tipo se drena por
-  /// separado; si el primer tipo provoca un authExpired, se corta el bucle
-  /// y el [AuthExpirationHandler] gestiona el logout.
+  /// Suma dos [DrainSummary].
+  DrainSummary _accumulate(DrainSummary a, DrainSummary b) => DrainSummary(
+        succeeded: a.succeeded + b.succeeded,
+        retryable: a.retryable + b.retryable,
+        rejected: a.rejected + b.rejected,
+        conflicts: a.conflicts + b.conflicts,
+        authExpired: a.authExpired || b.authExpired,
+      );
+
+  /// Envía a la nube todo el contenido de un segmento y, si todo queda
+  /// sincronizado, dispara `sync-complete` + purga local (dentro de
+  /// [PurgeSyncedSegmentoUseCase.purgeIfFullySynced]). Orden: vídeos → fotos →
+  /// mensajes → datos del segmento; solo los jobs de ESE segmento. Un fallo
+  /// deja el segmento pendiente sin tocar a los demás.
+  Future<DrainSummary> _sendOne(SegmentoEntity s) async {
+    final videoIds = (await _videoStore.findWhere('segmento_client_id', s.clientId))
+        .map((e) => e.clientId)
+        .toSet();
+    final imagenIds = (await _imagenStore.findWhere('segmento_client_id', s.clientId))
+        .map((e) => e.clientId)
+        .toSet();
+    final mensajeIds = (await _mensajeStore.findWhere('segmento_client_id', s.clientId))
+        .map((e) => e.clientId)
+        .toSet();
+
+    final scopes = <(String, Set<String>)>[
+      ('video', videoIds),
+      ('imagen', imagenIds),
+      ('mensaje', mensajeIds),
+      ('segmento', {s.clientId}),
+    ];
+
+    var combined = const DrainSummary();
+    for (final (entityType, ids) in scopes) {
+      if (ids.isEmpty) continue; // nada de este tipo para este segmento
+      AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "$entityType"...');
+      final summary =
+          await _engine.drain(entityType: entityType, onlyClientIds: ids);
+      combined = _accumulate(combined, summary);
+      if (summary.authExpired) return combined; // no purgar tras auth expirado
+    }
+
+    // Todo OK del segmento → sync-complete + borrado; algo pendiente → se queda.
+    await _purge.purgeIfFullySynced(s);
+    return combined;
+  }
+
+  /// Envío de UN segmento (botón "enviar").
   Future<void> enviarCloud(SegmentoEntity segmento) async {
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
@@ -140,8 +197,6 @@ class ForzarEnvioController extends MyGetxController {
       return;
     }
 
-    // Usa el id remoto si existe; si no, la UI no puede distinguir qué segmento
-    // está enviando, pero el drain drena por tipo (no por id), así que es correcto.
     final displayId = segmento.id ?? -1;
     if (enviandoIds.contains(displayId)) return; // guard re-entrancia
     enviandoIds.add(displayId);
@@ -149,38 +204,13 @@ class ForzarEnvioController extends MyGetxController {
     lastDrainSummary.value = null;
 
     try {
-      var combined = const DrainSummary();
-
-      for (final entityType in const ['segmento', 'imagen', 'video', 'mensaje']) {
-        AppLog.i('ForzarEnvioController: drenando tipo "$entityType"...');
-        final summary = await _engine.drain(entityType: entityType);
-        combined = DrainSummary(
-          succeeded: combined.succeeded + summary.succeeded,
-          retryable: combined.retryable + summary.retryable,
-          rejected: combined.rejected + summary.rejected,
-          conflicts: combined.conflicts + summary.conflicts,
-          authExpired: combined.authExpired || summary.authExpired,
-        );
-        if (summary.authExpired) {
-          // AuthExpirationHandler ya gestiona logout; solo cortamos el bucle.
-          AppLog.w('ForzarEnvioController: auth expirado en "$entityType", abortando drain.');
-          break;
-        }
-      }
-
-      lastDrainSummary.value = combined;
-      if (combined.rejected > 0 || combined.conflicts > 0) {
+      final summary = await _sendOne(segmento);
+      lastDrainSummary.value = summary;
+      if (summary.rejected > 0 || summary.conflicts > 0) {
         AppLog.w(
           'ForzarEnvioController.enviarCloud: '
-          'rechazados=${combined.rejected} conflictos=${combined.conflicts}',
+          'rechazados=${summary.rejected} conflictos=${summary.conflicts}',
         );
-      }
-
-      // Tras un drenado limpio (sin caducidad de sesión), borra el segmento y
-      // sus dependientes SOLO si TODO quedó sincronizado. Si algo sigue
-      // pendiente, no borra nada. Nunca purgar tras un authExpired.
-      if (!combined.authExpired) {
-        await _purge.purgeIfFullySynced(segmento);
       }
     } catch (e, st) {
       lastError.value = e.toString();
@@ -191,9 +221,10 @@ class ForzarEnvioController extends MyGetxController {
     }
   }
 
-  /// Drena el outbox de todas las entidades con adapter registrado:
-  /// segmento → imagen → mensaje → position. Si el primer tipo provoca
-  /// authExpired, se corta el bucle.
+  /// Envío de TODOS los segmentos pendientes, uno a uno (igual que pulsar
+  /// "enviar" en cada uno). Un segmento pendiente = tiene algún dato/imagen/
+  /// vídeo/mensaje sin subir. Nunca aborta por un fallo de un segmento; sí por
+  /// sesión caducada. El GPS (batches) es global → se drena una vez al final.
   Future<void> enviarAllCloud() async {
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
@@ -206,23 +237,36 @@ class ForzarEnvioController extends MyGetxController {
     lastDrainSummary.value = null;
 
     try {
-      var combined = const DrainSummary();
+      // Segmentos pendientes: los que NO están totalmente sincronizados.
+      final u = await _purge.readUnsyncedSets();
+      final pending = <SegmentoEntity>[];
+      for (final s in List.of(segmentos)) {
+        final imgs =
+            await _imagenStore.findWhere('segmento_client_id', s.clientId);
+        final vids =
+            await _videoStore.findWhere('segmento_client_id', s.clientId);
+        final msgs =
+            await _mensajeStore.findWhere('segmento_client_id', s.clientId);
+        if (!PurgeSyncedSegmentoUseCase.isFullySynced(s, imgs, vids, msgs, u)) {
+          pending.add(s);
+        }
+      }
 
-      // Orden: segmento primero (FK origen), luego sus entidades dependientes.
-      for (final entityType in const ['segmento', 'imagen', 'video', 'mensaje', 'position']) {
-        AppLog.i('ForzarEnvioController: drenando tipo "$entityType"...');
-        final summary = await _engine.drain(entityType: entityType);
-        combined = DrainSummary(
-          succeeded: combined.succeeded + summary.succeeded,
-          retryable: combined.retryable + summary.retryable,
-          rejected: combined.rejected + summary.rejected,
-          conflicts: combined.conflicts + summary.conflicts,
-          authExpired: combined.authExpired || summary.authExpired,
-        );
+      var combined = const DrainSummary();
+      for (final s in pending) {
+        final summary = await _sendOne(s);
+        combined = _accumulate(combined, summary);
         if (summary.authExpired) {
-          AppLog.w('ForzarEnvioController: auth expirado en "$entityType", abortando drain.');
+          AppLog.w('ForzarEnvioController.enviarAllCloud: '
+              'auth expirado, abortando.');
           break;
         }
+      }
+
+      // GPS es global (no per-segmento): drenar una vez al final.
+      if (!combined.authExpired) {
+        combined =
+            _accumulate(combined, await _engine.drain(entityType: 'position'));
       }
 
       lastDrainSummary.value = combined;
@@ -231,12 +275,6 @@ class ForzarEnvioController extends MyGetxController {
           'ForzarEnvioController.enviarAllCloud: '
           'rechazados=${combined.rejected} conflictos=${combined.conflicts}',
         );
-      }
-
-      // Purga en lote: instantánea de la lista antes de mutar; una sola lectura
-      // de sets pendientes dentro. Nunca purgar tras un authExpired.
-      if (!combined.authExpired) {
-        await _purge.purgeAllFullySynced(List.of(segmentos));
       }
     } catch (e, st) {
       lastError.value = e.toString();

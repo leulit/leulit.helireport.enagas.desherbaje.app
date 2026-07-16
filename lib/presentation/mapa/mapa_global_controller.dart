@@ -12,8 +12,8 @@ import '../../core/app_di.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
-import '../../core/services/pks_service.dart';
 import '../../core/services/hitos_service.dart';
+import '../../core/services/pks_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
@@ -21,6 +21,8 @@ import 'layers/posiciones_fijas_map_controller.dart';
 import 'layers/segmentos_map_controller.dart';
 import 'lines_cut/lines_cut_controller.dart';
 import 'lines_cut/lines_cut_dialog.dart';
+
+
 
 class MapaGlobalController extends GetxController {
   final mapController = MapController();
@@ -335,6 +337,8 @@ class MapaGlobalController extends GetxController {
     linesCut.clearExtracted();
     linesCut.canCut.value = false;
     linesCut.cutStateOn.value = false;
+
+    LinesCutTypedActions.endCutAction.dispatch();
   }
 
   // ─────────────────── Helpers ──────────────────────────────────────────────

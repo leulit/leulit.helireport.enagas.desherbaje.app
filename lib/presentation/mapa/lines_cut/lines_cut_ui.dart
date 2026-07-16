@@ -236,27 +236,30 @@ class LinesCutModeButton extends StatelessWidget {
 
       final List<Color> colors;
       final IconData icon;
-      final String label;
       final VoidCallback onTap;
 
       if (!active) {
         colors = [Colors.green.shade400, Colors.green.shade700];
         icon = Icons.content_cut;
-        label = 'Líneas de corte';
         onTap = () {
           controller.toggleFeature();
           controller.canCut.value = true;
+          LinesCutTypedActions.startCutAction.dispatch();
         };
       } else if (ready) {
         colors = [Colors.blue.shade400, Colors.blue.shade700];
         icon = Icons.check;
-        label = 'Aplicar corte';
-        onTap = onApplyCut;
+        onTap = () {
+          onApplyCut();          
+        };
       } else {
         colors = [Colors.purple.shade400, Colors.purple.shade700];
         icon = Icons.close;
-        label = 'Cancelar';
-        onTap = controller.toggleFeature;
+        onTap = () {
+          controller.toggleFeature();
+          //controller.canCut.value = false;
+          LinesCutTypedActions.endCutAction.dispatch();
+        };
       }
 
       return Material(
@@ -282,7 +285,7 @@ class LinesCutModeButton extends StatelessWidget {
                 Icon(icon, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  label,
+                  "",
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,

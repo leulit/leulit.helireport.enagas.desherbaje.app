@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
@@ -34,9 +35,15 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
     }
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final usuario = prefs.getString('user_usuario') ?? '';
+      final userId = prefs.getInt('user_id') ?? 0;
+
       final body = <String, dynamic>{
         'client_id': entity.clientId,
         'segmento_id': entity.segmentoId,
+        'usuariologged': usuario,
+        'idusuariologged': userId,
         'mensaje': entity.mensaje,
         'enviado_por': entity.enviadoPor,
       };

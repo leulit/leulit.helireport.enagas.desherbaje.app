@@ -12,7 +12,6 @@ import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_in
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:helireport_desherbaje/core/result/data_result.dart';
 import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/services/gasoductos_service.dart';
 import 'package:helireport_desherbaje/core/sync/sync.dart';
@@ -23,7 +22,6 @@ import 'package:helireport_desherbaje/data/repository/imagen_repository_impl.dar
 import 'package:helireport_desherbaje/data/repository/mensaje_segmento_repository.dart';
 import 'package:helireport_desherbaje/data/repository/segmento_repository_impl.dart';
 import 'package:helireport_desherbaje/data/repository/video_repository_impl.dart';
-import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/segmento_local_store.dart';
 import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
@@ -49,8 +47,6 @@ class _MockOfflineMensaje extends Mock
 
 class _MockSegmentoLocalStore extends Mock implements SegmentoLocalStore {}
 
-class _MockMensajeLocalStore extends Mock implements MensajeLocalStore {}
-
 class _MockSyncEngine extends Mock implements SyncEngine {}
 
 class _MockConnectivity extends Mock implements ConnectivityService {}
@@ -70,20 +66,16 @@ class _StubAuthRepo extends AuthRepositoryImpl {
 /// NetworkService stub — not called in these tests (Dio init is harmless).
 class _StubNetworkService extends NetworkService {}
 
-/// MensajeSegmentoRepository stub — all 3 dependencies injected to avoid
-/// Get.find calls; mensajesBySegmento returns empty list.
+/// MensajeSegmentoRepository stub — offline-only; local reads return empty.
 class _StubMensajeRepo extends MensajeSegmentoRepository {
-  _StubMensajeRepo({
-    required NetworkService network,
-    required OfflineRepository<MensajeSegmentoEntity> offline,
-    required MensajeLocalStore localStore,
-  }) : super(network: network, offline: offline, localStore: localStore);
+  _StubMensajeRepo({required OfflineRepository<MensajeSegmentoEntity> offline})
+      : super(offline: offline);
 
   @override
-  Future<DataResult<List<MensajeSegmentoEntity>>> mensajesBySegmento({
-    required int id,
-  }) async =>
-      DataResult.success(const []);
+  Future<List<MensajeSegmentoEntity>> getAllBySegmentoClientId(
+    String segmentoClientId,
+  ) async =>
+      const [];
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +175,6 @@ void main() {
   late _MockOfflineVideo mockOfflineVideo;
   late _MockOfflineMensaje mockOfflineMensaje;
   late _MockSegmentoLocalStore mockSegmentoStore;
-  late _MockMensajeLocalStore mockMensajeStore;
   late _MockSyncEngine mockEngine;
   late _MockConnectivity mockConnectivity;
 
@@ -230,7 +221,6 @@ void main() {
     mockOfflineVideo = _MockOfflineVideo();
     mockOfflineMensaje = _MockOfflineMensaje();
     mockSegmentoStore = _MockSegmentoLocalStore();
-    mockMensajeStore = _MockMensajeLocalStore();
     mockEngine = _MockSyncEngine();
     mockConnectivity = _MockConnectivity();
 
@@ -265,11 +255,7 @@ void main() {
       connectivity: mockConnectivity,
     );
 
-    mensajeRepo = _StubMensajeRepo(
-      network: _StubNetworkService(),
-      offline: mockOfflineMensaje,
-      localStore: mockMensajeStore,
-    );
+    mensajeRepo = _StubMensajeRepo(offline: mockOfflineMensaje);
 
     // Register global services in DI — resolved via AppDI getters in constructors.
     DI.registerSingleton<NetworkService>(_StubNetworkService());

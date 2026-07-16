@@ -41,9 +41,15 @@ class ApiEndpoints {
   static String segmentoUpd(int id) => '$apiBaseUrl/segmentos/update/$id';
   static String get segmentoAdd => '$apiBaseUrl/segmentos/create';
   static String get segmentosByEstado => '$apiBaseUrl/segmentos/byestado';
-  static String mensajesBySegmento(int id) => '$apiBaseUrl/segmentos/mensajes/$id';
   static String mensajeAdd(int segmentoId) => '$apiBaseUrl/segmentos/mensajes/$segmentoId';
   static String deleteSegmento(int id) => '$apiBaseUrl/segmentos/delete/$id';
+
+  /// Marca un segmento como "envío finalizado": el cliente ha subido con éxito
+  /// todo su contenido (datos + imágenes + vídeos + mensajes). Idempotente por
+  /// `id`: una segunda llamada sobre un segmento ya finalizado devuelve 2xx.
+  /// Body JSON: `{ client_id }`.
+  static String segmentoSyncComplete(int id) =>
+      '$apiBaseUrl/segmentos/$id/sync-complete';
 
   // ──────────────────────────── CTs ────────────────────────────
 

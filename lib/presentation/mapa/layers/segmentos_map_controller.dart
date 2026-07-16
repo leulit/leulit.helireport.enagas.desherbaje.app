@@ -5,9 +5,11 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_router.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/my_getx_controller.dart';
 import '../../../data/repository/segmento_repository_impl.dart';
 import '../../../domain/entities/segmento_entity.dart';
 import '../../../domain/usecases/get_segmentos_usecase.dart';
+import '../lines_cut/lines_cut_controller.dart';
 
 class SegmentoMapInfo {
   final SegmentoEntity segmento;
@@ -23,13 +25,17 @@ class SegmentoMapInfo {
   });
 }
 
-class SegmentosMapController extends GetxController {
+class SegmentosMapController extends MyGetxController {
   final _segmentosUseCase = GetSegmentosUseCase(SegmentoRepositoryImpl());
 
   final segmentosHitNotifier = LayerHitNotifier<SegmentoEntity>(null);
   final segmentos = <SegmentoMapInfo>[].obs;
   final isLoading = false.obs;
   final error = Rx<String?>(null);
+
+  /// Visibilidad de la barra de filtros. Se oculta al entrar en modo
+  /// corte de líneas (reactividad con primitiva Flutter, no `.obs`).
+  final filtrosVisible = ValueNotifier<bool>(true);
 
   final rxEstado = Rx<EstadoActividad?>(null);
   final rxTipo = Rx<TipoActividad?>(null);
@@ -46,6 +52,16 @@ class SegmentosMapController extends GetxController {
       if (tipo != null && info.segmento.tipoActividad != tipo) return false;
       return true;
     }).toList();
+  }
+
+  @override
+  void myOnInit() {
+    onTypedAction(LinesCutTypedActions.startCutAction, (action) {
+      filtrosVisible.value = false;
+    });
+    onTypedAction(LinesCutTypedActions.endCutAction, (action) {
+      filtrosVisible.value = true;
+    });
   }
 
   Future<void> load() async {
@@ -97,6 +113,7 @@ class SegmentosMapController extends GetxController {
   @override
   void onClose() {
     segmentosHitNotifier.dispose();
+    filtrosVisible.dispose();
     super.onClose();
   }
 }

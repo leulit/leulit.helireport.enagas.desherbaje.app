@@ -6,8 +6,14 @@ import 'package:mocktail/mocktail.dart';
 import 'package:helireport_desherbaje/core/result/data_result.dart';
 import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/sync/engine/sync_engine.dart';
+import 'package:helireport_desherbaje/data/model/mensaje_entity.dart';
+import 'package:helireport_desherbaje/data/sync/imagen_local_store.dart';
+import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
+import 'package:helireport_desherbaje/data/sync/video_local_store.dart';
+import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
+import 'package:helireport_desherbaje/domain/entities/video_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/repository/auth_repository.dart';
 import 'package:helireport_desherbaje/domain/usecases/get_segmentos_usecase.dart';
 import 'package:helireport_desherbaje/presentation/forzar_envio/forzar_envio_controller.dart';
@@ -24,15 +30,48 @@ class MockAuthRepository extends Mock implements AuthRepository {}
 
 class MockPurgeUseCase extends Mock implements PurgeSyncedSegmentoUseCase {}
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
+class MockImagenLocalStore extends Mock implements ImagenLocalStore {}
 
-SegmentoEntity _fakeSegmento({int? id}) {
-  final s = SegmentoEntity(id, 1, TipoInstalacion.lineal, []);
+class MockVideoLocalStore extends Mock implements VideoLocalStore {}
+
+class MockMensajeLocalStore extends Mock implements MensajeLocalStore {}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+SegmentoEntity _seg({int? id, String? clientId}) {
+  final s =
+      SegmentoEntity(id, 1, TipoInstalacion.lineal, [], clientId: clientId);
   s.estado = EstadoActividad.finalizada;
   s.tipoActividad = TipoActividad.desherbajeSelectivo;
   s.descripcion = 'Segmento test';
   return s;
 }
+
+ImagenSegmentoEntity _img(String clientId) => ImagenSegmentoEntity(
+      actividadId: 0,
+      segmentoId: 0,
+      tipoFoto: TipoFoto.antes,
+      filename: 'i',
+      ruta: '',
+      capturadaAt: DateTime.utc(2025, 1, 1),
+      clientId: clientId,
+    );
+
+VideoSegmentoEntity _vid(String clientId) => VideoSegmentoEntity(
+      actividadId: 0,
+      segmentoId: 0,
+      tipoVideo: TipoVideo.antes,
+      filename: 'v',
+      ruta: '',
+      capturadaAt: DateTime.utc(2025, 1, 1),
+      clientId: clientId,
+    );
+
+MensajeSegmentoEntity _msg(String clientId) =>
+    MensajeSegmentoEntity(segmentoId: 0, mensaje: 'm', clientId: clientId);
+
+const _noneUnsynced =
+    UnsyncedSets(segmento: {}, imagen: {}, video: {}, mensaje: {});
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +81,9 @@ void main() {
   late MockConnectivityService mockConnectivity;
   late MockAuthRepository mockAuthRepo;
   late MockPurgeUseCase mockPurge;
+  late MockImagenLocalStore mockImagenStore;
+  late MockVideoLocalStore mockVideoStore;
+  late MockMensajeLocalStore mockMensajeStore;
   late ForzarEnvioController controller;
 
   setUpAll(() {
@@ -57,25 +99,34 @@ void main() {
     mockConnectivity = MockConnectivityService();
     mockAuthRepo = MockAuthRepository();
     mockPurge = MockPurgeUseCase();
+    mockImagenStore = MockImagenLocalStore();
+    mockVideoStore = MockVideoLocalStore();
+    mockMensajeStore = MockMensajeLocalStore();
 
-    // Stub por defecto: lista vacía para no bloquear onInit.
     when(() => mockUseCase.execute())
         .thenAnswer((_) async => const DataSuccess([]));
 
-    // Stub por defecto: engine ok vacío.
-    when(() => mockEngine.drain(entityType: any(named: 'entityType')))
-        .thenAnswer((_) async => const DrainSummary());
+    // Scoped drain matcher: covers both per-type-scoped calls (onlyClientIds
+    // set) and the global position drain (onlyClientIds null).
+    when(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds'),
+        )).thenAnswer((_) async => const DrainSummary());
 
-    // Stub por defecto: sin usuario autenticado.
-    when(() => mockAuthRepo.getCurrentUser())
-        .thenAnswer((_) async => null);
+    when(() => mockAuthRepo.getCurrentUser()).thenAnswer((_) async => null);
 
-    // Stub por defecto: purga no borra nada (no-op inyectado).
-    when(() => mockPurge.purgeIfFullySynced(any()))
-        .thenAnswer(
-            (_) async => const PurgeOutcome(status: PurgeStatus.keptUnsynced));
-    when(() => mockPurge.purgeAllFullySynced(any()))
-        .thenAnswer((_) async => const <PurgeOutcome>[]);
+    // Child stores empty by default → only the 'segmento' scope drains.
+    when(() => mockImagenStore.findWhere(any(), any()))
+        .thenAnswer((_) async => []);
+    when(() => mockVideoStore.findWhere(any(), any()))
+        .thenAnswer((_) async => []);
+    when(() => mockMensajeStore.findWhere(any(), any()))
+        .thenAnswer((_) async => []);
+
+    when(() => mockPurge.purgeIfFullySynced(any())).thenAnswer(
+        (_) async => const PurgeOutcome(status: PurgeStatus.keptUnsynced));
+    when(() => mockPurge.readUnsyncedSets())
+        .thenAnswer((_) async => _noneUnsynced);
 
     controller = ForzarEnvioController(
       mockUseCase,
@@ -83,121 +134,147 @@ void main() {
       mockConnectivity,
       authRepository: mockAuthRepo,
       purgeUseCase: mockPurge,
+      imagenStore: mockImagenStore,
+      videoStore: mockVideoStore,
+      mensajeStore: mockMensajeStore,
     );
     Get.put(controller);
   });
 
-  tearDown(() {
-    Get.reset();
-  });
+  tearDown(Get.reset);
 
-  // ─── (a) enviarCloud con red → drena segmento, imagen, mensaje ──────────
-
-  group('enviarCloud', () {
-    test('(a) con red invoca drain para segmento, imagen y mensaje en orden',
+  group('enviarCloud (un segmento)', () {
+    test('(a) drena SOLO los tipos de ese segmento en orden vídeo→foto→mensaje→segmento',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      when(() => mockImagenStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_img('img-1')]);
+      when(() => mockMensajeStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_msg('msg-1')]);
 
-      final segmento = _fakeSegmento(id: 42);
-      await controller.enviarCloud(segmento);
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
       verifyInOrder([
-        () => mockEngine.drain(entityType: 'segmento'),
-        () => mockEngine.drain(entityType: 'imagen'),
-        () => mockEngine.drain(entityType: 'mensaje'),
+        () => mockEngine.drain(
+            entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')),
+        () => mockEngine.drain(
+            entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')),
+        () => mockEngine.drain(
+            entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')),
+        () => mockEngine.drain(
+            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
       ]);
     });
 
-    // ─── (b) sin red → NO invoca drain, pone lastError ────────────────────
+    test('(a2) tipos sin jobs de ese segmento no se drenan', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      // Child stores empty (default) → solo 'segmento' se drena.
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verify(() => mockEngine.drain(
+          entityType: 'segmento',
+          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+      verifyNever(() => mockEngine.drain(
+          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')));
+    });
 
     test('(b) sin red no invoca drain y pone lastError', () async {
       when(() => mockConnectivity.isConnected).thenReturn(false);
 
-      await controller.enviarCloud(_fakeSegmento(id: 1));
+      await controller.enviarCloud(_seg(id: 1, clientId: 'seg-1'));
 
-      verifyNever(() => mockEngine.drain(entityType: any(named: 'entityType')));
+      verifyNever(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds')));
       expect(controller.lastError.value, isNotEmpty);
     });
 
-    // ─── (d) DrainSummary con rechazados/conflictos se refleja ────────────
-
-    test('(d) summary con rechazados y conflictos se expone en lastDrainSummary',
-        () async {
+    test('(d) rechazados/conflictos se exponen en lastDrainSummary', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds')))
+          .thenAnswer((_) async => const DrainSummary(rejected: 1, conflicts: 2));
 
-      // segmento → rejected:1, imagen/mensaje → ok
-      when(() => mockEngine.drain(entityType: 'segmento'))
-          .thenAnswer((_) async => const DrainSummary(rejected: 1));
-      when(() => mockEngine.drain(entityType: 'imagen'))
-          .thenAnswer((_) async => const DrainSummary(conflicts: 2));
-      when(() => mockEngine.drain(entityType: 'mensaje'))
-          .thenAnswer((_) async => const DrainSummary());
-
-      await controller.enviarCloud(_fakeSegmento(id: 10));
+      await controller.enviarCloud(_seg(id: 10, clientId: 'seg-1'));
 
       expect(controller.lastDrainSummary.value?.rejected, 1);
       expect(controller.lastDrainSummary.value?.conflicts, 2);
     });
 
-    // ─── (e) authExpired en primer drain → NO sigue con los siguientes ────
-
-    test('(e) authExpired en segmento corta el bucle y no drena imagen ni mensaje',
+    test('(e) authExpired corta el envío del segmento (no drena tipos posteriores)',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-
-      when(() => mockEngine.drain(entityType: 'segmento'))
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      when(() => mockImagenStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_img('img-1')]);
+      when(() => mockEngine.drain(
+              entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')))
           .thenAnswer((_) async => const DrainSummary(authExpired: true));
 
-      await controller.enviarCloud(_fakeSegmento(id: 5));
+      await controller.enviarCloud(_seg(id: 5, clientId: 'seg-1'));
 
-      // El primer drain se llama...
-      verify(() => mockEngine.drain(entityType: 'segmento')).called(1);
-      // ...pero imagen y mensaje NO se llaman.
-      verifyNever(() => mockEngine.drain(entityType: 'imagen'));
-      verifyNever(() => mockEngine.drain(entityType: 'mensaje'));
-
-      expect(controller.lastDrainSummary.value?.authExpired, isTrue);
+      verify(() => mockEngine.drain(
+          entityType: 'video',
+          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+      verifyNever(() => mockEngine.drain(
+          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')));
+      // Invariante: nunca purgar tras authExpired.
+      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
-
-    // ─── (f) drenado limpio → purga el segmento enviado ───────────────────
 
     test('(f) tras un drenado limpio invoca purgeIfFullySynced del segmento',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
 
-      await controller.enviarCloud(_fakeSegmento(id: 42));
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
       verify(() => mockPurge.purgeIfFullySynced(any())).called(1);
     });
-
-    // ─── (g) authExpired → NUNCA purga (invariante de seguridad) ──────────
-
-    test('(g) authExpired en el drain NO purga el segmento', () async {
-      when(() => mockConnectivity.isConnected).thenReturn(true);
-      when(() => mockEngine.drain(entityType: 'segmento'))
-          .thenAnswer((_) async => const DrainSummary(authExpired: true));
-
-      await controller.enviarCloud(_fakeSegmento(id: 7));
-
-      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
-    });
   });
 
-  // ─── (c) enviarAllCloud drena todos los tipos ──────────────────────────────
-
-  group('enviarAllCloud', () {
-    test('(c) con red invoca drain para segmento, imagen, mensaje y position',
+  group('enviarAllCloud (todos)', () {
+    test('(c) recorre segmentos pendientes y drena position una vez al final',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
+      final seg = _seg(id: 42, clientId: 'seg-1');
+      controller.segmentos.assignAll([seg]);
+      // El segmento está pendiente (su clientId en el set de no-sincronizados).
+      when(() => mockPurge.readUnsyncedSets()).thenAnswer(
+        (_) async => const UnsyncedSets(
+            segmento: {'seg-1'}, imagen: {}, video: {}, mensaje: {}),
+      );
 
       await controller.enviarAllCloud();
 
       verifyInOrder([
-        () => mockEngine.drain(entityType: 'segmento'),
-        () => mockEngine.drain(entityType: 'imagen'),
-        () => mockEngine.drain(entityType: 'mensaje'),
+        () => mockEngine.drain(
+            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
         () => mockEngine.drain(entityType: 'position'),
       ]);
+    });
+
+    test('segmentos ya sincronizados no se envían (no están pendientes)',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      // readUnsyncedSets vacío (default) → segmento fully synced → no pendiente.
+
+      await controller.enviarAllCloud();
+
+      verifyNever(() => mockEngine.drain(
+          entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')));
+      // position sí se drena siempre al final.
+      verify(() => mockEngine.drain(entityType: 'position')).called(1);
     });
 
     test('sin red no invoca drain y pone lastError', () async {
@@ -205,55 +282,49 @@ void main() {
 
       await controller.enviarAllCloud();
 
-      verifyNever(() => mockEngine.drain(entityType: any(named: 'entityType')));
+      verifyNever(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds')));
       expect(controller.lastError.value, isNotEmpty);
     });
 
-    test('authExpired en imagen corta el bucle: mensaje y position no se drenan',
+    test('authExpired en un segmento corta el bucle: position no se drena',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-
-      when(() => mockEngine.drain(entityType: 'segmento'))
-          .thenAnswer((_) async => const DrainSummary(succeeded: 1));
-      when(() => mockEngine.drain(entityType: 'imagen'))
+      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      when(() => mockPurge.readUnsyncedSets()).thenAnswer(
+        (_) async => const UnsyncedSets(
+            segmento: {'seg-1'}, imagen: {}, video: {}, mensaje: {}),
+      );
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds')))
           .thenAnswer((_) async => const DrainSummary(authExpired: true));
 
       await controller.enviarAllCloud();
 
-      verify(() => mockEngine.drain(entityType: 'segmento')).called(1);
-      verify(() => mockEngine.drain(entityType: 'imagen')).called(1);
-      verifyNever(() => mockEngine.drain(entityType: 'mensaje'));
       verifyNever(() => mockEngine.drain(entityType: 'position'));
-      // Invariante: nunca purgar en lote tras un authExpired.
-      verifyNever(() => mockPurge.purgeAllFullySynced(any()));
+      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
 
-    test('tras un drenado limpio invoca purgeAllFullySynced una vez', () async {
+    test('summary combinado acumula totales de segmentos + position', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-
-      await controller.enviarAllCloud();
-
-      verify(() => mockPurge.purgeAllFullySynced(any())).called(1);
-    });
-
-    test('summary combinado acumula totales de todos los tipos', () async {
-      when(() => mockConnectivity.isConnected).thenReturn(true);
-
-      when(() => mockEngine.drain(entityType: 'segmento'))
+      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      when(() => mockPurge.readUnsyncedSets()).thenAnswer(
+        (_) async => const UnsyncedSets(
+            segmento: {'seg-1'}, imagen: {}, video: {}, mensaje: {}),
+      );
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 2));
-      when(() => mockEngine.drain(entityType: 'imagen'))
-          .thenAnswer((_) async => const DrainSummary(succeeded: 1, retryable: 1));
-      when(() => mockEngine.drain(entityType: 'mensaje'))
-          .thenAnswer((_) async => const DrainSummary(rejected: 1));
       when(() => mockEngine.drain(entityType: 'position'))
           .thenAnswer((_) async => const DrainSummary(conflicts: 1));
 
       await controller.enviarAllCloud();
 
       final s = controller.lastDrainSummary.value!;
-      expect(s.succeeded, 3);
-      expect(s.retryable, 1);
-      expect(s.rejected, 1);
+      expect(s.succeeded, 2);
       expect(s.conflicts, 1);
     });
   });

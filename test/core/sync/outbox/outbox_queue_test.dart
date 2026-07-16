@@ -212,6 +212,34 @@ void main() {
       final pending = await queue.nextPending();
       expect(pending, isEmpty);
     });
+
+    test('onlyClientIds scopes the drain to the given clientIds', () async {
+      await queue.enqueue(
+          entityType: 'imagen', clientId: 'a', operation: SyncOperation.create);
+      await queue.enqueue(
+          entityType: 'imagen', clientId: 'b', operation: SyncOperation.create);
+      await queue.enqueue(
+          entityType: 'imagen', clientId: 'c', operation: SyncOperation.create);
+
+      final scoped = await queue.nextPending(
+        entityType: 'imagen',
+        onlyClientIds: {'a', 'c'},
+      );
+      expect(scoped.map((j) => j.clientId).toSet(), {'a', 'c'});
+    });
+
+    test('empty onlyClientIds behaves as no filter', () async {
+      await queue.enqueue(
+          entityType: 'imagen', clientId: 'a', operation: SyncOperation.create);
+      await queue.enqueue(
+          entityType: 'imagen', clientId: 'b', operation: SyncOperation.create);
+
+      final all = await queue.nextPending(
+        entityType: 'imagen',
+        onlyClientIds: const {},
+      );
+      expect(all, hasLength(2));
+    });
   });
 
   // ─── countPending ──────────────────────────────────────────────────────────

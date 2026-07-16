@@ -60,19 +60,29 @@ class OutboxQueue {
   }
 
   /// Returns up to [limit] pending jobs in FIFO order, optionally filtered by
-  /// [entityType].
+  /// [entityType] and by [onlyClientIds] (scoped drain of a single segmento's
+  /// jobs). An empty [onlyClientIds] is treated as "no filter"; callers that
+  /// mean "nothing to drain" must skip the call entirely.
   Future<List<SyncJob>> nextPending({
     String? entityType,
     int limit = 100,
+    Set<String>? onlyClientIds,
   }) async {
+    final conditions = <String>['status = ?'];
+    final args = <Object?>[SyncStatus.pending.wireName];
+    if (entityType != null) {
+      conditions.add('entity_type = ?');
+      args.add(entityType);
+    }
+    if (onlyClientIds != null && onlyClientIds.isNotEmpty) {
+      final placeholders = List.filled(onlyClientIds.length, '?').join(', ');
+      conditions.add('client_id IN ($placeholders)');
+      args.addAll(onlyClientIds);
+    }
     final rows = await _db.query(
       _table,
-      where: entityType == null
-          ? 'status = ?'
-          : 'status = ? AND entity_type = ?',
-      whereArgs: entityType == null
-          ? [SyncStatus.pending.wireName]
-          : [SyncStatus.pending.wireName, entityType],
+      where: conditions.join(' AND '),
+      whereArgs: args,
       orderBy: 'created_at ASC, id ASC',
       limit: limit,
     );

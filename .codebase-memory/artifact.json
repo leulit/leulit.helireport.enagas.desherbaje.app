@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "fc00b3238dc69ae000b43b10571f10a63824f71f",
-    "indexed_at": "2026-07-16T06:58:34Z",
+    "commit": "31daf150b090e3630cdeb3e4316235eeb7244968",
+    "indexed_at": "2026-07-16T09:56:52Z",
     "project": "Users-emiloalvarez-Work-PROYECTOS-ENAGAS-HELIREPORT2025-leulit_helireport_enagas_desherbaje_app",
-    "nodes": 2554,
-    "edges": 8860,
+    "nodes": 2573,
+    "edges": 8912,
     "original_size": 13107200,
-    "compressed_size": 1375399,
+    "compressed_size": 1378592,
     "compression_level": 3
 }

@@ -52,168 +52,160 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
         if (didPop) await controller.stopTracking();
       },
       child: Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppColors.moduleGreenLight,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 2, color: const Color(0xFFA5D6A7)),
-        ),
-        leading: const Padding(
-          padding: EdgeInsets.all(8),
-          child: Icon(Icons.eco, color: AppColors.moduleGreen),
-        ),
-        title: const Text(
-          'Mapa',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.moduleGreenText,
+        appBar: AppBar(
+          backgroundColor: AppColors.moduleGreenLight,
+          elevation: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(height: 2, color: const Color(0xFFA5D6A7)),
           ),
+          leading: const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(Icons.eco, color: AppColors.moduleGreen),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
+              tooltip: 'Ver listado',
+              onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
+            ),
+            IconButton(
+              icon: const Icon(Icons.cloud_upload_outlined,
+                  color: AppColors.moduleGreen),
+              tooltip: 'Forzar envío',
+              onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+            ),
+            Obx(() {
+              if (controller.isLoading) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.moduleGreen,
+                    ),
+                  ),
+                );
+              }
+              return IconButton(
+                icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
+                onPressed: controller.reloadAll,
+              );
+            }),
+            _LeyendaButton(),
+            IconButton(
+              icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
+              tooltip: 'Salir',
+              onPressed: _logout,
+            ),
+          ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
-            tooltip: 'Ver listado',
-            onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
-          ),
-          IconButton(
-            icon: const Icon(Icons.cloud_upload_outlined,
-                color: AppColors.moduleGreen),
-            tooltip: 'Forzar envío',
-            onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
-          ),
-          Obx(() {
-            if (controller.isLoading) {
-              return const Padding(
-                padding: EdgeInsets.all(12),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.moduleGreen,
+        body: Stack(
+          children: [
+            FlutterMap(
+              mapController: controller.mapController,
+              options: MapOptions(
+                initialCenter: const LatLng(40.4168, -3.7038),
+                initialZoom: 7,
+                minZoom: 5,
+                maxZoom: 20,
+                onMapReady: controller.onMapReady,
+                onMapEvent: controller.onMapEvent,
+                onTap: controller.onMapTap,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all,
+                ),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: ApiEndpoints.pnoaWmts,
+                  tileProvider: CancellableNetworkTileProvider(),
+                  userAgentPackageName:
+                      'com.leulit.enagas.helireport_desherbaje',
+                  additionalOptions: const {
+                    'User-Agent': 'helireport-desherbaje',
+                  },
+                ),
+                const GasoductosMapLayer(),
+                SegmentosMapLayer(currentZoom: controller.currentZoom),
+                PksMapLayer(currentZoom: controller.currentZoom),
+                HitosMapLayer(currentZoom: controller.currentZoom),
+                PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
+                MyCurrentLocationLayer(
+                  alignDirectionOnUpdate: AlignOnUpdate.always,
+                  alignPositionOnUpdate: AlignOnUpdate.always,
+                  alignPositionStream: controller.alignPositionStream,
+                ),
+                ...buildLinesCutMapLayers(controller.linesCut),
+                const MapCompass.cupertino(
+                  rotationDuration: Duration(milliseconds: 300),
+                  hideIfRotatedNorth: false,
+                  alignment: Alignment.bottomRight,
+                  padding: EdgeInsets.only(bottom: 48, right: 10),
+                ),
+                const _ZoomDisplay(),
+              ],
+            ),
+            Positioned(
+              top: 8,
+              left: 8,
+              right: 8,
+              child: _FiltrosBar(),
+            ),
+            Positioned(
+              bottom: 40,
+              left: 10,
+              child: LinesCutModeButton(
+                controller: controller.linesCut,
+                onApplyCut: controller.applyLinesCut,
+              ),
+            ),
+            Positioned(
+              top: 56,
+              left: 8,
+              right: 8,
+              child: LinesCutControlPanel(controller: controller.linesCut),
+            ),
+            const Positioned(
+              bottom: 96,
+              right: 10,
+              child: _PksLoadStatus(),
+            ),
+            Positioned(
+              bottom: 48,
+              right: 58,
+              child: Material(
+                color: Colors.white,
+                shape: const CircleBorder(),
+                elevation: 3,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: controller.centerOnMyLocation,
+                  child: const Padding(
+                    padding: EdgeInsets.all(9),
+                    child: Icon(Icons.my_location,
+                        size: 22, color: AppColors.moduleGreen),
                   ),
                 ),
-              );
-            }
-            return IconButton(
-              icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
-              onPressed: controller.reloadAll,
-            );
-          }),
-          _LeyendaButton(),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-            tooltip: 'Salir',
-            onPressed: _logout,
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: controller.mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(40.4168, -3.7038),
-              initialZoom: 7,
-              minZoom: 5,
-              maxZoom: 20,
-              onMapReady: controller.onMapReady,
-              onMapEvent: controller.onMapEvent,
-              onTap: controller.onMapTap,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all,
               ),
             ),
-            children: [
-              TileLayer(
-                urlTemplate: ApiEndpoints.pnoaWmts,
-                tileProvider: CancellableNetworkTileProvider(),
-                userAgentPackageName:
-                    'com.leulit.enagas.helireport_desherbaje',
-                additionalOptions: const {
-                  'User-Agent': 'helireport-desherbaje',
-                },
-              ),
-              const GasoductosMapLayer(),
-              SegmentosMapLayer(currentZoom: controller.currentZoom),
-              PksMapLayer(currentZoom: controller.currentZoom),
-              HitosMapLayer(currentZoom: controller.currentZoom),
-              PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
-              MyCurrentLocationLayer(
-                alignDirectionOnUpdate: AlignOnUpdate.always,
-                alignPositionOnUpdate: AlignOnUpdate.always,
-                alignPositionStream: controller.alignPositionStream,
-              ),
-              ...buildLinesCutMapLayers(controller.linesCut),
-              const MapCompass.cupertino(
-                rotationDuration: Duration(milliseconds: 300),
-                hideIfRotatedNorth: false,
-                alignment: Alignment.bottomRight,
-                padding: EdgeInsets.only(bottom: 48, right: 10),
-              ),
-              const _ZoomDisplay(),
-            ],
-          ),
-          Positioned(
-            top: 8,
-            left: 8,
-            right: 8,
-            child: _FiltrosBar(),
-          ),
-          Positioned(
-            bottom: 40,
-            left: 10,
-            child: LinesCutModeButton(
-              controller: controller.linesCut,
-              onApplyCut: controller.applyLinesCut,
+            const Positioned(
+              top: 64,
+              left: 16,
+              right: 16,
+              child: _ErrorBanner(),
             ),
-          ),
-          Positioned(
-            top: 56,
-            left: 8,
-            right: 8,
-            child: LinesCutControlPanel(controller: controller.linesCut),
-          ),
-          const Positioned(
-            bottom: 96,
-            right: 10,
-            child: _PksLoadStatus(),
-          ),
-          Positioned(
-            bottom: 48,
-            right: 58,
-            child: Material(
-              color: Colors.white,
-              shape: const CircleBorder(),
-              elevation: 3,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: controller.centerOnMyLocation,
-                child: const Padding(
-                  padding: EdgeInsets.all(9),
-                  child: Icon(Icons.my_location,
-                      size: 22, color: AppColors.moduleGreen),
-                ),
-              ),
+            const Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: _MapLoadBanner(),
             ),
-          ),
-          const Positioned(
-            top: 64,
-            left: 16,
-            right: 16,
-            child: _ErrorBanner(),
-          ),
-          const Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
-            child: _MapLoadBanner(),
-          ),
-        ],
-      ),
-    ), // end Scaffold
+          ],
+        ),
+      ), // end Scaffold
     ); // end PopScope
   }
 }
@@ -244,46 +236,52 @@ class _FiltrosBar extends GetView<SegmentosMapController> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(14),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _FilterDropdown<EstadoActividad>(
-              icon: Icons.flag_outlined,
-              label: '',
-              groupColor: const Color(0xFF455A64),
-              rxValue: controller.rxEstado,
-              items: const [
-                EstadoActividad.propuesta,
-                EstadoActividad.contratista,
-                EstadoActividad.validada,
-                EstadoActividad.ejecucion,
-                EstadoActividad.finalizada,
+    return ValueListenableBuilder<bool>(
+      valueListenable: controller.filtrosVisible,
+      builder: (context, visible, _) {
+        if (!visible) return const SizedBox.shrink();
+        return Material(
+          color: Colors.white.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(14),
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _FilterDropdown<EstadoActividad>(
+                  icon: Icons.flag_outlined,
+                  label: '',
+                  groupColor: const Color(0xFF455A64),
+                  rxValue: controller.rxEstado,
+                  items: const [
+                    EstadoActividad.propuesta,
+                    EstadoActividad.contratista,
+                    EstadoActividad.validada,
+                    EstadoActividad.ejecucion,
+                    EstadoActividad.finalizada,
+                  ],
+                  itemLabel: (e) => e.etiqueta,
+                  itemColor: (e) =>
+                      _estadoFilterColors[e] ?? const Color(0xFF455A64),
+                  onChanged: controller.setEstado,
+                ),
+                _FilterDropdown<TipoActividad>(
+                  icon: Icons.construction_outlined,
+                  label: '',
+                  groupColor: const Color(0xFF2E7D32),
+                  rxValue: controller.rxTipo,
+                  items: TipoActividad.values,
+                  itemLabel: (t) => t.etiqueta,
+                  itemColor: (t) =>
+                      _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
+                  onChanged: controller.setTipo,
+                ),
               ],
-              itemLabel: (e) => e.etiqueta,
-              itemColor: (e) =>
-                  _estadoFilterColors[e] ?? const Color(0xFF455A64),
-              onChanged: controller.setEstado,
             ),
-            _FilterDropdown<TipoActividad>(
-              icon: Icons.construction_outlined,
-              label: '',
-              groupColor: const Color(0xFF2E7D32),
-              rxValue: controller.rxTipo,
-              items: TipoActividad.values,
-              itemLabel: (t) => t.etiqueta,
-              itemColor: (t) =>
-                  _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
-              onChanged: controller.setTipo,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -316,8 +314,7 @@ class _FilterDropdown<T> extends StatelessWidget {
       decoration: BoxDecoration(
         color: groupColor.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
+        border: Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Row(
@@ -343,8 +340,7 @@ class _FilterDropdown<T> extends StatelessWidget {
               value: selected,
               isDense: true,
               underline: const SizedBox.shrink(),
-              icon:
-                  Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
+              icon: Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
               style: TextStyle(
                 fontSize: 12,
                 color: selectedColor,
@@ -587,8 +583,7 @@ class _ErrorBanner extends StatelessWidget {
               Expanded(
                 child: Text(
                   [if (errG != null) errG, if (errA != null) errA].join(' · '),
-                  style:
-                      TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                  style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
                 ),
               ),
               TextButton(
@@ -598,8 +593,7 @@ class _ErrorBanner extends StatelessWidget {
                   minimumSize: const Size(0, 0),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child:
-                    const Text('Reintentar', style: TextStyle(fontSize: 11)),
+                child: const Text('Reintentar', style: TextStyle(fontSize: 11)),
               ),
             ],
           ),

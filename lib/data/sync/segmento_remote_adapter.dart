@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
@@ -47,8 +48,15 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
     }
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final usuario = prefs.getString('user_usuario') ?? '';
+      final userId = prefs.getInt('user_id') ?? 0;
+
       final body = <String, dynamic>{
         'client_id': entity.clientId,
+        'segmento_id': remoteId,
+        'usuariologged': usuario,
+        'idusuariologged': userId,
         'estado': entity.estado.descripcion,
         if (entity.latInicio != null) 'lat_inicio': entity.latInicio,
         if (entity.lngInicio != null) 'lng_inicio': entity.lngInicio,
