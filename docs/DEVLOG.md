@@ -1,5 +1,59 @@
 # DEVLOG
 
+## 2026-07-16 — Fix: alinear cliente sync con contrato backend (4 bugs HIGH)
+
+Validación de la capa de sync contra la guía de cliente del backend (`/api/enagas/v1`).
+Cuatro divergencias que rompían la subida; corregidas:
+
+1. **Segmento upsert — campo `id`.** `segmento_remote_adapter.dart` mandaba `segmento_id`,
+   que no está en el schema del backend → se descartaba en silencio → todo upsert se trataba
+   como insert → idempotente por `client_id` → **los cambios de estado nunca se aplicaban**.
+   Fix: body key `'segmento_id': entity.id` → `'id': entity.id ?? 0` (0/null=insert, >0=update).
+2. **Fotos — endpoint equivocado.** `imagen_remote_adapter.dart` usaba el legacy
+   `/operador/additem`, que ignora `segmentoId`/`tipoFoto`/`clientId` → foto nunca ligada al
+   segmento (se perdía). Fix: `POST /segmentos/{id}/imagenes` (nuevo `ApiEndpoints.segmentoImagenes`),
+   fields reducidos a los declarados: `clientId`, `tipoFoto` (antes|despues), `capturada_at`,
+   `subida_por`. `imagenAdd`/`additem` se conserva SOLO para incidencias de operador.
+3. **Vídeo — chunks con PATCH.** El backend solo registra POST para el chunk → PATCH daba 404 →
+   subida de vídeo rota. La resumabilidad no depende del verbo (vive en `uploadId` + header
+   `Upload-Offset` + body octet-stream). Fix: `network_service.patchVideoChunk` → `postVideoChunk`
+   (verbo HMAC y llamada Dio a POST; header/offset intactos) + call site en `video_remote_adapter`.
+4. **Vídeo — init snake_case.** `_doInit` mandaba `original_filename`/`total_bytes`/`mime_type`/
+   `client_id`/`segmento_id`; el backend exige camelCase y `segmento_id` snake NO se lee → vídeo
+   huérfano. Fix: `originalFilename`/`totalBytes`/`mimeType`/`clientId`/`segmentoId`.
+
+**Conforme (sin tocar):** orden segmento→propaga id→hijos→sync-complete; idempotencia `client_id`;
+mensajes (`/segmentos/mensajes/{id}`); sync-complete antes de purgar y no-purga-si-falla;
+`segmento_client_id` es columna **local-only** (se manda `segmento_id` int tras propagar, no viaja
+al backend — §10 del contrato); HMAC ms + path completo con prefijo+query.
+
+**Pull migrado al endpoint contratista (antes MEDIUM).** `segmento_remote_fetcher` pasa de
+`/segmentos/bycts/{cts}` (path) a `GET /segmentos/contratista?cts=CT1,CT2` (querystring), decisión
+del responsable. Nuevo `ApiEndpoints.segmentosContratista(cts)`. La firma HMAC del interceptor ya
+incluye el querystring (firma `options.uri`, path+query → auto-consistente). El endpoint devuelve
+`propuesta`+`validada` enriquecidos con `imagenes[]`/`mensajes[]` (vídeos como fila de `imagenes[]`
+con `mime_type` `video/*`, que es como la entidad los parsea) y `client_id` en cada hijo para dedup.
+Instrucciones para backend: `docs/BACKEND_SEGMENTOS_CONTRATISTA.md` (endpoint pendiente de implementar
+en el backend; la app ya apunta ahí). `segmentosByCt` queda definido como legacy sin callers.
+
+**Identidad de entidades hijas por `id` remoto (no `client_id`) — decisión del responsable.**
+Imagen/vídeo/mensaje siguen el MISMO patrón que SegmentoEntity: el payload lleva `id` (`0`/null=insert,
+`>0`=update), el backend upserta por `id` y devuelve la entidad completa, el frontend lee el `id` y lo
+persiste (`markSynced`). La dedup local↔nube en re-descarga se hace por `id` remoto (cuando un hijo puede
+re-descargarse ya tiene `id` en ambos lados). `client_id` deja de ser clave de identidad/dedup. Razón:
+reenvío tras fallo parcial hace UPDATE por `id` (no duplica) y el segmento no es visible hasta
+`sync-complete` → sin colisión. Cambios: `mensaje_remote_adapter`/`imagen_remote_adapter` añaden `id` al
+payload; `video_remote_adapter` manda `id` en init y lee el `id` entero del registro desde la respuesta de
+`complete` (`{uploadId, id, status}`) → `entity.id` (degradación limpia a `uploadId` si el backend aún no
+lo devuelve); `segmento_detalle_controller` migra las 3 dedups (`_loadImagenes`, `_loadMensajes`,
+`mediaPorTipo`) de `clientId` a `id` (con guarda de `id == null` para hijos locales no subidos).
+Backend debe: upsert de hijos por `id`, devolver `id` en cada uno (incl. `id` entero del vídeo en el
+`complete`, mismo `id` que la fila de `imagenes[]` en descarga). Verificación: analyze limpio, 158/158
+`test/data/sync/` + detalle tests.
+
+Verificación: `flutter analyze` limpio en los 5 ficheros; 47/47 tests
+(`video_remote_adapter_test`, `imagen_remote_adapter_mime_test`).
+
 ## 2026-07-10 — Feature: GIS en captura de foto/vídeo (`gis_json` GeoJSON por media)
 
 **Objetivo:** al capturar foto o grabar vídeo desde la cámara propia de la app, registrar
@@ -722,3 +776,33 @@ EstadoActividad.contratista` — el estado en que el operario de campo trabaja l
 estado **persistido** del segmento (no el dropdown editable sin guardar). `_GuardarBar` sigue
 autónomo; lee el estado vía `Get.find<SegmentoDetalleController>()`. Fichero:
 `segmento_detalle_page.dart`.
+
+## 2026-07-16 — Envío por segmento reordenado: segmento primero, id propagado a hijos
+
+**Motivo:** un segmento creado en la app (no traído del pull) no tiene `id` de backend hasta que se
+sube. Los adapters de imagen/vídeo/mensaje envían el `id` numérico leído de `entity.segmentoId` —
+si esos hijos se subían ANTES que el segmento (orden previo: vídeo → foto → mensaje → segmento),
+subían con `segmento_id` a 0/null y quedaban sin vincular en el backend.
+
+**Cambio:** `ForzarEnvioController._sendOne` ahora drena `segmento` PRIMERO. Si el drain no es
+limpio (rejected/retryable/conflicts/authExpired) se corta sin tocar hijos. Si es limpio, relee el
+segmento del store local por `clientId` (`SegmentoLocalStore.findByClientId`) para obtener el `id`
+que el engine acaba de persistir (`UpdateLocalStateTask` → `markSynced` ya lo escribe sin cambios en
+el motor) y lo propaga con el nuevo `PropagateSegmentoRemoteIdUseCase` a las columnas `segmento_id`
+de `imagenes_segmento`/`videos_segmento`/`mensajes_segmento` (match por `segmento_client_id`, una
+sola transacción) ANTES de drenar vídeo → foto → mensaje.
+
+`SegmentoRemoteAdapter` pasa de dos endpoints (`create`/`update/{id}`) a un único upsert: `POST
+/segmentos/upsert` con `segmento_id` en el body (`null` si es alta, el id existente si es
+actualización); el backend decide insertar o actualizar. Ya acepta `SyncOperation.create` además de
+`update` (antes `create` devolvía `SyncUnrecoverable`). Los antiguos `ApiEndpoints.segmentoUpd`/
+`segmentoAdd` se eliminan (sin más referencias tras el cambio).
+
+Ficheros: `core/api_endpoints.dart` (nuevo `segmentoUpsert`, eliminados `segmentoUpd`/`segmentoAdd`),
+`data/sync/segmento_remote_adapter.dart` (upsert único), `data/sync/propagate_segmento_remote_id_usecase.dart`
+(nuevo), `data/sync/imagen_local_store.dart`/`video_local_store.dart`/`mensaje_local_store.dart`
+(nuevo `setSegmentoRemoteId`), `presentation/forzar_envio/forzar_envio_controller.dart` (orden de
+`_sendOne` + nuevas deps `PropagateSegmentoRemoteIdUseCase`/`SegmentoLocalStore`),
+`test/presentation/forzar_envio/forzar_envio_controller_test.dart` (orden y 2 tests nuevos: guard de
+segmento no-limpio, backendId ausente). `flutter analyze` → 0 issues; 49/49 tests de los ficheros
+tocados pasan.

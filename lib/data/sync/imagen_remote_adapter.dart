@@ -16,11 +16,11 @@ import 'adapter_support.dart';
 
 /// Remote adapter for [ImagenSegmentoEntity].
 ///
-/// Replicates the exact multipart contract produced by the legacy
-/// `ImageUploadProvider.uploadImage`:
-/// - endpoint: `POST /operador/additem`
+/// Uploads to the segmento-scoped contract endpoint
+/// [ApiEndpoints.segmentoImagenes]:
+/// - endpoint: `POST /api/enagas/v1/segmentos/{id}/imagenes`
 /// - bearer token read from `flutter_secure_storage` under `auth_token`
-/// - `usuariologged` / `idusuariologged` read from `SharedPreferences`
+/// - fields: `clientId`, `tipoFoto`, `capturada_at`, `subida_por`
 /// - file attached under the field name `file`
 ///
 /// Only [SyncOperation.create] is supported — the backend assigns the remote
@@ -29,7 +29,6 @@ import 'adapter_support.dart';
 class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
   static const String _fileFieldName = 'file';
   static const String _prefsUsuarioKey = 'user_usuario';
-  static const String _prefsUserIdKey = 'user_id';
 
   final NetworkService _network;
   final File Function(String path) _fileFactory;
@@ -56,7 +55,6 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final usuario = prefs.getString(_prefsUsuarioKey) ?? '';
-      final userId = prefs.getInt(_prefsUserIdKey)?.toString() ?? '0';
 
       final file = _fileFactory(entity.ruta);
       final fileName = file.path.split('/').last;
@@ -65,18 +63,11 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       final mimeType = _detectMime(headerBytes, fileName: fileName);
 
       final fields = <String, dynamic>{
-        'fileNameOriginal': fileName,
-        'description': entity.tipoFoto == TipoFoto.antes
-            ? 'Antes del trabajo'
-            : 'Después del trabajo',
-        'tipo': 'imagen',
-        'tipovigilancia': 'VH',
-        'usuariologged': usuario,
-        'idusuariologged': userId,
-        'client_id': entity.clientId,
-        'actividad_id': entity.actividadId.toString(),
-        'segmento_id': entity.segmentoId.toString(),
-        'tipo_foto': entity.tipoFoto.name,
+        'id': (entity.id ?? 0).toString(),
+        'clientId': entity.clientId,
+        'tipoFoto': entity.tipoFoto.name,
+        'capturada_at': entity.capturadaAt.toIso8601String(),
+        'subida_por': usuario,
       };
 
       final files = <NetworkFile>[
@@ -89,7 +80,7 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       ];
 
       final response = await _network.postMultipart(
-        ApiEndpoints.imagenAdd,
+        ApiEndpoints.segmentoImagenes(entity.segmentoId),
         fields: fields,
         files: files,
         headers: await bearerAuthHeader(_secureStorage),

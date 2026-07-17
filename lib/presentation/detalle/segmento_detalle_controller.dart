@@ -182,19 +182,20 @@ class SegmentoDetalleController extends MyGetxController {
 
   /// Media combinada (fotos + videos, nube + local) de un [tipo], ordenada por
   /// fecha de captura ascendente. Lee ambas RxList para que el Obx reaccione a
-  /// cualquiera. Un video de nube que ya existe como captura local (mismo
-  /// clientId) se omite: gana la copia local (reproduce offline).
+  /// cualquiera. Un video de nube que ya existe como captura local (mismo id
+  /// remoto) se omite: gana la copia local (reproduce offline).
   List<SegmentoMediaItem> mediaPorTipo(TipoFoto tipo) {
     final tv = _tipoVideoDesde(tipo);
-    final localVideoIds = <String>{
+    final localVideoIds = <int>{
       for (final v in videos)
-        if (v.tipoVideo == tv) v.clientId,
+        if (v.tipoVideo == tv && v.id != null) v.id!,
     };
     final items = <SegmentoMediaItem>[];
     for (final i in imagenes) {
       if (i.tipoFoto != tipo) continue;
       if (_esVideo(i)) {
-        if (localVideoIds.contains(i.clientId)) continue; // dedup: local wins
+        // Mismo id remoto → gana la copia local.
+        if (i.id != null && localVideoIds.contains(i.id)) continue;
         items.add(SegmentoMediaItem.remoteVideo(i));
       } else {
         items.add(SegmentoMediaItem.imagen(
@@ -217,8 +218,10 @@ class SegmentoDetalleController extends MyGetxController {
   Future<void> _loadImagenes() async {
     final remote = segmento.imagenes;
     final local = await _imagenRepo.getAllByClientId(segmento.clientId);
+    // Dedup por id remoto: una captura local sin subir (id == null) siempre
+    // se conserva; una ya subida se omite si su id ya llegó en `remote`.
     final extras =
-        local.where((l) => !remote.any((r) => r.clientId == l.clientId));
+        local.where((l) => l.id == null || !remote.any((r) => r.id == l.id));
     imagenes.assignAll([...remote, ...extras]);
   }
 
@@ -600,13 +603,14 @@ class SegmentoDetalleController extends MyGetxController {
 
   /// Offline-first, idéntico a [_loadImagenes]: los mensajes de nube viajan
   /// embebidos en `segmento.mensajes[]` (pull); los nuevos viven en el store
-  /// local. Merge por `clientId`, ordenado cronológicamente ascendente.
+  /// local. Merge por id remoto (un mensaje local sin subir tiene `id == null`
+  /// y siempre se conserva), ordenado cronológicamente ascendente.
   Future<void> _loadMensajes() async {
     final remote = segmento.mensajes;
     final local =
         await _mensajeRepo.getAllBySegmentoClientId(segmento.clientId);
     final extras =
-        local.where((l) => !remote.any((r) => r.clientId == l.clientId));
+        local.where((l) => l.id == null || !remote.any((r) => r.id == l.id));
     final all = [...remote, ...extras]
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     mensajes.assignAll(all);

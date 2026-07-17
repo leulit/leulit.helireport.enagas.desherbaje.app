@@ -12,11 +12,12 @@ import 'adapter_support.dart';
 
 /// [RemoteAdapter] for [SegmentoEntity].
 ///
-/// Backend currently only supports `update`. `create` and `delete` come back
-/// as [SyncUnrecoverable] until the backend exposes those operations.
+/// Single insert-or-update path: `POST /segmentos/upsert` with `segmento_id`
+/// in the body (`null` for a brand-new segmento, the existing backend id for
+/// an update). The backend decides insert vs update from that value. `delete`
+/// is not supported yet and comes back as [SyncUnrecoverable].
 ///
-/// The endpoint is `POST /segmentos/update/{id}` with the editable fields in
-/// the body. 401 surfaces as [AuthExpiredException] via the helper.
+/// 401 surfaces as [AuthExpiredException] via the helper.
 class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
   final NetworkService _network;
   final FlutterSecureStorage _storage;
@@ -31,19 +32,11 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
     required SegmentoEntity entity,
     required SyncOperation operation,
   }) async {
-    if (operation != SyncOperation.update) {
+    if (operation == SyncOperation.delete) {
       return SyncUnrecoverable<SegmentoEntity>(
         'Operation ${operation.name} not supported for segmento yet',
         errorMessageEs:
             'El servidor todavía no acepta esta operación para segmentos.',
-      );
-    }
-    final remoteId = entity.id;
-    if (remoteId == null) {
-      return SyncUnrecoverable<SegmentoEntity>(
-        'Segmento sin id remoto: no puede actualizarse',
-        errorMessageEs:
-            'El segmento aún no existe en el servidor; no se puede actualizar.',
       );
     }
 
@@ -54,7 +47,7 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
 
       final body = <String, dynamic>{
         'client_id': entity.clientId,
-        'segmento_id': remoteId,
+        'id': entity.id ?? 0,
         'usuariologged': usuario,
         'idusuariologged': userId,
         'estado': entity.estado.descripcion,
@@ -67,24 +60,46 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
       };
 
       final response = await _network.post(
-        ApiEndpoints.segmentoUpd(remoteId),
+        ApiEndpoints.segmentoUpsert,
         body: body,
         headers: await bearerAuthHeader(_storage),
       );
 
-      if (response.isSuccess && !bodyIndicatesError(response.data)) {
-        return SyncSuccess<SegmentoEntity>(remoteId: remoteId.toString());
+      if (!response.isSuccess || bodyIndicatesError(response.data)) {
+        // Fallo por status HTTP o por error de negocio en el body (HTTP 200 +
+        // `{ok:false}`/`error`). Ver convención en BACKEND_SEGMENTO_SYNC_ENDPOINTS.
+        final msg = bodyErrorMessage(response.data);
+        return SyncUnrecoverable<SegmentoEntity>(
+          msg ?? 'HTTP ${response.statusCode}',
+          statusCode: response.statusCode,
+        );
       }
-      // Fallo por status HTTP o por error de negocio en el body (HTTP 200 +
-      // `{ok:false}`/`error`). Ver convención en BACKEND_SEGMENTO_SYNC_ENDPOINTS.
-      final msg = bodyErrorMessage(response.data);
-      return SyncUnrecoverable<SegmentoEntity>(
-        msg ?? 'HTTP ${response.statusCode}',
-        statusCode: response.statusCode,
+
+      final data = response.data;
+      final payload = data is Map<String, dynamic>
+          ? data
+          : data is Map
+              ? data.cast<String, dynamic>()
+              : const <String, dynamic>{};
+
+      final newId = extractRemoteIntId(payload);
+      if (newId != null) entity.id = newId;
+
+      final resolvedId = newId ?? entity.id;
+      if (resolvedId == null) {
+        return SyncUnrecoverable<SegmentoEntity>(
+          'El servidor no devolvió un id para el segmento',
+          errorMessageEs:
+              'El servidor no devolvió un identificador para el segmento.',
+        );
+      }
+
+      return SyncSuccess<SegmentoEntity>(
+        remoteId: resolvedId.toString(),
+        serverVersion: entity,
       );
     } on NetworkError catch (err) {
       return syncOutcomeFromNetworkError<SegmentoEntity>(err);
     }
   }
-
 }

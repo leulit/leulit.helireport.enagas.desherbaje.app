@@ -127,6 +127,7 @@ ImagenSegmentoEntity _imagen({
   String ruta = '',
   bool subida = false,
   String filename = 'file.jpg',
+  int? id,
 }) {
   final e = ImagenSegmentoEntity(
     actividadId: 0,
@@ -139,6 +140,7 @@ ImagenSegmentoEntity _imagen({
   );
   e.mimeType = mimeType;
   e.url = url;
+  e.id = id;
   if (subida) e.subidaAt = DateTime(2026, 1, 1);
   return e;
 }
@@ -151,6 +153,7 @@ VideoSegmentoEntity _localVideo({
   String ruta = '/tmp/local.mp4',
   String filename = 'local.mp4',
   bool subida = false,
+  int? id,
 }) {
   final e = VideoSegmentoEntity(
     actividadId: 0,
@@ -161,6 +164,7 @@ VideoSegmentoEntity _localVideo({
     capturadaAt: capturadaAt,
     clientId: clientId,
   );
+  e.id = id;
   if (subida) e.subidaAt = DateTime(2026, 1, 1);
   return e;
 }
@@ -438,7 +442,7 @@ void main() {
     );
 
     testWidgets(
-      '(3) dedup: vídeo nube + vídeo local con mismo clientId → gana el local',
+      '(3) dedup: vídeo nube + vídeo local con mismo id remoto → gana el local',
       (tester) async {
         await tester.pumpWidget(_appWidget());
         await tester.pump();
@@ -446,26 +450,27 @@ void main() {
         final ctrl = buildCtrl();
         ctrl.imagenes.assignAll([
           _imagen(
-            clientId: 'dup',
+            clientId: 'dup-remote',
             capturadaAt: DateTime(2026, 1, 1),
             mimeType: 'video/mp4',
             url: 'https://x/dup.mp4',
             subida: true,
+            id: 77,
           ),
         ]);
         ctrl.videos.assignAll([
           _localVideo(
-            clientId: 'dup',
+            clientId: 'dup-local',
             capturadaAt: DateTime(2026, 1, 1),
             ruta: '/tmp/dup.mp4',
+            id: 77,
           ),
         ]);
 
         final items = ctrl.mediaPorTipo(TipoFoto.antes);
-        final dups = items.where((m) => m.clientId == 'dup').toList();
-        expect(dups.length, 1);
-        expect(dups.single.localPath, '/tmp/dup.mp4');
-        expect(dups.single.isSubida, isFalse);
+        expect(items.length, 1);
+        expect(items.single.localPath, '/tmp/dup.mp4');
+        expect(items.single.isSubida, isFalse);
       },
     );
 

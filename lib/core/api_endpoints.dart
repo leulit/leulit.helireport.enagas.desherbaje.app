@@ -38,8 +38,22 @@ class ApiEndpoints {
 
   static String segmentosByCt(String cts) => '$apiBaseUrl/segmentos/bycts/$cts';
   static String segmentoById(int id) => '$apiBaseUrl/segmentos/byid/$id';
-  static String segmentoUpd(int id) => '$apiBaseUrl/segmentos/update/$id';
-  static String get segmentoAdd => '$apiBaseUrl/segmentos/create';
+
+  /// Descarga para contratista: segmentos en estado `propuesta` + `validada`
+  /// de los CTs [cts] (CSV de nombres de CT, cada nombre URL-encoded, comas
+  /// literales), enriquecidos con `imagenes[]` y `mensajes[]`. Los vídeos
+  /// viajan como fila de `imagenes[]` con `mime_type` `video/*` (la app modela
+  /// el vídeo como imagen con mime de vídeo — no hay array `videos[]` aparte).
+  /// Cada hijo trae su `client_id` para dedup local↔nube.
+  /// `GET /api/enagas/v1/segmentos/contratista?cts=CT1,CT2`.
+  /// La firma HMAC se calcula sobre el path CON querystring (§9 del contrato).
+  static String segmentosContratista(String cts) =>
+      '$apiBaseUrl/segmentos/contratista?cts=$cts';
+
+  /// Insert-or-update: el backend decide crear o actualizar según el campo
+  /// **`id`** en el body (0/null = insert, >0 = update). Sustituye a los
+  /// antiguos `create`/`update/{id}`.
+  static String get segmentoUpsert => '$apiBaseUrl/segmentos/upsert';
   static String get segmentosByEstado => '$apiBaseUrl/segmentos/byestado';
   static String mensajeAdd(int segmentoId) => '$apiBaseUrl/segmentos/mensajes/$segmentoId';
   static String deleteSegmento(int id) => '$apiBaseUrl/segmentos/delete/$id';
@@ -69,8 +83,14 @@ class ApiEndpoints {
 
   // ──────────────────────────── Imágenes ────────────────────────────
 
-  /// Subida multipart de imágenes (legacy: `/operador/additem`).
+  /// Subida multipart de imágenes — legacy `/operador/additem`. SOLO
+  /// incidencias de operador; para fotos de segmento usar [segmentoImagenes].
   static String get imagenAdd => '$apiBaseUrl/operador/additem';
+
+  /// Subida multipart de una foto ligada a un segmento (contrato backend).
+  /// `POST /api/enagas/v1/segmentos/{id}/imagenes`. Campos: file, clientId,
+  /// tipoFoto (antes|despues), capturada_at?, subida_por?. Respuesta `{id,url}`.
+  static String segmentoImagenes(int id) => '$apiBaseUrl/segmentos/$id/imagenes';
 
   // ──────────────────────────── Vídeos ────────────────────────────
 
@@ -81,10 +101,10 @@ class ApiEndpoints {
   /// Devuelve `201 { uploadId, offset, segmentoId }`.
   static String get videosUploadInit => '$apiBaseUrl/videos/upload';
 
-  /// Consulta estado (GET) o envía chunk (PATCH) de una sesión en curso.
+  /// Consulta estado (GET) o envía chunk (POST) de una sesión en curso.
   /// `GET /api/enagas/v1/videos/upload/{uploadId}`
   ///   → `200 { uploadId, offset, totalBytes, mimeType, originalFilename, complete }`.
-  /// `PATCH /api/enagas/v1/videos/upload/{uploadId}`
+  /// `POST /api/enagas/v1/videos/upload/{uploadId}`
   ///   Header `Upload-Offset: <bytesYaEnServidor>`, body = bytes raw.
   ///   → `200 { offset }`.
   static String videoUpload(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId';

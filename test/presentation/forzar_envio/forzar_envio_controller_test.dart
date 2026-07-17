@@ -9,7 +9,9 @@ import 'package:helireport_desherbaje/core/sync/engine/sync_engine.dart';
 import 'package:helireport_desherbaje/data/model/mensaje_entity.dart';
 import 'package:helireport_desherbaje/data/sync/imagen_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
+import 'package:helireport_desherbaje/data/sync/propagate_segmento_remote_id_usecase.dart';
 import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
+import 'package:helireport_desherbaje/data/sync/segmento_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/video_local_store.dart';
 import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
@@ -35,6 +37,11 @@ class MockImagenLocalStore extends Mock implements ImagenLocalStore {}
 class MockVideoLocalStore extends Mock implements VideoLocalStore {}
 
 class MockMensajeLocalStore extends Mock implements MensajeLocalStore {}
+
+class MockSegmentoLocalStore extends Mock implements SegmentoLocalStore {}
+
+class MockPropagateSegmentoRemoteIdUseCase extends Mock
+    implements PropagateSegmentoRemoteIdUseCase {}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -84,6 +91,8 @@ void main() {
   late MockImagenLocalStore mockImagenStore;
   late MockVideoLocalStore mockVideoStore;
   late MockMensajeLocalStore mockMensajeStore;
+  late MockSegmentoLocalStore mockSegmentoStore;
+  late MockPropagateSegmentoRemoteIdUseCase mockPropagate;
   late ForzarEnvioController controller;
 
   setUpAll(() {
@@ -102,6 +111,8 @@ void main() {
     mockImagenStore = MockImagenLocalStore();
     mockVideoStore = MockVideoLocalStore();
     mockMensajeStore = MockMensajeLocalStore();
+    mockSegmentoStore = MockSegmentoLocalStore();
+    mockPropagate = MockPropagateSegmentoRemoteIdUseCase();
 
     when(() => mockUseCase.execute())
         .thenAnswer((_) async => const DataSuccess([]));
@@ -128,6 +139,14 @@ void main() {
     when(() => mockPurge.readUnsyncedSets())
         .thenAnswer((_) async => _noneUnsynced);
 
+    // El segmento upsert deja el id remoto en el store local; por defecto
+    // devolvemos el segmento ya con id (42) para que _sendOne pueda propagar
+    // y continuar con los hijos.
+    when(() => mockSegmentoStore.findByClientId(any()))
+        .thenAnswer((_) async => _seg(id: 42, clientId: 'seg-1'));
+    when(() => mockPropagate.propagate(any(), any()))
+        .thenAnswer((_) async {});
+
     controller = ForzarEnvioController(
       mockUseCase,
       mockEngine,
@@ -137,6 +156,8 @@ void main() {
       imagenStore: mockImagenStore,
       videoStore: mockVideoStore,
       mensajeStore: mockMensajeStore,
+      segmentoStore: mockSegmentoStore,
+      propagate: mockPropagate,
     );
     Get.put(controller);
   });
@@ -144,7 +165,7 @@ void main() {
   tearDown(Get.reset);
 
   group('enviarCloud (un segmento)', () {
-    test('(a) drena SOLO los tipos de ese segmento en orden vídeo→foto→mensaje→segmento',
+    test('(a) drena SOLO los tipos de ese segmento en orden segmento→vídeo→foto→mensaje',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
@@ -158,14 +179,16 @@ void main() {
 
       verifyInOrder([
         () => mockEngine.drain(
+            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
+        () => mockEngine.drain(
             entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')),
         () => mockEngine.drain(
             entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')),
         () => mockEngine.drain(
             entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')),
-        () => mockEngine.drain(
-            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
       ]);
+      // El id remoto del segmento se propaga a los hijos ANTES de drenarlos.
+      verify(() => mockPropagate.propagate('seg-1', 42)).called(1);
     });
 
     test('(a2) tipos sin jobs de ese segmento no se drenan', () async {
@@ -221,13 +244,16 @@ void main() {
 
       await controller.enviarCloud(_seg(id: 5, clientId: 'seg-1'));
 
+      // El segmento sí se drena primero (limpio); el authExpired llega al
+      // drenar los vídeos y corta ahí — imagen ya no se drena.
+      verify(() => mockEngine.drain(
+          entityType: 'segmento',
+          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
       verify(() => mockEngine.drain(
           entityType: 'video',
           onlyClientIds: any(named: 'onlyClientIds'))).called(1);
       verifyNever(() => mockEngine.drain(
           entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
-      verifyNever(() => mockEngine.drain(
-          entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')));
       // Invariante: nunca purgar tras authExpired.
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
@@ -239,6 +265,40 @@ void main() {
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
       verify(() => mockPurge.purgeIfFullySynced(any())).called(1);
+    });
+
+    test('(g) si el segmento no sincroniza limpio (rejected>0) no toca hijos ni propaga',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds')))
+          .thenAnswer((_) async => const DrainSummary(rejected: 1));
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verifyNever(() => mockPropagate.propagate(any(), any()));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
+    });
+
+    test('(h) sin id de backend tras el upsert (defensivo) no propaga ni continúa',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockSegmentoStore.findByClientId(any()))
+          .thenAnswer((_) async => _seg(id: null, clientId: 'seg-1'));
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verifyNever(() => mockPropagate.propagate(any(), any()));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+      verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
   });
 

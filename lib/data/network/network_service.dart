@@ -161,10 +161,10 @@ class NetworkService extends GetxService {
   }
 
   /// Sends a raw binary chunk to an active upload session.
-  /// `PATCH /api/enagas/v1/videos/upload/{uploadId}`
+  /// `POST /api/enagas/v1/videos/upload/{uploadId}`
   /// [uploadOffset] = bytes already confirmed on the server.
   /// Returns `200 { offset }` with the new accumulated offset.
-  Future<NetworkResponse<dynamic>> patchVideoChunk({
+  Future<NetworkResponse<dynamic>> postVideoChunk({
     required String uploadId,
     required int uploadOffset,
     required Uint8List bytes,
@@ -172,9 +172,9 @@ class NetworkService extends GetxService {
     final fullUrl = ApiEndpoints.videoUpload(uploadId);
     final path = _videoSigningPath(fullUrl);
     // Timestamp must be fresh on every request (anti-replay ±5 min).
-    final hmacHeaders = ApiSecurityService.buildHmacHeaders('PATCH', path);
+    final hmacHeaders = ApiSecurityService.buildHmacHeaders('POST', path);
     try {
-      final resp = await _videoDio.patch<dynamic>(
+      final resp = await _videoDio.post<dynamic>(
         fullUrl,
         data: bytes,
         options: Options(

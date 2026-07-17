@@ -220,6 +220,22 @@ class VideoLocalStore implements LocalStore<VideoSegmentoEntity> {
     );
   }
 
+  /// Estampa el id remoto del segmento en todos los vídeos hijos enlazados
+  /// por `segmento_client_id`. Se usa cuando un segmento nuevo obtiene su id
+  /// de backend, para que sus vídeos suban ya vinculados.
+  Future<void> setSegmentoRemoteId(
+    String segmentoClientId,
+    int backendId, {
+    DatabaseExecutor? txn,
+  }) async {
+    await (txn ?? _db).update(
+      _table,
+      {'segmento_id': backendId},
+      where: 'segmento_client_id = ?',
+      whereArgs: [segmentoClientId],
+    );
+  }
+
   /// Persists the server-assigned [uploadId] for the upload session of the
   /// video identified by [clientId]. Called immediately after a successful
   /// `initVideoUpload` so the session can be resumed across app restarts.

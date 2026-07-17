@@ -19,7 +19,7 @@ import 'video_local_store.dart';
 /// 1. **Init** — `POST /api/enagas/v1/videos/upload` → `uploadId`.
 ///    Persists [uploadId] to [VideoLocalStore] immediately so the session
 ///    survives an app restart.
-/// 2. **Chunks** — `PATCH /api/enagas/v1/videos/upload/{uploadId}` with
+/// 2. **Chunks** — `POST /api/enagas/v1/videos/upload/{uploadId}` with
 ///    `Upload-Offset` header and raw binary body (5 MB default).
 ///    Per-chunk intra-adapter retry (max 3 attempts, retryable errors only).
 ///    Server offset re-confirmed via GET status before each retry.
@@ -141,7 +141,7 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
             if (chunkDone) break;
 
             try {
-              final resp = await _network.patchVideoChunk(
+              final resp = await _network.postVideoChunk(
                 uploadId: uploadId,
                 uploadOffset: offset,
                 bytes: chunkBytes,
@@ -164,10 +164,12 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
       }
 
       // ── Step 3: Complete ────────────────────────────────────────────────
-      await _network.completeVideoUpload(uploadId);
+      final completeResp = await _network.completeVideoUpload(uploadId);
+      final videoRecordId = extractRemoteIntId(_asMap(completeResp.data));
 
       // ── Step 4: Return success ──────────────────────────────────────────
-      return _buildSuccess(entity, uploadId, totalBytes);
+      return _buildSuccess(entity, uploadId, totalBytes,
+          videoRecordId: videoRecordId);
     } on NetworkError catch (e) {
       return _mapNetworkError(e);
     }
@@ -185,11 +187,12 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
     required int userId,
   }) async {
     final resp = await _network.initVideoUpload({
-      'original_filename': entity.filename,
-      'total_bytes': totalBytes,
-      'mime_type': mimeType,
-      'client_id': entity.clientId,
-      'segmento_id': entity.segmentoId,
+      'id': entity.id ?? 0,
+      'originalFilename': entity.filename,
+      'totalBytes': totalBytes,
+      'mimeType': mimeType,
+      'clientId': entity.clientId,
+      'segmentoId': entity.segmentoId,
       'usuariologged': usuario,
       'idusuariologged': userId,
     });
@@ -219,15 +222,17 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
   SyncSuccess<VideoSegmentoEntity> _buildSuccess(
     VideoSegmentoEntity entity,
     String uploadId,
-    int totalBytes,
-  ) {
+    int totalBytes, {
+    int? videoRecordId,
+  }) {
     final result = entity.copyWith(
       url: ApiEndpoints.videoDownload(uploadId),
       subidaAt: DateTime.now(),
       uploadOffset: 0,
     )..uploadId = uploadId;
+    if (videoRecordId != null) result.id = videoRecordId;
     return SyncSuccess<VideoSegmentoEntity>(
-      remoteId: uploadId,
+      remoteId: videoRecordId?.toString() ?? uploadId,
       serverVersion: result,
     );
   }

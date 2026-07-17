@@ -40,6 +40,7 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
       final userId = prefs.getInt('user_id') ?? 0;
 
       final body = <String, dynamic>{
+        'id': entity.id ?? 0,
         'client_id': entity.clientId,
         'segmento_id': entity.segmentoId,
         'usuariologged': usuario,

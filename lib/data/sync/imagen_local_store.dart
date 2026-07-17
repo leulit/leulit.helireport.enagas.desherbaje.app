@@ -206,4 +206,20 @@ class ImagenLocalStore implements LocalStore<ImagenSegmentoEntity> {
       whereArgs: [clientId],
     );
   }
+
+  /// Estampa el id remoto del segmento en todas las imágenes hijas
+  /// enlazadas por `segmento_client_id`. Se usa cuando un segmento nuevo
+  /// obtiene su id de backend, para que sus imágenes suban ya vinculadas.
+  Future<void> setSegmentoRemoteId(
+    String segmentoClientId,
+    int backendId, {
+    DatabaseExecutor? txn,
+  }) async {
+    await (txn ?? _db).update(
+      _table,
+      {'segmento_id': backendId},
+      where: 'segmento_client_id = ?',
+      whereArgs: [segmentoClientId],
+    );
+  }
 }

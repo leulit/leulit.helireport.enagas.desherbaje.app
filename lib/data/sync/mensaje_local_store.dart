@@ -137,6 +137,22 @@ class MensajeLocalStore implements LocalStore<MensajeSegmentoEntity> {
     );
   }
 
+  /// Estampa el id remoto del segmento en todos los mensajes hijos enlazados
+  /// por `segmento_client_id`. Se usa cuando un segmento nuevo obtiene su id
+  /// de backend, para que sus mensajes suban ya vinculados.
+  Future<void> setSegmentoRemoteId(
+    String segmentoClientId,
+    int backendId, {
+    DatabaseExecutor? txn,
+  }) async {
+    await (txn ?? _db).update(
+      _table,
+      {'segmento_id': backendId},
+      where: 'segmento_client_id = ?',
+      whereArgs: [segmentoClientId],
+    );
+  }
+
   /// Returns local mensajes for a given segmento by its remote id (legacy).
   Future<List<MensajeSegmentoEntity>> findBySegmento(int segmentoId) =>
       findWhere('segmento_id', segmentoId);

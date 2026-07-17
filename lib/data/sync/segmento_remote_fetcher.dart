@@ -12,14 +12,18 @@ import '../network/network_error.dart';
 import '../network/network_service.dart';
 import 'adapter_support.dart';
 
-/// [RemoteFetcher] for [SegmentoEntity]. Pulls the full set of segmentos
-/// assigned to the authenticated operator's CTs from the backend.
+/// [RemoteFetcher] for [SegmentoEntity]. Pulls the contractor download set
+/// (segmentos en estado `propuesta` + `validada`) for the authenticated
+/// operator's CTs, enriched with `imagenes[]`/`mensajes[]` (vídeos incluidos
+/// como filas de `imagenes[]` con `mime_type` `video/*`), cada hijo con su
+/// `client_id` para dedup local↔nube.
 ///
-/// The endpoint `GET /segmentos/bycts/{cts}` keys on CT **names**
-/// (`ct-burgos,ct-plasencia,…`), URL-encoded and comma-separated — NOT on
-/// ctids. Names are read from the persisted user (`user_json`, field
-/// `UserCt.ct`). The flat `user_cts` list holds ctids and is reserved for the
-/// local read/grouping path; it must not be sent to this endpoint.
+/// The endpoint `GET /segmentos/contratista?cts=…` keys on CT **names**
+/// (`ct-burgos,ct-plasencia,…`), URL-encoded and comma-separated in the
+/// querystring — NOT on ctids. Names are read from the persisted user
+/// (`user_json`, field `UserCt.ct`). The flat `user_cts` list holds ctids and
+/// is reserved for the local read/grouping path; it must not be sent here.
+/// La firma HMAC del interceptor incluye el querystring (§9 del contrato).
 ///
 /// If no CTs are available, returns an empty list (caller will see "nothing
 /// to import").
@@ -45,7 +49,7 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
 
     try {
       final response = await _network.get(
-        ApiEndpoints.segmentosByCt(cts),
+        ApiEndpoints.segmentosContratista(cts),
         headers: await bearerAuthHeader(_storage),
       );
       final raw = response.data as List? ?? const [];

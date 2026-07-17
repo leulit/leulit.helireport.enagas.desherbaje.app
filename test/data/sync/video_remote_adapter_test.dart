@@ -76,7 +76,7 @@ class _FakeNetworkService extends NetworkService {
   }
 
   @override
-  Future<NetworkResponse<dynamic>> patchVideoChunk({
+  Future<NetworkResponse<dynamic>> postVideoChunk({
     required String uploadId,
     required int uploadOffset,
     required Uint8List bytes,
@@ -237,11 +237,11 @@ void main() {
       await adapter.push(entity: entity, operation: SyncOperation.create);
 
       final body = network.capturedInitBodies.first;
-      expect(body['original_filename'], equals('clip.mp4'));
-      expect(body['mime_type'], equals('video/mp4'));
-      expect(body['client_id'], equals('test-cid'));
-      expect(body['segmento_id'], equals(5));
-      expect(body['total_bytes'], equals(10));
+      expect(body['originalFilename'], equals('clip.mp4'));
+      expect(body['mimeType'], equals('video/mp4'));
+      expect(body['clientId'], equals('test-cid'));
+      expect(body['segmentoId'], equals(5));
+      expect(body['totalBytes'], equals(10));
     });
 
     test('returns SyncSuccess with remoteId = uploadId', () async {

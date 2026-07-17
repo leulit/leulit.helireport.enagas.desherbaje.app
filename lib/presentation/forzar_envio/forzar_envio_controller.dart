@@ -9,7 +9,9 @@ import '../../core/sync/engine/sync_engine.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../../data/sync/imagen_local_store.dart';
 import '../../data/sync/mensaje_local_store.dart';
+import '../../data/sync/propagate_segmento_remote_id_usecase.dart';
 import '../../data/sync/purge_synced_segmento_usecase.dart';
+import '../../data/sync/segmento_local_store.dart';
 import '../../data/sync/video_local_store.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
@@ -30,11 +32,15 @@ class ForzarEnvioController extends MyGetxController {
     ImagenLocalStore? imagenStore,
     VideoLocalStore? videoStore,
     MensajeLocalStore? mensajeStore,
+    PropagateSegmentoRemoteIdUseCase? propagate,
+    SegmentoLocalStore? segmentoStore,
   })  : _authRepo = authRepository ?? AuthRepositoryImpl(),
         _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase(),
         _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
         _videoStore = videoStore ?? DI.get<VideoLocalStore>(),
-        _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>();
+        _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>(),
+        _propagate = propagate ?? PropagateSegmentoRemoteIdUseCase(),
+        _segmentoStore = segmentoStore ?? DI.get<SegmentoLocalStore>();
 
   final GetSegmentosUseCase _useCase;
   final SyncEngine _engine;
@@ -44,6 +50,8 @@ class ForzarEnvioController extends MyGetxController {
   final ImagenLocalStore _imagenStore;
   final VideoLocalStore _videoStore;
   final MensajeLocalStore _mensajeStore;
+  final PropagateSegmentoRemoteIdUseCase _propagate;
+  final SegmentoLocalStore _segmentoStore;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -153,10 +161,37 @@ class ForzarEnvioController extends MyGetxController {
 
   /// Envía a la nube todo el contenido de un segmento y, si todo queda
   /// sincronizado, dispara `sync-complete` + purga local (dentro de
-  /// [PurgeSyncedSegmentoUseCase.purgeIfFullySynced]). Orden: vídeos → fotos →
-  /// mensajes → datos del segmento; solo los jobs de ESE segmento. Un fallo
-  /// deja el segmento pendiente sin tocar a los demás.
+  /// [PurgeSyncedSegmentoUseCase.purgeIfFullySynced]).
+  ///
+  /// Orden: PRIMERO el segmento (upsert), para obtener/confirmar su id de
+  /// backend; ese id se propaga a las filas hijas locales (imagen/video/
+  /// mensaje, vía [PropagateSegmentoRemoteIdUseCase]) ANTES de drenarlas —
+  /// si el segmento es nuevo, sus hijos aún llevan `segmento_id` a 0/null y
+  /// subirían sin vínculo si se enviaran antes. Después: vídeos → fotos →
+  /// mensajes. Solo los jobs de ESE segmento. Un fallo del segmento aborta
+  /// sin tocar los hijos; un fallo de un hijo deja el segmento pendiente sin
+  /// tocar a los demás segmentos.
   Future<DrainSummary> _sendOne(SegmentoEntity s) async {
+    AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "segmento"...');
+    final segSummary =
+        await _engine.drain(entityType: 'segmento', onlyClientIds: {s.clientId});
+
+    if (segSummary.authExpired ||
+        segSummary.rejected > 0 ||
+        segSummary.retryable > 0 ||
+        segSummary.conflicts > 0) {
+      return segSummary; // el segmento no sincronizó limpio: no tocar hijos
+    }
+
+    final fresh = await _segmentoStore.findByClientId(s.clientId);
+    final backendId = fresh?.id;
+    if (backendId == null) {
+      // Defensivo: el upsert no devolvió id pese a no reportar fallo.
+      return segSummary;
+    }
+
+    await _propagate.propagate(s.clientId, backendId);
+
     final videoIds = (await _videoStore.findWhere('segmento_client_id', s.clientId))
         .map((e) => e.clientId)
         .toSet();
@@ -171,10 +206,9 @@ class ForzarEnvioController extends MyGetxController {
       ('video', videoIds),
       ('imagen', imagenIds),
       ('mensaje', mensajeIds),
-      ('segmento', {s.clientId}),
     ];
 
-    var combined = const DrainSummary();
+    var combined = segSummary;
     for (final (entityType, ids) in scopes) {
       if (ids.isEmpty) continue; // nada de este tipo para este segmento
       AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "$entityType"...');
