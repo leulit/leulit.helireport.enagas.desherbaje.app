@@ -259,4 +259,27 @@ class VideoLocalStore implements LocalStore<VideoSegmentoEntity> {
       whereArgs: [clientId],
     );
   }
+
+  /// Descarta la sesión de subida (`upload_id` + `upload_offset`) de TODOS los
+  /// vídeos del segmento [segmentoClientId].
+  ///
+  /// Una sesión de subida pertenece a UN intento de envío del sobre. Al
+  /// entregarse un `upsert` nuevo, el backend anula el intento anterior y borra
+  /// sus filas y ficheros `pending` (§2 regla 2): la sesión guardada apunta a
+  /// bytes que ya no existen en el servidor. Si no se descarta, el adapter
+  /// reanudaría contra ella, leería `complete: true` y reportaría éxito sin
+  /// subir nada — y el `sync-complete` posterior purgaría el vídeo local, que
+  /// desaparecería de todas partes. Limpia la sesión y el adapter hace `init`
+  /// nuevo y resube los bytes.
+  Future<void> clearUploadSessions(
+    String segmentoClientId, {
+    DatabaseExecutor? txn,
+  }) async {
+    await (txn ?? _db).update(
+      _table,
+      {'upload_id': null, 'upload_offset': 0},
+      where: 'segmento_client_id = ?',
+      whereArgs: [segmentoClientId],
+    );
+  }
 }

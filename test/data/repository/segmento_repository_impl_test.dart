@@ -22,7 +22,7 @@ class _MockSegmentoLocalStore extends Mock implements SegmentoLocalStore {}
 // ---------------------------------------------------------------------------
 
 SegmentoEntity _makeSegmento({int? id}) {
-  final s = SegmentoEntity(id, 1, TipoInstalacion.lineal, []);
+  final s = SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, []);
   s.estado = EstadoActividad.ejecucion;
   s.tipoActividad = TipoActividad.desherbajeSelectivo;
   s.descripcion = 'test';

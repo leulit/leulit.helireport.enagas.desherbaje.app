@@ -33,6 +33,7 @@ enum ImagenSegmentoFieldNames {
   ruta('ruta'),
   url('url'),
   mimeType('mime_type'),
+  status('status'),
   tamanyoBytes('tamanyo_bytes'),
   gisJson('gis_json'),
   capturadaAt('capturada_at'),
@@ -84,6 +85,14 @@ class ImagenSegmentoEntity implements Syncable {
   String ruta;
   String? url;
   String mimeType = 'image/jpeg';
+
+  /// Estado de conversión en servidor. **Solo aplica a vídeos**: es `null` en
+  /// fotos y en cualquier captura que aún no ha subido. Valores del backend:
+  /// `iniciado` | `recibido` | `convirtiendo` | `disponible` | `error`.
+  /// Hasta `disponible` la URL de media devuelve 404 — hay que mirarlo antes
+  /// de reproducir (ver [isMediaDisponible] / [isMediaProcesando]).
+  String? status;
+
   int? tamanyoBytes;
 
   /// GeoJSON FeatureCollection con la geolocalización de la captura (posición,
@@ -98,6 +107,18 @@ class ImagenSegmentoEntity implements Syncable {
   bool get isSubida => subidaAt != null;
   bool get isAntes => tipoFoto == TipoFoto.antes;
   bool get isDespues => tipoFoto == TipoFoto.despues;
+
+  /// `status == null` cubre fotos, capturas locales y filas legacy: no hay
+  /// conversión que esperar, la media es servible tal cual.
+  bool get isMediaDisponible => status == null || status == 'disponible';
+
+  /// La conversión falló. El motivo solo existe en el log del servidor.
+  bool get isMediaError => status == 'error';
+
+  /// Estado no terminal — `iniciado`, `recibido`, `convirtiendo` o cualquier
+  /// valor futuro que el backend añada. Se asume no servible: abrir el
+  /// reproductor daría 404.
+  bool get isMediaProcesando => !isMediaDisponible && !isMediaError;
 
   String get tamanyoLegible {
     final bytes = tamanyoBytes;
@@ -154,6 +175,8 @@ class ImagenSegmentoEntity implements Syncable {
         json, ImagenSegmentoFieldNames.url.value, null);
     entity.mimeType = readJsonDataUtil<String>(
         json, ImagenSegmentoFieldNames.mimeType.value, 'image/jpeg');
+    entity.status = readJsonDataUtil<String?>(
+        json, ImagenSegmentoFieldNames.status.value, null);
     entity.tamanyoBytes = readJsonDataUtil<int?>(
         json, ImagenSegmentoFieldNames.tamanyoBytes.value, null);
     entity.gisJson = readJsonDataUtil<String?>(
@@ -196,6 +219,10 @@ class ImagenSegmentoEntity implements Syncable {
         ImagenSegmentoFieldNames.ruta.value: ruta,
         ImagenSegmentoFieldNames.url.value: url,
         ImagenSegmentoFieldNames.mimeType.value: mimeType,
+        // Va en `toJson` porque el segmento serializa sus `imagenes[]` con él
+        // para persistirlas en `imagenes_json`: sin esto, el estado de
+        // conversión de un vídeo de nube se perdería al reabrir la app.
+        ImagenSegmentoFieldNames.status.value: status,
         ImagenSegmentoFieldNames.tamanyoBytes.value: tamanyoBytes,
         ImagenSegmentoFieldNames.gisJson.value: gisJson,
         ImagenSegmentoFieldNames.capturadaAt.value:
@@ -208,6 +235,10 @@ class ImagenSegmentoEntity implements Syncable {
 
   /// Mapa para la tabla local `imagenes_segmento`. Coincide con `toJson` y
   /// añade los campos de control de sincronía (`synced_at`, `needs_sync`).
+  ///
+  /// `status` NO se incluye: la tabla no tiene esa columna y este store es
+  /// push-only (solo guarda capturas locales, que nunca están en conversión).
+  /// El estado de los vídeos de nube viaja en `imagenes_json` del segmento.
   Map<String, Object?> toMap({bool needsSync = true}) => {
         ImagenSegmentoFieldNames.id.value: id,
         ImagenSegmentoFieldNames.clientId.value: clientId,
@@ -313,6 +344,7 @@ class ImagenSegmentoEntity implements Syncable {
     e.subidaPor = subidaPor ?? this.subidaPor;
     e.createdAt = createdAt;
     e.updatedAtRemote = updatedAtRemote;
+    e.status = status;
     return e;
   }
 

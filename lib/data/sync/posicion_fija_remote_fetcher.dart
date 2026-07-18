@@ -1,16 +1,14 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
-import '../../core/sync/contracts/auth_expired_exception.dart';
+import '../../core/app_log.dart';
 import '../../core/sync/contracts/remote_fetcher.dart';
 import '../../domain/entities/posicion_fija_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
-import 'adapter_support.dart';
 
 /// [RemoteFetcher] for [PosicionFijaEntity]. Pulls the full set of posiciones
 /// fijas assigned to the authenticated operator's CTs from the backend.
@@ -26,12 +24,8 @@ class PosicionFijaRemoteFetcher implements RemoteFetcher<PosicionFijaEntity> {
   static const _userJsonKey = 'user_json';
 
   final NetworkService _network;
-  final FlutterSecureStorage _storage;
 
-  PosicionFijaRemoteFetcher(
-    this._network, {
-    FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage();
+  PosicionFijaRemoteFetcher(this._network);
 
   @override
   Future<List<PosicionFijaEntity>> pullAll() async {
@@ -43,9 +37,10 @@ class PosicionFijaRemoteFetcher implements RemoteFetcher<PosicionFijaEntity> {
     final cts = names.map(Uri.encodeComponent).join(',');
 
     try {
+      // Sin cabecera de Bearer: esta API no tiene token de sesión, el HMAC del
+      // interceptor es la única autenticación (§1).
       final response = await _network.get(
         ApiEndpoints.posicionesFijasByCts(cts),
-        headers: await bearerAuthHeader(_storage),
       );
       final raw = response.data as List? ?? const [];
       return raw
@@ -53,8 +48,15 @@ class PosicionFijaRemoteFetcher implements RemoteFetcher<PosicionFijaEntity> {
           .map((m) => PosicionFijaEntity.fromJson(m.cast<String, dynamic>()))
           .toList();
     } on NetworkError catch (err) {
-      if (err.statusCode == 401) {
-        throw AuthExpiredException(err.message);
+      // 401/403 = firma HMAC rechazada, nunca sesión caducada (§1 del
+      // contrato). Se relanza para que el pull acabe en PullOutcome.error;
+      // deslogar al operador por un desfase de reloj sería destructivo.
+      if (err.category == NetworkErrorCategory.unauthorized) {
+        AppLog.e(
+          'HMAC signature rejected (HTTP ${err.statusCode}) on '
+          'GET /incidencias/posicionesfijasbycts — check HMAC_SECRET and '
+          'device clock (signature window is ±5 min): ${err.message}',
+        );
       }
       rethrow;
     }

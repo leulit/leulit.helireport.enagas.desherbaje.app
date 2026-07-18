@@ -12,6 +12,11 @@ import '../../core/app_theme.dart';
 /// [VideoPlayerPage.network] con [url]).
 class VideoPlayerPage extends StatefulWidget {
   final String? path;
+
+  /// URL de reproducción **ya firmada** por
+  /// `ApiSecurityService.buildSignedMediaUrl`: la media nunca se sirve sin
+  /// credencial. Va firmada en la query, no en cabeceras, porque el
+  /// reproductor la fija una vez y la reusa en cada seek.
   final String? url;
   const VideoPlayerPage({super.key, required this.path}) : url = null;
   const VideoPlayerPage.network(this.url, {super.key}) : path = null;
@@ -28,10 +33,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   @override
   void initState() {
     super.initState();
-    // Network playback assumes the media url is directly fetchable like image
-    // urls (no HMAC). If the backend serves it behind the signed
-    // /videos/download endpoint this will need signed headers — documented
-    // follow-up.
     final url = widget.url;
     _controller = url != null
         ? VideoPlayerController.networkUrl(Uri.parse(url))

@@ -7,10 +7,8 @@
 //  4. atomic rollback when a mid-cascade delete throws;
 //  5. batch purge purges only the fully-synced segment;
 //  6. the pure isFullySynced predicate.
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:helireport_desherbaje/core/sync/contracts/sync_job.dart';
@@ -28,8 +26,6 @@ import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/video_segmento_entity.dart';
 
 class _MockNetwork extends Mock implements NetworkService {}
-
-class _MockSecureStorage extends Mock implements FlutterSecureStorage {}
 
 const _syncQueueDdl = '''
   CREATE TABLE sync_queue (
@@ -62,7 +58,8 @@ class _ThrowingMensajeStore extends MensajeLocalStore {
 }
 
 SegmentoEntity _seg({required String clientId, int? id}) {
-  final s = SegmentoEntity(id, 1, TipoInstalacion.lineal, [], clientId: clientId);
+  final s =
+      SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, [], clientId: clientId);
   s.estado = EstadoActividad.finalizada;
   s.descripcion = 'seg $clientId';
   return s;
@@ -123,7 +120,6 @@ void main() {
   late OutboxQueue outbox;
   late List<String> deletedPaths;
   late _MockNetwork network;
-  late _MockSecureStorage storage;
 
   Future<void> seedJob(
     String entityType,
@@ -163,7 +159,6 @@ void main() {
         outbox: outbox,
         deleteFile: (p) async => deletedPaths.add(p),
         network: network,
-        secureStorage: storage,
       );
 
   setUp(() async {
@@ -176,7 +171,7 @@ void main() {
     imgStore = ImagenLocalStore(db);
     vidStore = VideoLocalStore(db);
     msgStore = MensajeLocalStore(db);
-    await segStore.migrate(db, 0, 1);
+    await segStore.migrate(db, 0, 2);
     await imgStore.migrate(db, 0, 3);
     await vidStore.migrate(db, 0, 3);
     await msgStore.migrate(db, 0, msgStore.schemaVersion);
@@ -184,14 +179,8 @@ void main() {
     outbox = OutboxQueue(db);
     deletedPaths = <String>[];
 
-    // Identidad del operario para el body de sync-complete.
-    SharedPreferences.setMockInitialValues(
-        {'user_usuario': 'operario', 'user_id': 45});
-
-    // sync-complete succeeds by default; no bearer token needed.
+    // sync-complete succeeds by default.
     network = _MockNetwork();
-    storage = _MockSecureStorage();
-    when(() => storage.read(key: any(named: 'key'))).thenAnswer((_) async => null);
     when(() => network.post(
           any(),
           body: any(named: 'body'),
@@ -255,15 +244,13 @@ void main() {
       final captured = verify(() => network.post(
             captureAny(),
             body: captureAny(named: 'body'),
-            headers: any(named: 'headers'),
+            headers: captureAny(named: 'headers'),
           )).captured;
       expect(captured[0] as String, contains('/segmentos/42/sync-complete'));
-      expect(captured[1], {
-        'client_id': 'seg-1',
-        'segmento_id': 42,
-        'usuariologged': 'operario',
-        'idusuariologged': 45,
-      });
+      // §7: sin body — el id viaja en el path. §1: el HMAC es la única auth,
+      // no hay Bearer.
+      expect(captured[1], isNull);
+      expect(captured[2], isNull);
     });
 
     test('sync-complete failure → finalizeFailed, nothing deleted', () async {
@@ -468,7 +455,6 @@ void main() {
         mensajeStore: msgStore,
         outbox: outbox,
         network: network,
-        secureStorage: storage,
         deleteFile: (p) async {
           if (injected) return;
           injected = true;

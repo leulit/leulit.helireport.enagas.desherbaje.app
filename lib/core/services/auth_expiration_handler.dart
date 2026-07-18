@@ -11,8 +11,18 @@ import '../sync/sync.dart';
 /// 2. Navigates to the login screen, removing the back stack.
 /// 3. Notifies the user that their session expired.
 ///
-/// Lives as a singleton service registered at startup so the listener is
-/// active before any sync attempt can fail with 401.
+/// **Hoy este handler es inalcanzable**: nada en `lib/` lanza ya
+/// [AuthExpiredException] (solo lo hacen los tests del motor de sync). Sigue
+/// registrado al arranque, pero no se dispara nunca.
+///
+/// **No lo recableéis a un 401.** Esta API no tiene sesión ni Bearer: la firma
+/// HMAC es la única autenticación (§1 del contrato), así que un 401 es SIEMPRE
+/// un fallo de firma (secreto erróneo, reloj desfasado >5 min, path mal
+/// firmado) y JAMÁS caducidad de sesión. Enganchar esto a un 401 desloguearía
+/// al operador en campo por un desfase de reloj, que es justo lo que el
+/// contrato prohíbe: los 401 se mapean a `SyncUnrecoverable` en
+/// `syncOutcomeFromNetworkError`. Cualquier uso futuro de esta máquina exige un
+/// disparador que sea de verdad expiración de sesión.
 class AuthExpirationHandler extends GetxService {
   String? _handlerId;
   bool _handling = false;

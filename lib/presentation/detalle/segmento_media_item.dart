@@ -7,18 +7,30 @@ import '../../domain/entities/video_segmento_entity.dart';
 /// shown in the Antes/Despues carousel. Collapses the three backing sources —
 /// cloud imagen, cloud video (both ImagenSegmentoEntity), and local video
 /// (VideoSegmentoEntity) — onto ONE type. The widget branches only on [isVideo]
-/// and on which of [localPath]/[remoteUrl] is present; it never inspects the
+/// and on which of [localPath]/[remoteId] is present; it never inspects the
 /// backing entity type.
 @immutable
 class SegmentoMediaItem {
   final TipoFoto tipo;
   final bool isVideo;
-  final String? remoteUrl; // raw imagen/video url (may be relative); null if none
+
+  /// Id remoto de la fila `imagenes_segmento`. Es lo único que hace falta para
+  /// pedir la media: la url que sirve el backend es siempre
+  /// `/segmentos/thumbdb/{id}/0/0`, pura derivación de este id. Null mientras
+  /// la captura solo existe en local.
+  final int? remoteId;
   final String? localPath; // local file path (ruta); null/empty if cloud-only
   final String filename;
   final String clientId;
   final DateTime capturadaAt;
   final bool isSubida;
+
+  /// Proyección del `status` de conversión del servidor, que solo traen los
+  /// vídeos de nube. Las fotos y los vídeos locales no esperan a nadie, de ahí
+  /// los defaults. La regla vive en [ImagenSegmentoEntity]; aquí solo llega ya
+  /// resuelta.
+  final bool isMediaDisponible;
+  final bool isMediaError;
   final String? gisJson; // raw GeoJSON de la captura (posición/rumbo o traza)
   final VoidCallback? onDelete; // null => not deletable (cloud or already uploaded)
 
@@ -29,11 +41,16 @@ class SegmentoMediaItem {
     required this.clientId,
     required this.capturadaAt,
     required this.isSubida,
-    this.remoteUrl,
+    this.remoteId,
     this.localPath,
+    this.isMediaDisponible = true,
+    this.isMediaError = false,
     this.gisJson,
     this.onDelete,
   });
+
+  /// El servidor aún está convirtiendo: la url de media daría 404.
+  bool get isMediaProcesando => !isMediaDisponible && !isMediaError;
 
   factory SegmentoMediaItem.imagen(ImagenSegmentoEntity i, {VoidCallback? onDelete}) =>
       SegmentoMediaItem(
@@ -43,7 +60,7 @@ class SegmentoMediaItem {
         clientId: i.clientId,
         capturadaAt: i.capturadaAt,
         isSubida: i.isSubida,
-        remoteUrl: (i.url != null && i.url!.isNotEmpty) ? i.url : null,
+        remoteId: i.id,
         localPath: i.ruta.isNotEmpty ? i.ruta : null,
         gisJson: i.gisJson,
         onDelete: onDelete,
@@ -58,8 +75,10 @@ class SegmentoMediaItem {
         clientId: i.clientId,
         capturadaAt: i.capturadaAt,
         isSubida: true,
-        remoteUrl: (i.url != null && i.url!.isNotEmpty) ? i.url : null,
+        remoteId: i.id,
         localPath: i.ruta.isNotEmpty ? i.ruta : null,
+        isMediaDisponible: i.isMediaDisponible,
+        isMediaError: i.isMediaError,
         gisJson: i.gisJson,
         onDelete: null,
       );
@@ -73,7 +92,7 @@ class SegmentoMediaItem {
       clientId: v.clientId,
       capturadaAt: v.capturadaAt,
       isSubida: v.isSubida,
-      remoteUrl: (v.url != null && v.url!.isNotEmpty) ? v.url : null,
+      remoteId: v.id,
       localPath: v.ruta.isNotEmpty ? v.ruta : null,
       gisJson: v.gisJson,
       onDelete: onDelete,

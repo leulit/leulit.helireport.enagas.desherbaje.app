@@ -226,7 +226,7 @@ class AppDI {
   }
 
   static Map<String, String> _formatSegmentoForDisplay(SegmentoEntity s) => {
-        'CT': s.ctId.toString(),
+        'CT': s.ctname,
         'Nombre': s.nombre ?? '—',
         'Traza': s.traza ?? '—',
         'Estado': s.estado.etiqueta,

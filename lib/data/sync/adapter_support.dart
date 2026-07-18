@@ -1,21 +1,12 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 /// Shared helpers for remote adapters and fetchers.
 ///
 /// Lives in `data/sync` (not `core/sync`) because it depends on
-/// [FlutterSecureStorage] and on Enagas-specific response shapes — keeping
-/// the generic motor in `core/sync` free from those dependencies.
-
-/// Reads the bearer token stored under [key] and returns the Authorization
-/// header map, or `null` when no token is stored.
-Future<Map<String, String>?> bearerAuthHeader(
-  FlutterSecureStorage storage, {
-  String key = 'auth_token',
-}) async {
-  final token = await storage.read(key: key);
-  if (token == null) return null;
-  return {'Authorization': 'Bearer $token'};
-}
+/// Enagas-specific response shapes — keeping the generic motor in `core/sync`
+/// free from those dependencies.
+///
+/// No hay helper de autenticación aquí a propósito: esta API no tiene token de
+/// sesión ni Bearer, el HMAC del interceptor es la única autenticación (§1).
+library;
 
 /// Scans [payload] for the first key in [keys] whose value is numeric
 /// (int, num, or a parseable String) and returns it as an [int].

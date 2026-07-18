@@ -1,5 +1,3 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
@@ -14,12 +12,8 @@ import 'adapter_support.dart';
 /// `batch_client_id` per the backend sync contract.
 class PositionBatchRemoteAdapter extends RemoteAdapter<PositionBatchEntity> {
   final NetworkService _network;
-  final FlutterSecureStorage _storage;
 
-  PositionBatchRemoteAdapter(
-    this._network, {
-    FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage();
+  PositionBatchRemoteAdapter(this._network);
 
   @override
   Future<SyncOutcome<PositionBatchEntity>> push({
@@ -38,10 +32,11 @@ class PositionBatchRemoteAdapter extends RemoteAdapter<PositionBatchEntity> {
     }
 
     try {
+      // Sin cabecera de Bearer: esta API no tiene token de sesión, el HMAC del
+      // interceptor es la única autenticación (§1).
       final response = await _network.post(
         ApiEndpoints.positionsBatch,
         body: entity.toJson(),
-        headers: await bearerAuthHeader(_storage),
       );
       if (!response.isSuccess) {
         return SyncUnrecoverable<PositionBatchEntity>(

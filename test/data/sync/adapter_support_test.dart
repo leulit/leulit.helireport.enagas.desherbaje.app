@@ -1,12 +1,8 @@
 // Tests for adapter_support.dart — extractRemoteIntId, parseRemoteId,
-// bearerAuthHeader.
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+// bodyIndicatesError, bodyErrorMessage.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 
 import 'package:helireport_desherbaje/data/sync/adapter_support.dart';
-
-class _MockSecureStorage extends Mock implements FlutterSecureStorage {}
 
 void main() {
   // ─── extractRemoteIntId ────────────────────────────────────────────────────
@@ -81,40 +77,6 @@ void main() {
 
     test('empty string returns null', () {
       expect(parseRemoteId(''), isNull);
-    });
-  });
-
-  // ─── bearerAuthHeader ──────────────────────────────────────────────────────
-
-  group('bearerAuthHeader', () {
-    late _MockSecureStorage storage;
-
-    setUp(() {
-      storage = _MockSecureStorage();
-    });
-
-    test('returns null when no token is stored', () async {
-      when(() => storage.read(key: 'auth_token')).thenAnswer((_) async => null);
-
-      final result = await bearerAuthHeader(storage);
-      expect(result, isNull);
-    });
-
-    test('returns Authorization header when token is stored', () async {
-      when(() => storage.read(key: 'auth_token'))
-          .thenAnswer((_) async => 'my-test-token');
-
-      final result = await bearerAuthHeader(storage);
-      expect(result, isNotNull);
-      expect(result!['Authorization'], equals('Bearer my-test-token'));
-    });
-
-    test('respects custom key param', () async {
-      when(() => storage.read(key: 'custom_key'))
-          .thenAnswer((_) async => 'custom-token');
-
-      final result = await bearerAuthHeader(storage, key: 'custom_key');
-      expect(result!['Authorization'], equals('Bearer custom-token'));
     });
   });
 

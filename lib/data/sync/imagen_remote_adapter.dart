@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
@@ -19,27 +18,26 @@ import 'adapter_support.dart';
 /// Uploads to the segmento-scoped contract endpoint
 /// [ApiEndpoints.segmentoImagenes]:
 /// - endpoint: `POST /api/enagas/v1/segmentos/{id}/imagenes`
-/// - bearer token read from `flutter_secure_storage` under `auth_token`
-/// - fields: `clientId`, `tipoFoto`, `capturada_at`, `subida_por`
+/// - fields: `tipoFoto`, `capturada_at`, `subida_por`
 /// - file attached under the field name `file`
+///
+/// Sin `Authorization`: esta API no tiene Bearer, la firma HMAC del
+/// interceptor es la única autenticación (§1 del contrato).
 ///
 /// Only [SyncOperation.create] is supported — the backend assigns the remote
 /// id on upload. Updates and deletes return [SyncUnrecoverable] so the outbox
 /// can mark the job dead and surface it to the user.
 class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
   static const String _fileFieldName = 'file';
-  static const String _prefsUsuarioKey = 'user_usuario';
+  static const String _prefsUserIdKey = 'user_id';
 
   final NetworkService _network;
   final File Function(String path) _fileFactory;
-  final FlutterSecureStorage _secureStorage;
 
   ImagenRemoteAdapter(
     this._network, {
     File Function(String path) fileFactory = File.new,
-    FlutterSecureStorage secureStorage = const FlutterSecureStorage(),
-  })  : _fileFactory = fileFactory,
-        _secureStorage = secureStorage;
+  }) : _fileFactory = fileFactory;
 
   @override
   Future<SyncOutcome<ImagenSegmentoEntity>> push({
@@ -54,7 +52,8 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final usuario = prefs.getString(_prefsUsuarioKey) ?? '';
+      // `subida_por` es un id de usuario, no el nombre de login.
+      final subidaPor = entity.subidaPor ?? prefs.getInt(_prefsUserIdKey);
 
       final file = _fileFactory(entity.ruta);
       final fileName = file.path.split('/').last;
@@ -62,12 +61,12 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
       final headerBytes = await _readHeader(file, 12);
       final mimeType = _detectMime(headerBytes, fileName: fileName);
 
+      // Solo los campos declarados por el backend: el resto lo descarta ajv
+      // (`removeAdditional: "all"`) sin devolver error.
       final fields = <String, dynamic>{
-        'id': (entity.id ?? 0).toString(),
-        'clientId': entity.clientId,
-        'tipoFoto': entity.tipoFoto.name,
+        'tipoFoto': entity.tipoFoto.valor,
         'capturada_at': entity.capturadaAt.toIso8601String(),
-        'subida_por': usuario,
+        if (subidaPor != null) 'subida_por': subidaPor.toString(),
       };
 
       final files = <NetworkFile>[
@@ -83,7 +82,6 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
         ApiEndpoints.segmentoImagenes(entity.segmentoId),
         fields: fields,
         files: files,
-        headers: await bearerAuthHeader(_secureStorage),
       );
 
       if (!response.isSuccess || bodyIndicatesError(response.data)) {
@@ -102,6 +100,9 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
               : const <String, dynamic>{};
 
       final remoteIntId = extractRemoteIntId(payload);
+      // La `url` del 200 llega relativa y sin el prefijo `/api/enagas/v1`
+      // (igual que la del pull). Se persiste tal cual: el prefijo lo antepone
+      // la UI al renderizar, así que normalizarla aquí la duplicaría.
       final remoteUrl = _extractRemoteUrl(payload);
 
       final updated = entity.copyWith(

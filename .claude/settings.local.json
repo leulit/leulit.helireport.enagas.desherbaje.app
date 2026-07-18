@@ -89,7 +89,10 @@
       "Bash(adb logcat *)",
       "Bash(nslookup enagastool.helireport.com)",
       "Bash(curl -sS -m 10 -o /dev/null -w \"HTTP %{http_code} | dns=%{time_namelookup}s connect=%{time_connect}s\\\\n\" https://enagastool.helireport.com/)",
-      "Bash(adb shell *)"
+      "Bash(adb shell *)",
+      "mcp__codebase-memory-mcp__get_architecture",
+      "mcp__codebase-memory-mcp__manage_adr",
+      "Bash(awk 'NR==807||NR==911{printf \"%d: %s\\\\n\", NR, $0}' lib/presentation/detalle/segmento_detalle_page.dart)"
     ]
   },
   "enabledPlugins": {}

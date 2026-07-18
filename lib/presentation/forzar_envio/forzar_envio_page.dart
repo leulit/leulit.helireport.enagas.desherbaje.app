@@ -213,12 +213,12 @@ class _DropdownsBar extends StatelessWidget {
                   _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
               onChanged: controller.filterByTipo,
             ),
-            Obx(() => _FilterDropdown<int>(
+            Obx(() => _FilterDropdown<String>(
                   icon: Icons.business_outlined,
                   groupColor: const Color(0xFF1565C0),
                   rxValue: controller.selectedCt,
                   items: controller.ctsDisponibles,
-                  itemLabel: controller.ctNameById,
+                  itemLabel: controller.ctLabel,
                   itemColor: (_) => const Color(0xFF1565C0),
                   onChanged: controller.filterByCt,
                 )),
@@ -344,7 +344,7 @@ class _FlatList extends StatelessWidget {
         final s = controller.filtradas[i];
         return _SegmentCard(
           segmento: s,
-          ctName: controller.ctNameById(s.ctId),
+          ctName: controller.ctLabel(s.ctname),
           isSending: controller.enviandoIds.contains(s.id ?? -1),
           onEnviar: () => controller.enviarCloud(s),
           onTap: () => Get.toNamed(AppRoutes.detalle, arguments: s),

@@ -26,10 +26,12 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
   @override
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
     int operadorId,
-    List<int> cts,
+    List<String> ctNames,
   ) async {
     try {
-      final list = cts.isEmpty ? await _store.findAll() : await _store.findByCts(cts);
+      final list = ctNames.isEmpty
+          ? await _store.findAll()
+          : await _store.findByCtNames(ctNames);
       return DataResult.success(list);
     } catch (e) {
       return DataResult.failure(

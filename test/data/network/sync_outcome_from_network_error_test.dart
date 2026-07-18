@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:helireport_desherbaje/core/sync/contracts/auth_expired_exception.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/remote_adapter.dart';
 import 'package:helireport_desherbaje/data/network/network_error.dart';
 import 'package:helireport_desherbaje/data/network/sync_outcome_from_network_error.dart';
@@ -27,12 +26,13 @@ void main() {
     }) =>
         NetworkError(category: category, statusCode: statusCode, message: message);
 
-    test('throws AuthExpiredException for 401', () {
+    // Un 401 es SIEMPRE fallo de firma HMAC, nunca sesión caducada: no puede
+    // acabar en logout.
+    test('returns SyncUnrecoverable for 401 (firma HMAC, no sesión)', () {
       final error = makeError(NetworkErrorCategory.unauthorized, statusCode: 401);
-      expect(
-        () => syncOutcomeFromNetworkError<_FakeSyncable>(error),
-        throwsA(isA<AuthExpiredException>()),
-      );
+      final result = syncOutcomeFromNetworkError<_FakeSyncable>(error);
+      expect(result, isA<SyncUnrecoverable<_FakeSyncable>>());
+      expect((result as SyncUnrecoverable).statusCode, equals(401));
     });
 
     test('returns SyncRetryable for offline category', () {

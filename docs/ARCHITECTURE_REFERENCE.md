@@ -193,7 +193,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 |---|---|---|
 | `clientId` | `String` | UUID v4 inmutable (PK lógica del dominio) |
 | `id` | `int?` | ID remoto del backend (nullable hasta primer sync) |
-| `ctId` | `int` | Código CT Enagas (entero) |
+| `ctname` | `String` | Nombre del CT (default `''`). El CT viaja por NOMBRE, no por id (contrato §3 upsert / §8 descarga contratista) |
 | `nombre` | `String?` | |
 | `descripcion` | `String` | |
 | `traza` | `String?` | |
@@ -328,7 +328,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 
 | Caso de Uso | Firma | Descripción |
 |---|---|---|
-| `GetSegmentosUseCase` | `execute(int operadorId, List<int> cts) → Future<DataResult<List<SegmentoEntity>>>` | Lee segmentos del store local (offline-first) |
+| `GetSegmentosUseCase` | `execute() → Future<DataResult<List<SegmentoEntity>>>` | Lee segmentos del store local (offline-first) filtrando por nombres de CT del usuario (`readCtNamesFromPrefs`, `user_json`) |
 | `UpdateSegmentoEstadoUseCase` | `execute(int id, EstadoActividad) → Future<DataResult<bool>>` | Actualiza estado vía `OfflineRepository` (local + outbox) |
 
 ---

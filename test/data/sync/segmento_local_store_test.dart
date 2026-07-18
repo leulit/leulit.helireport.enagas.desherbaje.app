@@ -3,7 +3,7 @@
 // ConflictAlgorithm.replace.
 //
 // DB infra: sqflite_common_ffi in-memory, recreating the segmentos table and
-// its unique partial index via store.migrate(db, 0, 1) — same pattern as
+// its unique partial index via store.migrate(db, 0, 2) — same pattern as
 // outbox_queue_test.dart.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -23,7 +23,8 @@ SegmentoEntity _seg({
   int? id,
   DateTime? updatedAt,
 }) {
-  final e = SegmentoEntity(id, 1, TipoInstalacion.lineal, [], clientId: clientId);
+  final e =
+      SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, [], clientId: clientId);
   e.descripcion = 'test';
   if (updatedAt != null) {
     // Force a specific updatedAt via fromJson round-trip.
@@ -43,7 +44,7 @@ void main() {
   setUp(() async {
     db = await _openDb();
     store = SegmentoLocalStore(db);
-    await store.migrate(db, 0, 1);
+    await store.migrate(db, 0, 2);
   });
 
   tearDown(() async => db.close());
@@ -158,19 +159,15 @@ void main() {
 
   group('findWhere', () {
     test('returns rows matching column value + correct order', () async {
-      final ct1a = _seg(clientId: 'ct1-a');
-      final ct1b = _seg(clientId: 'ct1-b');
-      final ct2 = _seg(clientId: 'ct2-a');
-      // Give each a different ct_id value by updating the row directly
+      // El CT se identifica por NOMBRE (columna ctname) tras el rediseño §3/§8.
+      final ct1a = _seg(clientId: 'ct1-a')..ctname = 'CT1';
+      final ct1b = _seg(clientId: 'ct1-b')..ctname = 'CT1';
+      final ct2 = _seg(clientId: 'ct2-a')..ctname = 'CT2';
       await store.upsert(ct1a);
       await store.upsert(ct1b);
       await store.upsert(ct2);
-      await db.rawUpdate(
-          "UPDATE segmentos SET ct_id = 1 WHERE client_id IN ('ct1-a','ct1-b')");
-      await db.rawUpdate(
-          "UPDATE segmentos SET ct_id = 2 WHERE client_id = 'ct2-a'");
 
-      final result = await store.findWhere('ct_id', 1);
+      final result = await store.findWhere('ctname', 'CT1');
       expect(result.length, equals(2));
       final ids = result.map((s) => s.clientId).toSet();
       expect(ids, containsAll(['ct1-a', 'ct1-b']));
@@ -178,8 +175,69 @@ void main() {
 
     test('returns empty list when no rows match', () async {
       await store.upsert(_seg(clientId: 'some-seg'));
-      final result = await store.findWhere('ct_id', 999);
+      final result = await store.findWhere('ctname', 'ZZZ');
       expect(result, isEmpty);
+    });
+  });
+
+  // ─── findByCtNames ────────────────────────────────────────────────────────
+
+  group('findByCtNames', () {
+    test('filters segmentos by CT name (§8)', () async {
+      await store.upsert(_seg(clientId: 'a')..ctname = 'CT1');
+      await store.upsert(_seg(clientId: 'b')..ctname = 'CT2');
+      await store.upsert(_seg(clientId: 'c')..ctname = 'CT1');
+
+      final result = await store.findByCtNames(['CT1']);
+      expect(result.map((s) => s.clientId).toSet(), equals({'a', 'c'}));
+    });
+
+    test('empty name list returns empty', () async {
+      await store.upsert(_seg(clientId: 'a')..ctname = 'CT1');
+      expect(await store.findByCtNames(const []), isEmpty);
+    });
+  });
+
+  // ─── schema migration (v1 ct_id → v2 ctname) ──────────────────────────────
+
+  group('migration', () {
+    test('(m1) fresh migrate(0,2) yields ctname column and no ct_id', () async {
+      // setUp already ran migrate(db, 0, 2).
+      final info = await db.rawQuery('PRAGMA table_info(segmentos)');
+      final cols = info.map((c) => c['name'] as String).toSet();
+      expect(cols, contains('ctname'));
+      expect(cols, isNot(contains('ct_id')));
+    });
+
+    test('(m2) v1→v2 replaces ct_id with ctname (DROP + CREATE)', () async {
+      // Simula una instalación dev en v1: tabla con la columna antigua ct_id.
+      await db.execute('DROP TABLE IF EXISTS segmentos');
+      await db.execute('''
+        CREATE TABLE segmentos (
+          client_id        TEXT PRIMARY KEY,
+          id               INTEGER,
+          ct_id            INTEGER NOT NULL DEFAULT 0,
+          descripcion      TEXT NOT NULL DEFAULT '',
+          tipo_instalacion TEXT NOT NULL DEFAULT 'lineal',
+          tipo_actividad   TEXT NOT NULL DEFAULT 'deshierbe_selectivo',
+          estado           TEXT NOT NULL DEFAULT 'propuesta',
+          updated_at       TEXT NOT NULL
+        )
+      ''');
+      await db.insert('segmentos', {
+        'client_id': 'old-1',
+        'ct_id': 9,
+        'updated_at': DateTime(2025).toIso8601String(),
+      });
+
+      await store.migrate(db, 1, 2);
+
+      final info = await db.rawQuery('PRAGMA table_info(segmentos)');
+      final cols = info.map((c) => c['name'] as String).toSet();
+      expect(cols, contains('ctname'));
+      expect(cols, isNot(contains('ct_id')));
+      // DROP + CREATE: los datos dev de la v1 no se preservan (app pre-release).
+      expect(await db.query('segmentos'), isEmpty);
     });
   });
 

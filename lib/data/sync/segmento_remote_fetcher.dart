@@ -1,22 +1,21 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
-import '../../core/sync/contracts/auth_expired_exception.dart';
+import '../../core/app_log.dart';
 import '../../core/sync/contracts/remote_fetcher.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/entities/user_entity.dart';
 import '../network/network_error.dart';
 import '../network/network_service.dart';
-import 'adapter_support.dart';
 
 /// [RemoteFetcher] for [SegmentoEntity]. Pulls the contractor download set
 /// (segmentos en estado `propuesta` + `validada`) for the authenticated
 /// operator's CTs, enriched with `imagenes[]`/`mensajes[]` (vídeos incluidos
-/// como filas de `imagenes[]` con `mime_type` `video/*`), cada hijo con su
-/// `client_id` para dedup local↔nube.
+/// como filas de `imagenes[]` con `mime_type` `video/*`). La identidad de cada
+/// hijo es su `id` entero (§8): `client_id` NO existe en esta API, así que no
+/// hay dedup local↔nube por ese campo.
 ///
 /// The endpoint `GET /segmentos/contratista?cts=…` keys on CT **names**
 /// (`ct-burgos,ct-plasencia,…`), URL-encoded and comma-separated in the
@@ -31,12 +30,8 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
   static const _userJsonKey = 'user_json';
 
   final NetworkService _network;
-  final FlutterSecureStorage _storage;
 
-  SegmentoRemoteFetcher(
-    this._network, {
-    FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage();
+  SegmentoRemoteFetcher(this._network);
 
   @override
   Future<List<SegmentoEntity>> pullAll() async {
@@ -48,9 +43,10 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
     final cts = names.map(Uri.encodeComponent).join(',');
 
     try {
+      // Sin cabecera de Bearer: esta API no tiene token de sesión, el HMAC del
+      // interceptor es la única autenticación (§1).
       final response = await _network.get(
         ApiEndpoints.segmentosContratista(cts),
-        headers: await bearerAuthHeader(_storage),
       );
       final raw = response.data as List? ?? const [];
       final remote = raw
@@ -59,8 +55,15 @@ class SegmentoRemoteFetcher implements RemoteFetcher<SegmentoEntity> {
           .toList();
       return remote;
     } on NetworkError catch (err) {
-      if (err.statusCode == 401) {
-        throw AuthExpiredException(err.message);
+      // 401/403 = firma HMAC rechazada, nunca sesión caducada (§1 del
+      // contrato). Se relanza para que el pull acabe en PullOutcome.error;
+      // deslogar al operador por un desfase de reloj sería destructivo.
+      if (err.category == NetworkErrorCategory.unauthorized) {
+        AppLog.e(
+          'HMAC signature rejected (HTTP ${err.statusCode}) on '
+          'GET /segmentos/contratista — check HMAC_SECRET and device clock '
+          '(signature window is ±5 min): ${err.message}',
+        );
       }
       rethrow;
     }

@@ -24,12 +24,14 @@ class PolylineSegment {
     required LoggedUserCtsProvider ctsProvider,
     String? name,
     int? ctId,
+    String? ctname,
     String? traza,
     this.description = '',
     this.selected = false,
     TipoActividad? tipoActividad,
     EstadoActividad? estado,
   })  : ctId = ctId ?? _extractCtId(originalPolyline, ctsProvider),
+        ctname = ctname ?? _extractCtName(originalPolyline),
         traza = traza ?? _extractTraza(originalPolyline),
         name = name ?? _extractName(originalPolyline),
         tipoActividad = tipoActividad ?? TipoActividad.desherbajeSelectivo,
@@ -38,6 +40,11 @@ class PolylineSegment {
   final int id;
   final String name;
   final int ctId;
+
+  /// Nombre del CT, leído del `hitValue` del polyline de gasoducto
+  /// (`GasoductoHitData.ct`). Es el valor que se persiste en el segmento: su
+  /// CT viaja por NOMBRE, no por id (contrato §3/§8).
+  final String ctname;
   final String traza;
   final List<LatLng> points;
   final Polyline originalPolyline;
@@ -91,6 +98,14 @@ class PolylineSegment {
       debugPrint('PolylineSegment._extractCtId: $e');
     }
     return 0;
+  }
+
+  static String _extractCtName(Polyline p) {
+    try {
+      final hit = p.hitValue;
+      if (hit != null) return (hit as dynamic).ct?.toString() ?? '';
+    } catch (_) {}
+    return '';
   }
 
   static String _extractTraza(Polyline p) {

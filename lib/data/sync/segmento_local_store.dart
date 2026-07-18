@@ -22,16 +22,24 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   String get entityType => 'segmento';
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
-    if (from == 0 && to == 1) {
+    // v1 (columna `ct_id INTEGER`) → v2 (columna `ctname TEXT`): el segmento
+    // identifica su CT por NOMBRE, no por id (contrato §3/§8: la descarga
+    // `GET /segmentos/contratista` filtra por nombre de CT). App pre-release,
+    // sin datos de producción que preservar y sin poder mapear el id al nombre
+    // en SQLite → DROP + CREATE en vez de reconstruir la tabla.
+    if (from == 1 && to >= 2) {
+      await db.execute('DROP TABLE IF EXISTS $_table');
+    }
+    if (from < 2 && to >= 2) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_table (
           client_id         TEXT PRIMARY KEY,
           id                INTEGER,
-          ct_id             INTEGER NOT NULL DEFAULT 0,
+          ctname            TEXT NOT NULL DEFAULT '',
           nombre            TEXT,
           descripcion       TEXT NOT NULL DEFAULT '',
           traza             TEXT,
@@ -55,7 +63,7 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
         )
       ''');
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_${_table}_ct ON $_table(ct_id)',
+        'CREATE INDEX IF NOT EXISTS idx_${_table}_ctname ON $_table(ctname)',
       );
       await db.execute(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_${_table}_remote '
@@ -182,14 +190,14 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
     return _rowToEntity(rows.first);
   }
 
-  /// Returns segmentos belonging to any of the given CTs.
-  Future<List<SegmentoEntity>> findByCts(List<int> cts) async {
-    if (cts.isEmpty) return const [];
-    final placeholders = List.filled(cts.length, '?').join(',');
+  /// Returns segmentos belonging to any of the given CT names.
+  Future<List<SegmentoEntity>> findByCtNames(List<String> ctNames) async {
+    if (ctNames.isEmpty) return const [];
+    final placeholders = List.filled(ctNames.length, '?').join(',');
     final rows = await _db.query(
       _table,
-      where: 'ct_id IN ($placeholders)',
-      whereArgs: cts,
+      where: 'ctname IN ($placeholders)',
+      whereArgs: ctNames,
       orderBy: 'fecha_fin DESC',
     );
     return rows.map(_rowToEntity).toList(growable: false);
@@ -198,7 +206,7 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   Map<String, Object?> _entityToRow(SegmentoEntity e) => {
         'client_id': e.clientId,
         'id': e.id,
-        'ct_id': e.ctId,
+        'ctname': e.ctname,
         'nombre': e.nombre,
         'descripcion': e.descripcion,
         'traza': e.traza,
@@ -225,7 +233,7 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
 
     final entity = SegmentoEntity(
       row['id'] as int?,
-      (row['ct_id'] as int?) ?? 0,
+      (row['ctname'] as String?) ?? '',
       TipoInstalacion.fromString(row['tipo_instalacion'] as String?),
       ubicacion,
       clientId: row['client_id'] as String,

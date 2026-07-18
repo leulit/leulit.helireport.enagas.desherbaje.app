@@ -4,7 +4,7 @@ import '../entities/segmento_entity.dart';
 abstract class SegmentoRepository {
   Future<DataResult<List<SegmentoEntity>>> getByOperador(
     int operadorId,
-    List<int> cts,
+    List<String> ctNames,
   );
 
   Future<DataResult<SegmentoEntity?>> getById(int id);

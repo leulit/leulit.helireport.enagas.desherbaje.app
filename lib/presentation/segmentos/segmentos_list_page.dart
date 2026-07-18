@@ -337,19 +337,19 @@ class _GroupedByCt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final grouped = controller.groupedByCt;
-    final ctIds = grouped.keys.toList()..sort();
+    final ctNames = grouped.keys.toList()..sort();
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: ctIds.length,
+      itemCount: ctNames.length,
       itemBuilder: (_, i) {
-        final ctId = ctIds[i];
-        final list = grouped[ctId]!;
+        final ct = ctNames[i];
+        final list = grouped[ct]!;
         final totalLongitud = list.fold<double>(0, (s, e) => s + e.longitud);
         final totalSuperficie = list.fold<double>(0, (s, e) => s + e.superficie);
 
         return Obx(() {
-          final isExpanded = controller.expandedCtId.value == ctId;
+          final isExpanded = controller.expandedCt.value == ct;
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
@@ -368,12 +368,12 @@ class _GroupedByCt extends StatelessWidget {
             child: Column(
               children: [
                 _CtHeader(
-                  ctName: controller.ctNameById(ctId),
+                  ctName: controller.ctLabel(ct),
                   total: list.length,
                   totalLongitud: totalLongitud,
                   totalSuperficie: totalSuperficie,
                   isExpanded: isExpanded,
-                  onTap: () => controller.toggleCtExpanded(ctId),
+                  onTap: () => controller.toggleCtExpanded(ct),
                 ),
                 AnimatedCrossFade(
                   firstChild: const SizedBox(width: double.infinity),

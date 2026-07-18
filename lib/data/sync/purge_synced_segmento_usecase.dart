@@ -1,8 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/api_endpoints.dart';
@@ -115,7 +113,6 @@ class PurgeSyncedSegmentoUseCase {
   final OutboxQueue _outbox;
   final LocalFileDeleter _deleteFile;
   final NetworkService _network;
-  final FlutterSecureStorage _storage;
 
   PurgeSyncedSegmentoUseCase({
     Database? db,
@@ -126,7 +123,6 @@ class PurgeSyncedSegmentoUseCase {
     OutboxQueue? outbox,
     LocalFileDeleter? deleteFile,
     NetworkService? network,
-    FlutterSecureStorage secureStorage = const FlutterSecureStorage(),
   })  : _db = db ?? AppDI.database,
         _segmentoStore = segmentoStore ?? DI.get<SegmentoLocalStore>(),
         _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
@@ -134,8 +130,7 @@ class PurgeSyncedSegmentoUseCase {
         _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>(),
         _outbox = outbox ?? AppDI.outboxQueue,
         _deleteFile = deleteFile ?? _defaultDeleteFile,
-        _network = network ?? AppDI.networkService,
-        _storage = secureStorage;
+        _network = network ?? AppDI.networkService;
 
   /// Reads the union of pending + rejected + syncing (non-delete) outbox jobs
   /// per entity type. Read FRESH for every segment, always AFTER enumerating
@@ -279,19 +274,12 @@ class PurgeSyncedSegmentoUseCase {
   /// for a later retry). Idempotent server-side by segment id.
   Future<bool> _notifySyncComplete(SegmentoEntity s) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final usuario = prefs.getString('user_usuario') ?? '';
-      final userId = prefs.getInt('user_id') ?? 0;
-      final response = await _network.post(
-        ApiEndpoints.segmentoSyncComplete(s.id!),
-        body: {
-          'client_id': s.clientId,
-          'segmento_id': s.id,
-          'usuariologged': usuario,
-          'idusuariologged': userId,
-        },
-        headers: await bearerAuthHeader(_storage),
-      );
+      // Sin body y sin Bearer: §7 define el endpoint sin cuerpo (el id viaja en
+      // el path) y §1 fija el HMAC como única autenticación de la API. Los
+      // campos que se mandaban no están declarados en el backend: ajv los
+      // borraba en silencio y respondía 200 igual.
+      final response =
+          await _network.post(ApiEndpoints.segmentoSyncComplete(s.id!));
       if (response.isSuccess && !bodyIndicatesError(response.data)) return true;
       final msg = bodyErrorMessage(response.data);
       AppLog.w(

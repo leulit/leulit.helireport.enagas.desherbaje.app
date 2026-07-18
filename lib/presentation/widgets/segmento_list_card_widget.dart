@@ -86,7 +86,7 @@ class SegmentoListCard extends StatelessWidget {
                               size: 12, color: Colors.grey.shade500),
                           const SizedBox(width: 4),
                           Text(
-                            'CT ${segmento.ctId}'
+                            '${segmento.ctname.isNotEmpty ? segmento.ctname : 'CT desconocido'}'
                             '${segmento.traza != null && segmento.traza!.isNotEmpty ? ' · ${segmento.traza}' : ''}',
                             style: const TextStyle(
                               fontSize: 11,

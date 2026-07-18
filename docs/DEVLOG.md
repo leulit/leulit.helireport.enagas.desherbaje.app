@@ -806,3 +806,91 @@ Ficheros: `core/api_endpoints.dart` (nuevo `segmentoUpsert`, eliminados `segment
 `test/presentation/forzar_envio/forzar_envio_controller_test.dart` (orden y 2 tests nuevos: guard de
 segmento no-limpio, backendId ausente). `flutter analyze` → 0 issues; 49/49 tests de los ficheros
 tocados pasan.
+
+---
+
+## 2026-07-18 — Cumplimiento de spec `BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` (12 fixes)
+
+Verificación del cliente contra la spec (única fuente de verdad; `CLIENT-VIDEO-UPLOAD.md` y
+`BACKEND_VIDEO_CONTRACT.md` estaban obsoletos y el backend los borró). 33 mismatches confirmados tras
+refutación adversarial; se aplicaron los de cliente. `flutter analyze` → 0 issues; 519 tests pasan.
+
+**Media (§9) — BLOCKER, ninguna foto/vídeo de nube cargaba.** Dos defectos apilados: la URL se
+construía sobre `ApiEndpoints.baseUrl` (host pelado, sin `/api/enagas/v1` → 404) y sin credencial
+(→ 401). Fix: `ApiEndpoints.segmentoThumb(id,w,h)` (endpoint único de media; `/segmentos/imagen` y
+`/videos/download` RETIRADOS), `ApiSecurityService.buildSignedMediaUrl(path)` (firma en query
+`?ts=&sig=`, ventana 2h, cubre SOLO el pathname). Fotos → HMAC en cabeceras; vídeo → firma en query
+(el `<video>` fija la URL y el seek reusa el `ts`; ±5 min no aguanta). `status` de vídeo se parsea y
+la reproducción se bloquea salvo `disponible` (`convirtiendo`→"procesando", 404 evitado).
+
+**Sobre del segmento (§2) — BLOCKER, pérdida silenciosa de vídeo de campo.** La unidad de sync es el
+SOBRE entero, no el adjunto: hasta el 200 de `sync-complete` todo hijo es `pending` y un `upsert`
+nuevo anula el intento anterior (el backend borra sus `pending`). El motor marcaba `synced` cada job
+por separado, así que un vídeo ya subido no se reenviaba tras un `upsert` que lo había borrado en
+servidor → la purga borraba la fila y el fichero local. Fix en el controller (que SÍ sabe que se
+entregó un upsert): `VideoLocalStore.clearUploadSessions(segmentoClientId)` antes del re-drain, así el
+adapter reinicializa sesión y resube los bytes. Resume dentro de un mismo intento intacto.
+
+**upsert (§3):** el body omitía 10 campos declarados (`tipo_actividad`, `descripcion`, `nombre`,
+`traza`, `tipo_instalacion`, `pk_inicio`, `pk_fin`, `fecha_inico` [SIC, nombre real de columna],
+`fecha_fin`, `longitud`) → el backend los descartaba en silencio (ajv `removeAdditional:"all"`, 200).
+Ahora se mandan todos. Quitados `client_id`/`usuariologged`/`idusuariologged` (no declarados).
+
+**401 nunca es logout (§1):** `sync_outcome_from_network_error` y los fetchers mapeaban 401 →
+`AuthExpiredException` → wipe de token + navegación a login. En esta API no hay sesión ni Bearer: 401 =
+fallo de firma HMAC (secreto mal, reloj desviado >5 min, path mal firmado). Ahora → `SyncUnrecoverable`
+sin logout.
+
+**Vídeo (§6):** `tipoFoto` ahora viaja en el init (antes todo vídeo "antes" se guardaba `despues`); el
+409 sin clave `error` se trata como señal de REANUDAR (chunk y complete) parseando `offset`, con guarda
+de progreso acotado; se persiste el `id` que devuelve `complete`; se retira el sellado con
+`/videos/download`.
+
+**Mensaje (§5):** la respuesta ya no pasa por `fromJson` (acuñaba un `clientId` nuevo → fila local
+huérfana duplicada); se estampa solo el `id` entero sobre la entidad existente. Body recortado a
+`mensaje`+`enviado_por`.
+
+**imagen (§4):** `subida_por` manda el id entero, no el nombre de usuario; quitado el header Bearer
+muerto (y su dependencia `flutter_secure_storage`).
+
+**Finalize atascado (§7):** un segmento en `finalizeFailed` (todo `synced`, solo falló el POST de
+`sync-complete`) quedaba excluido de "Enviar todos" para siempre. Ahora se reintenta (sync-complete es
+idempotente y no destructivo); no revoca sesiones de vídeo (no se entrega upsert nuevo).
+
+**Docs mentirosos / dead code:** comentarios que afirmaban eco de `client_id`, Bearer token, o 401 =
+sesión, corregidos. `ApiEndpoints.baseUrl` (sin consumidores) eliminado. `AuthExpirationHandler`:
+solo documentado como inalcanzable — su borrado (handler + registro DI + tipo `AuthExpiredException`)
+queda PENDIENTE de sign-off.
+
+**PENDIENTE de decisión del responsable:**
+1. `ctname` en `upsert`: la spec §3 lo declara pero `SegmentoEntity` no tiene el campo (solo `ctId`).
+   En insert el segmento aterriza con `ctname` NULL y §8 filtra `?cts=` por nombre → el segmento nuevo
+   nunca vuelve en la descarga. Cerrarlo exige columna + campo + migración schema 1→2 + poblarlo del
+   `ctname` que §8 ya devuelve. ¿Lo deriva el backend en insert, o lo manda el cliente?
+2. Borrado de `AuthExpirationHandler` (arriba).
+
+### 2026-07-18 (cont.) — `SegmentoEntity`: identidad de CT por `ctname`, no `ctId`
+
+Decisión del responsable: el segmento identifica su CT por **`ctname` (String)**, como
+`PosicionFijaEntity`, no por `ctId` (int). Alinea con el contrato: §3 (upsert) y §8 (descarga
+contratista) usan `ctname` y §8 filtra por NOMBRE de CT. Arregla además un bug latente: la descarga
+`/segmentos/contratista` devuelve `ctname` pero `fromJson` leía `ct_id` → todo segmento descargado
+quedaba con `ctId=0`.
+
+`SegmentoLocalStore` schemaVersion **1→2** (columna `ct_id INTEGER` → `ctname TEXT NOT NULL DEFAULT ''`,
+índice `idx_segmentos_ct`→`idx_segmentos_ctname`; migración DROP+CREATE porque la app es pre-release,
+sin back-compat). El body del upsert ya manda `ctname` (cierra el último campo pendiente de §3).
+
+Ruta de lectura migrada por necesidad (consultaba la columna eliminada): `findByCts(List<int>)`→
+`findByCtNames(List<String>)`, `getByOperador`, y `GetSegmentosUseCase` ahora lee NOMBRES de CT de
+`user_json` (misma fuente que `SegmentoRemoteFetcher` usa para la descarga §8 — lectura local y
+descarga filtran de una fuente consistente). El nombre en el punto de creación sale del hit del mapa
+(`GasoductoHitData.ct`, poblado del mapa id→nombre del usuario) vía nuevo `PolylineSegment.ctname`.
+
+NO tocados (correcto): `HitoEntity`/`PkEntity`/`GasoductoEntity` y sus tablas conservan su propio
+`ctId`; `GasoductoHitData.ctId` y `PolylineSegment.ctId` los sigue usando el motor de corte de líneas.
+
+`flutter analyze` → 0 issues; 521 tests pasan (verificado de forma independiente). Consumidores de
+`SegmentoEntity.ctId` migrados: `app_di`, `mapa_global_controller`, `forzar_envio` (filtro por nombre),
+`segmento_detalle_controller`, `segmento_list_card_widget`, `segmentos_list_controller` (agrupa por
+nombre). Docs: `ARCHITECTURE_REFERENCE.md` actualizado.

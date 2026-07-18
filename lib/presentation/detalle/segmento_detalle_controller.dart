@@ -146,11 +146,10 @@ class SegmentoDetalleController extends MyGetxController {
     user.value = await _authRepo.getCurrentUser();
   }
 
-  String get ctName {
-    final name = user.value?.ctNameById(segmento.ctId);
-    if (name != null && name.isNotEmpty) return name;
-    return 'CT ${segmento.ctId}';
-  }
+  // El CT del segmento viaja por NOMBRE (contrato §3/§8), ya resuelto en la
+  // entidad; no hay que mapear id→nombre vía el usuario.
+  String get ctName =>
+      segmento.ctname.isNotEmpty ? segmento.ctname : 'CT desconocido';
 
   /// A cloud media row (all media lives in the imagenes list on the backend) is a
   /// video when its mime type is video/* — with a filename/url extension fallback
@@ -168,8 +167,8 @@ class SegmentoDetalleController extends MyGetxController {
   bool _esVideo(ImagenSegmentoEntity i) {
     if (i.mimeType.toLowerCase().startsWith('video/')) return true;
     // Fallback por extensión para filas legacy sin mime fiable. Se prueban
-    // AMBAS fuentes (filename y url): un endpoint de descarga sin extensión
-    // limpia (p.ej. `/videos/download/42`) no debe descartar un filename
+    // AMBAS fuentes (filename y url): la url de media no lleva extensión
+    // (`/segmentos/thumbdb/{id}/0/0`), así que no debe descartar un filename
     // `.mp4` válido. Se recorta el querystring antes de tomar la extensión.
     bool hasVideoExt(String? s) {
       if (s == null || s.isEmpty) return false;

@@ -13,6 +13,7 @@ import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/app_typed_actions.dart';
 import '../../core/extensions.dart';
+import '../../core/services/api_security_service.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
@@ -801,14 +802,20 @@ class _CarouselSlide extends StatelessWidget {
   }
 
   Widget _image() {
-    final url = item.remoteUrl;
-    if (url != null && url.isNotEmpty) {
-      final fullUrl =
-          url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
+    final id = item.remoteId;
+    if (id != null) {
+      // w=0,h=0 → original. La media SIEMPRE exige credencial; aquí la petición
+      // la hace la app, así que va HMAC en cabeceras (la firma en query se
+      // reserva para las urls que se entregan a un reproductor).
+      final fullUrl = ApiEndpoints.segmentoThumb(id, 0, 0);
       return Container(
         color: Colors.black,
         child: CachedNetworkImage(
           imageUrl: fullUrl,
+          httpHeaders: ApiSecurityService.buildHmacHeaders(
+            'GET',
+            Uri.parse(fullUrl).path,
+          ),
           fit: BoxFit.contain,
           placeholder: (_, __) =>
               const Center(child: CircularProgressIndicator(strokeWidth: 2)),
@@ -817,7 +824,7 @@ class _CarouselSlide extends StatelessWidget {
         ),
       );
     }
-    // Sin URL remota → la imagen aún vive solo en disco local.
+    // Sin id remoto → la imagen aún vive solo en disco local.
     final local = item.localPath;
     if (local != null && local.isNotEmpty) {
       return Container(
@@ -836,31 +843,61 @@ class _CarouselSlide extends StatelessWidget {
 
 /// Slide de vídeo en el carrusel: póster negro con botón play. Al tocar abre
 /// el reproductor a pantalla completa: usa el fichero local si existe, y si no
-/// la url remota (vídeo ya en la nube). Si no hay ninguna fuente, avisa.
+/// la url remota firmada (vídeo ya en la nube). Si no hay ninguna fuente, avisa.
+///
+/// Un vídeo de nube aún en conversión no se ofrece como reproducible: su url
+/// devuelve 404 hasta `status: disponible`, así que se pinta "procesando" y el
+/// tap no abre el reproductor. La copia local, si existe, siempre gana: se
+/// reproduce sin esperar al servidor.
 class _VideoSlide extends StatelessWidget {
   final SegmentoMediaItem item;
   const _VideoSlide({required this.item});
 
+  bool get _hasLocalPath {
+    final local = item.localPath;
+    return local != null && local.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // La copia local no depende del servidor: si la hay, el estado de
+    // conversión es irrelevante.
+    final procesando = !_hasLocalPath && item.isMediaProcesando;
+    final fallido = !_hasLocalPath && item.isMediaError;
     return GestureDetector(
-      onTap: _open,
+      onTap: (procesando || fallido) ? null : _open,
       child: Container(
         color: Colors.black,
         child: Stack(
           alignment: Alignment.center,
           children: [
             const Icon(Icons.videocam, color: Colors.white24, size: 96),
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: Colors.black45,
-                shape: BoxShape.circle,
+            if (procesando)
+              const _VideoEstadoBadge(
+                icon: Icons.hourglass_top,
+                label: 'Procesando…',
+                detail: 'El vídeo estará disponible cuando el servidor termine '
+                    'de convertirlo.',
+                color: Colors.orangeAccent,
+              )
+            else if (fallido)
+              const _VideoEstadoBadge(
+                icon: Icons.error_outline,
+                label: 'Conversión fallida',
+                detail: 'El servidor no pudo procesar este vídeo.',
+                color: Colors.redAccent,
+              )
+            else
+              Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
+                child:
+                    const Icon(Icons.play_arrow, color: Colors.white, size: 44),
               ),
-              child:
-                  const Icon(Icons.play_arrow, color: Colors.white, size: 44),
-            ),
             Positioned(
               left: 12,
               right: 12,
@@ -906,16 +943,64 @@ class _VideoSlide extends StatelessWidget {
       Get.to<void>(() => VideoPlayerPage(path: local));
       return;
     }
-    final url = item.remoteUrl;
-    if (url != null && url.isNotEmpty) {
-      final full = url.startsWith('http') ? url : '${ApiEndpoints.baseUrl}$url';
-      Get.to<void>(() => VideoPlayerPage.network(full));
+    final id = item.remoteId;
+    if (id != null && item.isMediaDisponible) {
+      // Firma en query, no en cabeceras: el reproductor fija la url una vez y
+      // cada seek reusa el mismo `ts`, cosa que la ventana de ±5 min del HMAC
+      // de cabeceras no sobrevive. Este endpoint acepta 2 h por eso mismo.
+      final signed = ApiSecurityService.buildSignedMediaUrl(
+        ApiEndpoints.segmentoThumb(id, 0, 0),
+      );
+      Get.to<void>(() => VideoPlayerPage.network(signed));
       return;
     }
     Get.snackbar(
-      'Video no disponible',
-      'No hay fuente reproducible para este video.',
+      'Vídeo no disponible',
+      'No hay fuente reproducible para este vídeo.',
       snackPosition: SnackPosition.BOTTOM,
+    );
+  }
+}
+
+/// Estado no reproducible de un vídeo de nube (en conversión o fallido).
+class _VideoEstadoBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String detail;
+  final Color color;
+
+  const _VideoEstadoBadge({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 44),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            detail,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/result/data_result.dart';
 import '../entities/segmento_entity.dart';
+import '../entities/user_entity.dart';
 import '../repository/segmento_repository.dart';
 
 class GetSegmentosUseCase {
@@ -13,43 +14,28 @@ class GetSegmentosUseCase {
   Future<DataResult<List<SegmentoEntity>>> execute() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id') ?? 0;
-    final cts = readCtIdsFromPrefs(prefs);
-    return _repo.getByOperador(userId, cts);
+    final ctNames = readCtNamesFromPrefs(prefs);
+    return _repo.getByOperador(userId, ctNames);
   }
 }
 
-/// Lee `user_cts` aceptando tanto el formato actual (JSON `"[12,15,23]"`)
-/// como el legacy (`List<String>` de ids stringificados). El próximo login
-/// lo reescribirá en formato JSON.
-List<int> readCtIdsFromPrefs(SharedPreferences prefs) {
-  final raw = prefs.get('user_cts');
-  if (raw == null) return const <int>[];
-
-  if (raw is String) {
-    if (raw.isEmpty) return const <int>[];
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        return decoded.whereType<num>().map((n) => n.toInt()).toList();
-      }
-    } catch (_) {}
-    return const <int>[];
-  }
-
-  if (raw is List) {
-    final ids = <int>[];
-    for (final item in raw) {
-      if (item is int) {
-        ids.add(item);
-      } else if (item is num) {
-        ids.add(item.toInt());
-      } else if (item is String) {
-        final parsed = int.tryParse(item);
-        if (parsed != null) ids.add(parsed);
-      }
+/// Nombres de CT del operador logueado, leídos del usuario persistido
+/// (`user_json`, campo `UserCt.ct`). El segmento identifica su CT por NOMBRE
+/// (contrato §3/§8: la descarga `GET /segmentos/contratista` filtra por nombre
+/// de CT), así que el filtro local de lectura también va por nombre — misma
+/// fuente que [SegmentoRemoteFetcher]. El plano `user_cts` (ctids) ya no sirve
+/// para filtrar la tabla local.
+List<String> readCtNamesFromPrefs(SharedPreferences prefs) {
+  final raw = prefs.getString('user_json');
+  if (raw == null || raw.isEmpty) return const <String>[];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) {
+      return UserModel.fromJson(decoded)
+          .ctsName()
+          .where((n) => n.isNotEmpty)
+          .toList();
     }
-    return ids;
-  }
-
-  return const <int>[];
+  } catch (_) {}
+  return const <String>[];
 }

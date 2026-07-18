@@ -11,7 +11,6 @@ import 'app_config.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static String get baseUrl => AppConfig.baseUrl;
   static String get apiBaseUrl => AppConfig.apiBaseUrl;
 
   // ──────────────────────────── Externos ────────────────────────────
@@ -44,7 +43,7 @@ class ApiEndpoints {
   /// literales), enriquecidos con `imagenes[]` y `mensajes[]`. Los vídeos
   /// viajan como fila de `imagenes[]` con `mime_type` `video/*` (la app modela
   /// el vídeo como imagen con mime de vídeo — no hay array `videos[]` aparte).
-  /// Cada hijo trae su `client_id` para dedup local↔nube.
+  /// La identidad de cada hijo es su `id` entero; no existe `client_id`.
   /// `GET /api/enagas/v1/segmentos/contratista?cts=CT1,CT2`.
   /// La firma HMAC se calcula sobre el path CON querystring (§9 del contrato).
   static String segmentosContratista(String cts) =>
@@ -60,8 +59,8 @@ class ApiEndpoints {
 
   /// Marca un segmento como "envío finalizado": el cliente ha subido con éxito
   /// todo su contenido (datos + imágenes + vídeos + mensajes). Idempotente por
-  /// `id`: una segunda llamada sobre un segmento ya finalizado devuelve 2xx.
-  /// Body JSON: `{ client_id }`.
+  /// `id` y no destructivo: una segunda llamada sobre un segmento ya
+  /// finalizado devuelve 2xx. **Sin body.**
   static String segmentoSyncComplete(int id) =>
       '$apiBaseUrl/segmentos/$id/sync-complete';
 
@@ -88,16 +87,32 @@ class ApiEndpoints {
   static String get imagenAdd => '$apiBaseUrl/operador/additem';
 
   /// Subida multipart de una foto ligada a un segmento (contrato backend).
-  /// `POST /api/enagas/v1/segmentos/{id}/imagenes`. Campos: file, clientId,
-  /// tipoFoto (antes|despues), capturada_at?, subida_por?. Respuesta `{id,url}`.
+  /// `POST /api/enagas/v1/segmentos/{id}/imagenes`. Campos: file, tipoFoto
+  /// (antes|despues), capturada_at?, subida_por?. Respuesta `{id, url}`.
   static String segmentoImagenes(int id) => '$apiBaseUrl/segmentos/$id/imagenes';
+
+  // ──────────────────────────── Media (fotos + vídeos) ────────────────────────────
+
+  /// Endpoint ÚNICO de media: sirve tanto fotos como vídeos (§9 del contrato).
+  /// `GET /api/enagas/v1/segmentos/thumbdb/{id}/{width}/{height}`.
+  ///
+  /// - `width=0, height=0` → fichero original sin procesar.
+  /// - Otros valores → thumbnail JPEG (solo fotos).
+  ///
+  /// Los vídeos se sirven con `Range`, así el reproductor hace seek sin bajar
+  /// el fichero entero. Siempre exige credencial: HMAC en cabeceras para
+  /// peticiones de la app, o firma en query
+  /// (`ApiSecurityService.buildSignedMediaUrl`) para una URL que se entrega a
+  /// un reproductor.
+  static String segmentoThumb(int id, int width, int height) =>
+      '$apiBaseUrl/segmentos/thumbdb/$id/$width/$height';
 
   // ──────────────────────────── Vídeos ────────────────────────────
 
   /// Inicia una nueva sesión de subida chunked.
   /// `POST /api/enagas/v1/videos/upload`
-  /// Body JSON: `{ originalFilename, totalBytes, mimeType, clientId?,
-  /// segmentoId?, usuariologged?, idusuariologged? }`.
+  /// Body JSON (camelCase exacto): `{ originalFilename, totalBytes, mimeType,
+  /// segmentoId, tipoFoto?, usuariologged?, idusuariologged? }`.
   /// Devuelve `201 { uploadId, offset, segmentoId }`.
   static String get videosUploadInit => '$apiBaseUrl/videos/upload';
 
@@ -111,13 +126,10 @@ class ApiEndpoints {
 
   /// Completa la sesión de subida (activa la conversión MOV→MP4 asíncrona).
   /// `POST /api/enagas/v1/videos/upload/{uploadId}/complete`
-  /// → `200 { uploadId, status: "recibido" }`.
+  /// → `200 { uploadId, id, status: "recibido" }`. El `id` es la fila de
+  /// `imagenes_segmento`: con él se construye la URL de reproducción vía
+  /// [segmentoThumb]. `/videos/download/{uploadId}.mp4` está RETIRADO.
   static String videoUploadComplete(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId/complete';
-
-  /// URL de descarga determinista del vídeo convertido (exenta de HMAC).
-  /// `GET /api/enagas/v1/videos/download/{uploadId}.mp4`
-  /// Solo se guarda como referencia en la entidad; no se invoca desde la app.
-  static String videoDownload(String uploadId) => '$apiBaseUrl/videos/download/$uploadId.mp4';
 
   // ──────────────────────────── Posiciones GPS ────────────────────────────
 

@@ -2,16 +2,13 @@ import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
 import '../../core/app_router.dart';
 import '../../core/result/data_result.dart';
-import '../../data/repository/auth_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
-import '../../domain/entities/user_entity.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
 
 class SegmentosListController extends MyGetxController {
   SegmentosListController(this._useCase);
 
   final GetSegmentosUseCase _useCase;
-  final _authRepo = AuthRepositoryImpl();
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -21,12 +18,10 @@ class SegmentosListController extends MyGetxController {
   final selectedTipo = Rx<TipoActividad?>(null);
   final filterDescripcion = ''.obs;
 
-  /// Usuario logueado, para poder resolver nombres de CT en la UI.
-  UserModel? _user;
-
   /// CT cuya tarjeta de grupo está expandida en el acordeón. `null` colapsa
-  /// todos. Se inicializa al primer CT con resultados al cargar.
-  final expandedCtId = Rx<int?>(null);
+  /// todos. Se identifica por NOMBRE de CT (§3/§8). Se inicializa al primer CT
+  /// con resultados al cargar.
+  final expandedCt = Rx<String?>(null);
 
   @override
   void myOnInit() {
@@ -35,23 +30,13 @@ class SegmentosListController extends MyGetxController {
       (_) => _applyFilter(),
       time: const Duration(milliseconds: 300),
     );
-    _bootstrap();
+    loadSegmentos();
   }
 
-  /// Carga el usuario antes que los segmentos para garantizar que la primera
-  /// renderización del listado ya disponga del nombre de cada CT.
-  Future<void> _bootstrap() async {
-    _user = await _authRepo.getCurrentUser();
-    await loadSegmentos();
-  }
-
-  /// Nombre legible del CT a partir de su id. Cae a `CT $id` si el usuario
-  /// no está cargado o el ct no figura en sus asignados.
-  String ctNameById(int ctId) {
-    final name = _user?.ctNameById(ctId);
-    if (name != null && name.isNotEmpty) return name;
-    return 'CT $ctId';
-  }
+  /// Etiqueta legible del CT. El nombre viaja en la propia entidad (§3/§8);
+  /// cae a 'CT desconocido' si viniera vacío.
+  String ctLabel(String ctname) =>
+      ctname.isNotEmpty ? ctname : 'CT desconocido';
 
   Future<void> loadSegmentos() async {
     isLoading.value = true;
@@ -78,15 +63,15 @@ class SegmentosListController extends MyGetxController {
     _applyFilter();
   }
 
-  void toggleCtExpanded(int ctId) {
-    expandedCtId.value = expandedCtId.value == ctId ? null : ctId;
+  void toggleCtExpanded(String ctname) {
+    expandedCt.value = expandedCt.value == ctname ? null : ctname;
   }
 
-  /// Mapa CT → segmentos, para el render agrupado.
-  Map<int, List<SegmentoEntity>> get groupedByCt {
-    final map = <int, List<SegmentoEntity>>{};
+  /// Mapa CT → segmentos, para el render agrupado. La clave es el nombre de CT.
+  Map<String, List<SegmentoEntity>> get groupedByCt {
+    final map = <String, List<SegmentoEntity>>{};
     for (final s in filtradas) {
-      map.putIfAbsent(s.ctId, () => []).add(s);
+      map.putIfAbsent(s.ctname, () => []).add(s);
     }
     return map;
   }
@@ -112,9 +97,9 @@ class SegmentosListController extends MyGetxController {
 
   void _ensureExpanded() {
     if (filtradas.isEmpty) return;
-    final ctIds = filtradas.map((s) => s.ctId).toSet();
-    if (expandedCtId.value == null || !ctIds.contains(expandedCtId.value)) {
-      expandedCtId.value = ctIds.first;
+    final ctNames = filtradas.map((s) => s.ctname).toSet();
+    if (expandedCt.value == null || !ctNames.contains(expandedCt.value)) {
+      expandedCt.value = ctNames.first;
     }
   }
 

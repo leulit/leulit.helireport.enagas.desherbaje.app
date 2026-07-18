@@ -7,7 +7,11 @@
 //   - push(create): resume — uploadId present → GET status → continue from offset
 //   - push(create): re-init on 404 status (session expired)
 //   - push(create): already complete on resume → idempotent SyncSuccess
+//   - push(create): no uploadId → never GETs status; init + full re-upload
 //   - push(create): chunk retry on transient error (retryable → success on 2nd attempt)
+//   - push(create): 409 on chunk → adopt server offset and resume (§6.2)
+//   - push(create): 409 on complete → resume chunks and retry close (§6.4)
+//   - push(create): 409 repeating the same offset → SyncUnrecoverable (no infinite loop)
 //   - push(create): 401 → SyncUnrecoverable, NOT AuthExpiredException
 //   - push(create): offline/timeout/5xx → SyncRetryable
 //   - push(create): 4xx unrecoverable → SyncUnrecoverable
@@ -126,13 +130,14 @@ VideoSegmentoEntity _entity({
   int actividadId = 1,
   int uploadOffset = 0,
   String? uploadId,
+  TipoVideo tipoVideo = TipoVideo.antes,
   required String ruta,
 }) {
   final e = VideoSegmentoEntity(
     clientId: clientId,
     actividadId: actividadId,
     segmentoId: segmentoId,
-    tipoVideo: TipoVideo.antes,
+    tipoVideo: tipoVideo,
     filename: filename,
     ruta: ruta,
     capturadaAt: DateTime.utc(2026, 1, 1),
@@ -151,10 +156,32 @@ NetworkResponse<dynamic> _okInit({String uploadId = 'up-uuid'}) =>
 NetworkResponse<dynamic> _okPatch({required int offset}) =>
     NetworkResponse<dynamic>(statusCode: 200, data: {'offset': offset});
 
-NetworkResponse<dynamic> _okComplete({String uploadId = 'up-uuid'}) =>
+/// §6.2 — el servidor va por delante del `Upload-Offset` enviado. Sin clave
+/// `error`: es una señal de reanudación, no un fallo.
+NetworkResponse<dynamic> _resume409Chunk({required int offset}) =>
+    NetworkResponse<dynamic>(statusCode: 409, data: {'offset': offset});
+
+/// §6.4 — faltan bytes por subir antes de poder cerrar. Sin clave `error`.
+NetworkResponse<dynamic> _resume409Complete({
+  required int offset,
+  int totalBytes = 10,
+}) =>
+    NetworkResponse<dynamic>(
+      statusCode: 409,
+      data: {'offset': offset, 'totalBytes': totalBytes},
+    );
+
+NetworkResponse<dynamic> _okComplete({
+  String uploadId = 'up-uuid',
+  int? id = 987,
+}) =>
     NetworkResponse<dynamic>(
       statusCode: 200,
-      data: {'uploadId': uploadId, 'status': 'recibido'},
+      data: {
+        'uploadId': uploadId,
+        if (id != null) 'id': id,
+        'status': 'recibido',
+      },
     );
 
 NetworkResponse<dynamic> _okStatus({
@@ -227,7 +254,7 @@ void main() {
     setUp(() async => f = await _tmpFile(bytes: 10));
     tearDown(() async { if (f.existsSync()) await f.delete(); });
 
-    test('init body contains required fields', () async {
+    test('init body contains exactly the fields declared in §6.1', () async {
       network
         ..queueInit(_okInit())
         ..queuePatch(_okPatch(offset: 10))
@@ -239,16 +266,47 @@ void main() {
       final body = network.capturedInitBodies.first;
       expect(body['originalFilename'], equals('clip.mp4'));
       expect(body['mimeType'], equals('video/mp4'));
-      expect(body['clientId'], equals('test-cid'));
       expect(body['segmentoId'], equals(5));
       expect(body['totalBytes'], equals(10));
+      // client_id no existe en esta API: ajv borraría estos campos en silencio.
+      expect(body.containsKey('clientId'), isFalse);
+      expect(body.containsKey('id'), isFalse);
+      expect(
+        body.keys,
+        containsAll(<String>['usuariologged', 'idusuariologged']),
+      );
     });
 
-    test('returns SyncSuccess with remoteId = uploadId', () async {
+    test('init body carries tipoFoto = antes for a TipoVideo.antes', () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path, tipoVideo: TipoVideo.antes);
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(network.capturedInitBodies.first['tipoFoto'], equals('antes'));
+    });
+
+    test('init body carries tipoFoto = despues for a TipoVideo.despues',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path, tipoVideo: TipoVideo.despues);
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(network.capturedInitBodies.first['tipoFoto'], equals('despues'));
+    });
+
+    test('returns SyncSuccess with remoteId = id from complete', () async {
       network
         ..queueInit(_okInit(uploadId: 'abc-123'))
         ..queuePatch(_okPatch(offset: 10))
-        ..queueComplete(_okComplete(uploadId: 'abc-123'));
+        ..queueComplete(_okComplete(uploadId: 'abc-123', id: 987));
 
       final entity = _entity(ruta: f.path);
       final outcome =
@@ -256,14 +314,30 @@ void main() {
 
       expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
       final success = outcome as SyncSuccess<VideoSegmentoEntity>;
-      expect(success.remoteId, equals('abc-123'));
+      expect(success.remoteId, equals('987'));
     });
 
-    test('serverVersion.url is the deterministic download URL', () async {
+    test('serverVersion.id is the imagenes_segmento row id from complete',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete(id: 987));
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      final success = outcome as SyncSuccess<VideoSegmentoEntity>;
+      expect(success.serverVersion?.id, equals(987));
+    });
+
+    test('serverVersion.url is the thumbdb media URL keyed by the row id',
+        () async {
       network
         ..queueInit(_okInit(uploadId: 'xyz'))
         ..queuePatch(_okPatch(offset: 10))
-        ..queueComplete(_okComplete(uploadId: 'xyz'));
+        ..queueComplete(_okComplete(uploadId: 'xyz', id: 987));
 
       final entity = _entity(ruta: f.path);
       final outcome =
@@ -272,7 +346,7 @@ void main() {
       final success = outcome as SyncSuccess<VideoSegmentoEntity>;
       expect(
         success.serverVersion?.url,
-        contains('/api/enagas/v1/videos/download/xyz'),
+        contains('/api/enagas/v1/segmentos/thumbdb/987/0/0'),
       );
     });
 
@@ -403,6 +477,32 @@ void main() {
       expect(network.capturedChunks, isEmpty);
       expect(network.capturedCompleteIds, isEmpty);
     });
+
+    // El atajo `complete: true` de arriba solo es válido DENTRO del intento en
+    // curso. Un sobre reenviado llega aquí sin `uploadId` —quien entrega el
+    // upsert descarta antes las sesiones del segmento, §2 regla 2— y entonces
+    // el adapter NO debe consultar estado alguno: debe hacer init y volver a
+    // mandar los bytes, porque el backend borró los del intento anulado.
+    // Si esto se rompe, un vídeo de campo puede reportar éxito sin subirse y
+    // acabar purgado del móvil: desaparece de los dos lados.
+    test('sin uploadId nunca consulta estado: init + bytes completos', () async {
+      network
+        ..queueInit(_okInit(uploadId: 'attempt-2'))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete(uploadId: 'attempt-2', id: 987));
+
+      final entity = _entity(ruta: f.path, uploadId: null);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
+      expect(network.capturedStatusIds, isEmpty);
+      expect(network.capturedInitBodies, hasLength(1));
+      // Los bytes viajan de verdad, desde cero.
+      expect(network.capturedChunks.first.offset, equals(0));
+      expect(network.capturedChunks.first.bytes, hasLength(10));
+      expect(network.capturedCompleteIds, equals(<String>['attempt-2']));
+    });
   });
 
   // ─── push(create) — re-init on 404 status ───────────────────────────────
@@ -429,8 +529,9 @@ void main() {
 
       expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
       expect(network.capturedInitBodies, isNotEmpty);
-      final success = outcome as SyncSuccess<VideoSegmentoEntity>;
-      expect(success.remoteId, equals('new-id'));
+      // La sesión reanudada es la nueva, no la caducada.
+      expect(network.capturedCompleteIds, contains('new-id'));
+      expect(network.capturedChunks.first.uploadId, equals('new-id'));
     });
 
     test('saveUploadId called with new uploadId after re-init', () async {
@@ -514,6 +615,122 @@ void main() {
       expect(outcome, isA<SyncUnrecoverable<VideoSegmentoEntity>>());
       // Only 1 PATCH attempt — unrecoverable is not retried.
       expect(network.capturedChunks.length, equals(1));
+    });
+  });
+
+  // ─── push(create) — 409 = reanudación, no fallo ─────────────────────────
+
+  group('push(create) — 409 resume', () {
+    late File f;
+    setUp(() async => f = await _tmpFile(bytes: 10));
+    tearDown(() async { if (f.existsSync()) await f.delete(); });
+
+    test('409 on chunk → adopts server offset and resumes (§6.2)', () async {
+      network
+        ..queueInit(_okInit(uploadId: 'r409'))
+        ..queuePatch(_resume409Chunk(offset: 4))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete(uploadId: 'r409'));
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
+      // Segundo chunk enviado desde el offset que dictó el servidor, no desde
+      // un contador local.
+      expect(
+        network.capturedChunks.map((c) => c.offset).toList(),
+        equals(<int>[0, 4]),
+      );
+    });
+
+    test('409 on chunk persists the adopted offset', () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_resume409Chunk(offset: 4))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path);
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      verify(() => store.saveUploadOffset('test-cid', 4)).called(1);
+    });
+
+    test('409 on chunk repeating the same offset → SyncUnrecoverable',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_resume409Chunk(offset: 4))
+        ..queuePatch(_resume409Chunk(offset: 4))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      // Sin progreso posible: se corta en lugar de girar para siempre.
+      expect(outcome, isA<SyncUnrecoverable<VideoSegmentoEntity>>());
+      expect(network.capturedChunks.length, equals(2));
+      expect(network.capturedCompleteIds, isEmpty);
+    });
+
+    test('409 without an offset in the body → SyncUnrecoverable', () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(
+          NetworkResponse<dynamic>(statusCode: 409, data: <String, dynamic>{}),
+        );
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(outcome, isA<SyncUnrecoverable<VideoSegmentoEntity>>());
+    });
+
+    test('409 on complete → re-sends missing bytes and closes (§6.4)',
+        () async {
+      network
+        ..queueInit(_okInit(uploadId: 'c409'))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_resume409Complete(offset: 4))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete(uploadId: 'c409', id: 55));
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
+      final success = outcome as SyncSuccess<VideoSegmentoEntity>;
+      expect(success.remoteId, equals('55'));
+      // Chunks: el inicial + la reanudación desde el offset que pidió complete.
+      expect(
+        network.capturedChunks.map((c) => c.offset).toList(),
+        equals(<int>[0, 4]),
+      );
+      expect(network.capturedCompleteIds.length, equals(2));
+    });
+
+    test('409 on complete repeating the same offset → SyncUnrecoverable',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_resume409Complete(offset: 4))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_resume409Complete(offset: 4));
+
+      final entity = _entity(ruta: f.path);
+      final outcome =
+          await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(outcome, isA<SyncUnrecoverable<VideoSegmentoEntity>>());
+      final unrecoverable = outcome as SyncUnrecoverable<VideoSegmentoEntity>;
+      expect(unrecoverable.statusCode, equals(409));
+      expect(network.capturedCompleteIds.length, equals(2));
     });
   });
 

@@ -1,6 +1,3 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../core/api_endpoints.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
@@ -14,12 +11,8 @@ import 'adapter_support.dart';
 /// existing mensajes are not yet supported by the backend.
 class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
   final NetworkService _network;
-  final FlutterSecureStorage _storage;
 
-  MensajeRemoteAdapter(
-    this._network, {
-    FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage();
+  MensajeRemoteAdapter(this._network);
 
   @override
   Future<SyncOutcome<MensajeSegmentoEntity>> push({
@@ -35,23 +28,18 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
     }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final usuario = prefs.getString('user_usuario') ?? '';
-      final userId = prefs.getInt('user_id') ?? 0;
-
+      // Solo los campos declarados por el backend: el resto lo descarta ajv
+      // (`removeAdditional: "all"`) sin devolver error. El `segmento_id` del
+      // body se ignora — manda el del path.
       final body = <String, dynamic>{
-        'id': entity.id ?? 0,
-        'client_id': entity.clientId,
-        'segmento_id': entity.segmentoId,
-        'usuariologged': usuario,
-        'idusuariologged': userId,
         'mensaje': entity.mensaje,
         'enviado_por': entity.enviadoPor,
       };
+      // Sin cabecera de Bearer: esta API no tiene token de sesión, el HMAC del
+      // interceptor es la única autenticación (§1).
       final response = await _network.post(
         ApiEndpoints.mensajeAdd(entity.segmentoId),
         body: body,
-        headers: await bearerAuthHeader(_storage),
       );
       if (!response.isSuccess || bodyIndicatesError(response.data)) {
         final msg = bodyErrorMessage(response.data);
@@ -61,22 +49,22 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
         );
       }
       final data = response.data;
-      String? remoteId;
-      MensajeSegmentoEntity? serverVersion;
-      if (data is Map) {
-        final payload = data is Map<String, dynamic>
-            ? data
-            : data.cast<String, dynamic>();
-        remoteId = extractRemoteIntId(payload)?.toString();
-        try {
-          serverVersion = MensajeSegmentoEntity.fromJson(payload);
-        } catch (_) {
-          serverVersion = null;
-        }
-      }
+      final payload = data is Map<String, dynamic>
+          ? data
+          : data is Map
+              ? data.cast<String, dynamic>()
+              : const <String, dynamic>{};
+
+      // Se estampa el `id` sobre la entidad existente en vez de reconstruirla
+      // desde la respuesta: `fromJson` acuñaría un clientId nuevo (el backend
+      // no devuelve `client_id`) y dejaría `segmento_client_id` a null, con lo
+      // que el upsert local crearía una fila huérfana en vez de actualizar.
+      final remoteIntId = extractRemoteIntId(payload);
+      if (remoteIntId != null) entity.id = remoteIntId;
+
       return SyncSuccess<MensajeSegmentoEntity>(
-        remoteId: remoteId,
-        serverVersion: serverVersion,
+        remoteId: entity.id?.toString(),
+        serverVersion: entity,
       );
     } on NetworkError catch (e) {
       return syncOutcomeFromNetworkError<MensajeSegmentoEntity>(e);

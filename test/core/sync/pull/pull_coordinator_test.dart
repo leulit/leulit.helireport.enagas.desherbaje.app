@@ -38,7 +38,7 @@ SegmentoEntity _seg({
   return SegmentoEntity.fromJson({
     'client_id': clientId,
     'id': id,
-    'ct_id': 1,
+    'ctname': 'CT1',
     'tipo_instalacion': 'lineal',
     'tipo_actividad': 'deshierbe_selectivo',
     'estado': 'propuesta',

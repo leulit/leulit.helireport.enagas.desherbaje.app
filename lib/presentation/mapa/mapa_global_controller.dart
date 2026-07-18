@@ -9,6 +9,7 @@ import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_in
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_di.dart';
+import '../../core/app_log.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
@@ -312,13 +313,23 @@ class MapaGlobalController extends GetxController {
 
     final nuevos = <SegmentoMapInfo>[];
     for (final seg in raw) {
+      // Un `ctname` vacío deja el segmento fuera del filtro por nombre de CT
+      // (§8): invisible en lista/mapa/forzar-envío y por tanto no enviable, así
+      // que su media nunca sale del dispositivo. No es recuperable en silencio.
+      if (seg.ctname.isEmpty) {
+        AppLog.w(
+          'MapaGlobalController: segmento nuevo sin ctname (traza "${seg.traza}") '
+          '— quedará fuera del filtro por CT y no será enviable. '
+          'Revisar el mapa CT id→nombre del usuario.',
+        );
+      }
       final entity = SegmentoEntity.empty()
         ..ubicacionGis = seg.points
         ..latInicio = seg.points.first.latitude
         ..lngInicio = seg.points.first.longitude
         ..latFin = seg.points.last.latitude
         ..lngFin = seg.points.last.longitude
-        ..ctId = seg.ctId
+        ..ctname = seg.ctname
         ..traza = seg.traza
         ..descripcion = seg.description
         ..tipoActividad = seg.tipoActividad

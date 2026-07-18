@@ -103,7 +103,7 @@ enum EstadoActividad {
 enum SegmentoEntityFieldNames {
   id('id'),
   clientId('client_id'),
-  ctId('ct_id'),
+  ctname('ctname'),
   nombre('nombre'),
   descripcion('descripcion'),
   traza('traza'),
@@ -135,7 +135,7 @@ class SegmentoEntity extends AbsBaseModel
     implements Syncable {
   SegmentoEntity(
     this.id,
-    this.ctId,
+    this.ctname,
     this.tipoInstalacion,
     this.ubicacionGis, {
     String? clientId,
@@ -143,7 +143,7 @@ class SegmentoEntity extends AbsBaseModel
 
   SegmentoEntity.empty()
       : id = null,
-        ctId = 0,
+        ctname = '',
         tipoInstalacion = TipoInstalacion.lineal,
         ubicacionGis = [],
         _clientId = const Uuid().v4() {
@@ -162,7 +162,11 @@ class SegmentoEntity extends AbsBaseModel
   final String _clientId;
 
   int? id;
-  int ctId = 0;
+
+  /// Nombre del CT propietario. El segmento identifica su CT por NOMBRE, no por
+  /// id: el contrato de backend (§3 upsert body, §8 descarga contratista) usa
+  /// `ctname` y `GET /segmentos/contratista` filtra por nombre de CT.
+  String ctname = '';
   String? nombre;
   String descripcion = '';
   String? traza;
@@ -200,10 +204,10 @@ class SegmentoEntity extends AbsBaseModel
       SegmentoEntityFieldNames.clientId.value,
       null,
     );
-    final ctId = readJsonDataUtil<int>(
+    final ctname = readJsonDataUtil<String>(
       json,
-      SegmentoEntityFieldNames.ctId.value,
-      0,
+      SegmentoEntityFieldNames.ctname.value,
+      '',
     );
     final tipoInstalacion = TipoInstalacion.fromString(
       readJsonDataUtil<String?>(
@@ -238,7 +242,7 @@ class SegmentoEntity extends AbsBaseModel
 
     final entity = SegmentoEntity(
       id,
-      ctId,
+      ctname,
       tipoInstalacion,
       parsedUbicacion,
       clientId: clientId,
@@ -351,7 +355,7 @@ class SegmentoEntity extends AbsBaseModel
     return {
       SegmentoEntityFieldNames.id.value: id,
       SegmentoEntityFieldNames.clientId.value: clientId,
-      SegmentoEntityFieldNames.ctId.value: ctId,
+      SegmentoEntityFieldNames.ctname.value: ctname,
       SegmentoEntityFieldNames.nombre.value: nombre,
       SegmentoEntityFieldNames.descripcion.value: descripcion,
       SegmentoEntityFieldNames.traza.value: traza,
@@ -420,7 +424,7 @@ class SegmentoEntity extends AbsBaseModel
 
   SegmentoEntity copyWith({
     int? id,
-    int? ctId,
+    String? ctname,
     String? nombre,
     String? descripcion,
     String? traza,
@@ -442,7 +446,7 @@ class SegmentoEntity extends AbsBaseModel
   }) {
     final copy = SegmentoEntity(
       id ?? this.id,
-      ctId ?? this.ctId,
+      ctname ?? this.ctname,
       tipoInstalacion ?? this.tipoInstalacion,
       ubicacionGis ?? List<LatLng>.from(this.ubicacionGis),
       clientId: _clientId,
@@ -477,6 +481,6 @@ class SegmentoEntity extends AbsBaseModel
 
   @override
   String toString() =>
-      'SegmentoEntity(clientId: $_clientId, id: $id, ctId: $ctId, '
+      'SegmentoEntity(clientId: $_clientId, id: $id, ctname: $ctname, '
       'estado: ${estado.descripcion}, longitud: ${longitudKm.toStringAsFixed(2)}km)';
 }

@@ -163,7 +163,8 @@ class NetworkService extends GetxService {
   /// Sends a raw binary chunk to an active upload session.
   /// `POST /api/enagas/v1/videos/upload/{uploadId}`
   /// [uploadOffset] = bytes already confirmed on the server.
-  /// Returns `200 { offset }` with the new accumulated offset.
+  /// Returns `200 { offset }` with the new accumulated offset, o `409 { offset }`
+  /// (§6.2 del contrato: señal de reanudación, sin clave `error`).
   Future<NetworkResponse<dynamic>> postVideoChunk({
     required String uploadId,
     required int uploadOffset,
@@ -184,6 +185,7 @@ class NetworkService extends GetxService {
             'Upload-Offset': uploadOffset.toString(),
           },
           responseType: ResponseType.json,
+          validateStatus: _videoResumeValidateStatus,
         ),
       );
       return _toNetworkResponse(resp);
@@ -213,7 +215,8 @@ class NetworkService extends GetxService {
 
   /// Signals that all chunks have been sent; triggers async MOV→MP4 conversion.
   /// `POST /api/enagas/v1/videos/upload/{uploadId}/complete`
-  /// Returns `200 { uploadId, status: "recibido" }`.
+  /// Returns `200 { uploadId, id, status }`, o `409 { offset, totalBytes }`
+  /// (§6.4 del contrato: faltan bytes, señal de reanudación sin clave `error`).
   Future<NetworkResponse<dynamic>> completeVideoUpload(String uploadId) async {
     final fullUrl = ApiEndpoints.videoUploadComplete(uploadId);
     final path = _videoSigningPath(fullUrl);
@@ -227,6 +230,7 @@ class NetworkService extends GetxService {
             ...hmacHeaders,
             HttpHeaders.contentTypeHeader: 'application/json',
           },
+          validateStatus: _videoResumeValidateStatus,
         ),
       );
       return _toNetworkResponse(resp);
@@ -234,6 +238,12 @@ class NetworkService extends GetxService {
       throw _mapDioException(e, st);
     }
   }
+
+  /// El `409` de las rutas de vídeo no es un fallo: transporta el `offset` desde
+  /// el que hay que reanudar. Se entrega como respuesta normal para que el
+  /// adapter lea el body; el resto de códigos siguen el mapeo estándar.
+  static bool _videoResumeValidateStatus(int? status) =>
+      status != null && (status < 400 || status == 409);
 
   /// Extracts the relative path (including query) from a full URL by stripping
   /// [AppConfig.baseUrl]. Falls back to [Uri.path] if the URL does not start

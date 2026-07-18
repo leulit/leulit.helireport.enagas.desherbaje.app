@@ -8,7 +8,7 @@ import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
 
 Map<String, dynamic> _minimalJson({String clientId = 'test-client-id'}) => {
       'client_id': clientId,
-      'ct_id': 12,
+      'ctname': 'CT12',
       'tipo_instalacion': 'lineal',
       'estado': 'propuesta',
       'tipo_actividad': 'deshierbe_selectivo',
@@ -18,7 +18,7 @@ Map<String, dynamic> _minimalJson({String clientId = 'test-client-id'}) => {
 Map<String, dynamic> _fullJson() => {
       'id': 42,
       'client_id': 'fixed-uuid',
-      'ct_id': 15,
+      'ctname': 'CT15',
       'nombre': 'Segmento Norte',
       'descripcion': 'Tramo principal',
       'traza': 'G-123',
@@ -56,7 +56,7 @@ void main() {
 
       expect(entity.id, equals(42));
       expect(entity.clientId, equals('fixed-uuid'));
-      expect(entity.ctId, equals(15));
+      expect(entity.ctname, equals('CT15'));
       expect(entity.nombre, equals('Segmento Norte'));
       expect(entity.descripcion, equals('Tramo principal'));
       expect(entity.traza, equals('G-123'));
@@ -69,6 +69,24 @@ void main() {
       expect(entity.lngFin, equals(-3.6));
       expect(entity.tipoActividad, equals(TipoActividad.desbroceManual));
       expect(entity.estado, equals(EstadoActividad.validada));
+    });
+
+    test('reads ctname from the contractor download payload (§8)', () {
+      // El backend identifica el CT por NOMBRE (contrato §3/§8), no por id.
+      final entity = SegmentoEntity.fromJson({
+        'id': 7,
+        'ctname': 'CT-BURGOS',
+        'estado': 'propuesta',
+        'imagenes': [],
+        'mensajes': [],
+      });
+      expect(entity.ctname, equals('CT-BURGOS'));
+    });
+
+    test('defaults ctname to empty string when absent', () {
+      final json = _minimalJson()..remove('ctname');
+      final entity = SegmentoEntity.fromJson(json);
+      expect(entity.ctname, isEmpty);
     });
 
     test('parses GeoJSON LineString coordinates in [lng, lat] order', () {
@@ -147,7 +165,7 @@ void main() {
 
       expect(restored.clientId, equals(original.clientId));
       expect(restored.id, equals(original.id));
-      expect(restored.ctId, equals(original.ctId));
+      expect(restored.ctname, equals(original.ctname));
       expect(restored.nombre, equals(original.nombre));
       expect(restored.estado, equals(original.estado));
       expect(restored.tipoActividad, equals(original.tipoActividad));
@@ -317,7 +335,7 @@ void main() {
       final copy = original.copyWith(estado: EstadoActividad.finalizada);
       expect(copy.estado, equals(EstadoActividad.finalizada));
       expect(copy.nombre, equals(original.nombre));
-      expect(copy.ctId, equals(original.ctId));
+      expect(copy.ctname, equals(original.ctname));
     });
 
     test('equality is based on clientId', () {
