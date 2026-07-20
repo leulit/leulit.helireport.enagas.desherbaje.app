@@ -1,5 +1,49 @@
 # DEVLOG
 
+## 2026-07-20 — Hitos/PKs en el mapa: clustering con supercluster
+
+**Síntoma:** los hitos no aparecían en `mapa_global_page`. Los PKs sí (a duras penas).
+
+**Diagnóstico (estado leído en vivo del dispositivo por VM Service, no por inspección de
+código):** la descarga y el parseo funcionaban — caché SQLite con 48.073 hitos y 12.965 PKs,
+y el backend sirve bien los `{ct}-hitos.json` (verificado contra prod: `ct-almeria` 1019
+features `Point`, `ct-toledo` 1331, propiedad `name`). El fallo estaba en el render:
+`HitosMapLayer` construía un `Marker` (`Container` + `CustomPaint`) por CADA punto cargado,
+sin culling. A zoom > 14 eso son 48k widgets en un `MarkerLayer` → el frame no se completa y
+la capa se ve vacía. Los PKs, con 4× menos puntos, aún salían: de ahí la asimetría engañosa.
+
+**Solución** — se adapta la lógica de render de la webapp (`MarkerManagerOptimized`), pero SIN
+portar el fichero: la webapp arrastra facade web/mobile, `export_core` entero y features que
+aquí no se usan (drag de markers, filtros por tipo/CT). El núcleo útil son ~60 líneas:
+
+- `clustered_marker_layer.dart` — `ClusteredMarkerLayer<T>` genérico. Indexa los puntos UNA vez
+  en `SuperclusterImmutable` (`radius: 80`, `extent: 512`, `minPoints: 2`, `maxZoom: 20`) y en
+  cada cambio de cámara (`MapCamera.of(context)`, que ya reconstruye la capa al panear/zoom)
+  hace `index.search(west, south, east, north, zoom)` → devuelve solo clusters + puntos del
+  viewport. El índice se reconstruye solo si cambia la lista, no en cada pan. Tap en cluster →
+  `MapController.of(context).move(pos, highestZoom + 3)`.
+- `point_label_marker.dart` — `_PkMarker` y `_HitoMarker` eran el mismo widget duplicado; ahora
+  uno solo con `fill` parametrizado (`0xFFFFC107` PK, `0xFF81D4FA` hito).
+- `PksService.pks` / `HitosService.hitos` pasan de `RxList` a `ValueNotifier<List<T>>`; las capas
+  usan `ValueListenableBuilder` y ya no importan `get`. Nadie más consumía esas listas.
+  `isLoading`/`totalFiles`/`processedFiles` siguen `.obs` porque `sincronizacion_controller` los
+  lee con workers de GetX.
+- `mapa_global_page` monta `const PksMapLayer()` / `const HitosMapLayer()`: el parámetro
+  `currentZoom` sobraba, el gate de zoom vive ahora en la capa (`minZoom = 14`).
+
+**Bug colateral corregido:** los marcadores usaban `alignment: Alignment.bottomCenter`, que en
+flutter_map coloca el widget DEBAJO del punto ("`Alignment.topCenter` will mean the entire marker
+widget is located above the point"), así que el pico del triángulo caía ~30 px al sur de la
+coordenada real y lo que tocaba el punto era el borde superior de la etiqueta. Ahora `topCenter`.
+
+**Verificado en dispositivo:** 61.038 puntos indexados, 12 markers en el árbol de widgets a
+zoom 19,25; sin runtime errors.
+
+**Lección:** una capa clonada hereda el techo de rendimiento del original. `PksMapLayer` funcionaba
+por accidente de volumen; copiarla para hitos (4× más puntos) la llevó por encima del límite. Ante
+"los datos no se ven", medir el estado en runtime antes de sospechar de la descarga: aquí el dato
+llevaba desde el principio en SQLite.
+
 ## 2026-07-20 — Eliminar segmento local (sin id remoto)
 
 Botón "Eliminar" en la barra de acciones de `segmento_detalle_page`, visible solo cuando

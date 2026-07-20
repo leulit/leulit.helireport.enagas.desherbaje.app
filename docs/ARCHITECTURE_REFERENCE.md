@@ -159,11 +159,13 @@ lib/
         ├── layers/
         │   ├── segmentos_map_controller.dart
         │   ├── segmentos_map_layer.dart
-        │   ├── hitos_map_layer.dart               # Lee AppDI.hitosService directamente
+        │   ├── clustered_marker_layer.dart        # Clustering supercluster + culling por viewport
+        │   ├── point_label_marker.dart            # Etiqueta con pico, compartida PK/hito
+        │   ├── hitos_map_layer.dart               # ValueListenableBuilder sobre AppDI.hitosService.hitos
         │   ├── posiciones_fijas_map_controller.dart  # Lee PosicionFijaLocalStore (DI get_it), pull-only
         │   ├── posiciones_fijas_map_layer.dart       # Clon visual de HitosMapLayer
         │   ├── gasoductos_map_layer.dart
-        │   └── pks_map_layer.dart
+        │   └── pks_map_layer.dart                 # ValueListenableBuilder sobre AppDI.pksService.pks
         ├── lines_cut/
         └── legacy/
 ```
@@ -313,8 +315,8 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `GpsBackgroundService` | Tracking GPS con buffer 500/30s + permisos de ubicación; lifecycle atado al mapa |
 | `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
 | `GasoductosService` | Master data legacy de trazas (no integrado al motor — ver §12.2 doc backend) |
-| `PksService` | Master data legacy de puntos kilométricos |
-| `HitosService` | Master data legacy de hitos (réplica de `PksService`; tabla `hitos`, fichero `{filename}-hitos.json`) |
+| `PksService` | Master data legacy de puntos kilométricos; expone `pks` como `ValueNotifier<List<PkEntity>>` |
+| `HitosService` | Master data legacy de hitos (réplica de `PksService`; tabla `hitos`, fichero `{filename}-hitos.json`); expone `hitos` como `ValueNotifier<List<HitoEntity>>` |
 | `AuthExpirationHandler` | Listener global de `SyncActions.authExpired` → logout + nav login |
 | `TypeRegistry` | Registro de tipos del motor (poblado por `OfflineModule.registerEntity`) |
 | `OutboxQueue` | Cola persistente de operaciones pendientes |
@@ -341,6 +343,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `dio` | `^5.9.2` | HTTP client |
 | `flutter_map` | `^8.3.0` | Mapas |
 | `flutter_map_cancellable_tile_provider` | `^3.1.1` | Tiles cancelables |
+| `supercluster` | `^3.2.0` | Clustering espacial de marcadores (PKs e hitos) |
 | `latlong2` | `^0.9.1` | Coordenadas |
 | `sqflite` | `^2.4.2` | SQLite local |
 | `image_picker` | `^1.2.1` | Galería |
