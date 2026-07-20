@@ -134,7 +134,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                 SegmentosMapLayer(currentZoom: controller.currentZoom),
                 const PksMapLayer(),
                 const HitosMapLayer(),
-                PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
+                const PosicionesFijasMapLayer(),
                 ValueListenableBuilder<bool>(
                   valueListenable: controller.followHeading,
                   builder: (_, follow, __) => MyCurrentLocationLayer(
