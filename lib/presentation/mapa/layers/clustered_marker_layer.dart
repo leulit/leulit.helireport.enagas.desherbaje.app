@@ -51,7 +51,7 @@ class ClusteredMarkerLayer<T> extends StatefulWidget {
     required this.clusterColor,
     this.markerHeight = 30,
     this.markerAlignment = Alignment.topCenter,
-    this.minZoom = 12,
+    this.minZoom = 14,
   });
 
   @override
