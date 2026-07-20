@@ -38,7 +38,7 @@ class _StubGasoductosService extends GasoductosService {
 SegmentoEntity _makeSegmento({int? id}) {
   final s = SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, []);
   s.estado = EstadoActividad.ejecucion;
-  s.tipoActividad = TipoActividad.desherbajeSelectivo;
+  s.tipoActividad = TipoActividad.posicionDesherbajeTraza;
   s.descripcion = 'test extremos';
   s.latInicio = 40.0;
   s.lngInicio = -3.0;

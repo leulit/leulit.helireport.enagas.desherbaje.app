@@ -27,7 +27,7 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
   required double totalMeters,
   required double totalSquareMeters,
   String initialDescripcion = '',
-  TipoActividad initialTipoActividad = TipoActividad.desherbajeSelectivo,
+  TipoActividad initialTipoActividad = TipoActividad.posicionDesherbajeTraza,
 }) {
   final descripcionCtrl = TextEditingController(text: initialDescripcion);
   final tipoRx = initialTipoActividad.obs;

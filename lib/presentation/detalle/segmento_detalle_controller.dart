@@ -120,20 +120,15 @@ class SegmentoDetalleController extends MyGetxController {
     _ensureGasoductos();
 
     onTypedAction<void>(AppTypedActions.guardarRequested, (_) => guardar());
-    onTypedAction<void>(
-        AppTypedActions.deleteSegmento, (_) => eliminarSegmento());
-    onTypedAction<void>(
-        AppTypedActions.editarExtremosRequested, (_) => abrirEdicionExtremos());
+    onTypedAction<void>(AppTypedActions.deleteSegmento, (_) => eliminarSegmento());
+    onTypedAction<void>(AppTypedActions.editarExtremosRequested, (_) => abrirEdicionExtremos());
     onTypedAction<TipoFoto>(AppTypedActions.capturaRequested, (event) {
       final tipo = event.data;
       if (tipo != null) capturarMedia(tipo);
     });
-    onTypedAction<void>(AppTypedActions.centrarEnDispositivoRequested,
-        (_) => _centrarEnDispositivo());
-    onTypedAction<LatLngBounds>(AppTypedActions.mediaGisBoundsRequested,
-        (event) => _fitMediaBounds(event.data));
-    addWorker(ever<bool>(
-        isSaving, (v) => AppTypedActions.savingChanged.dispatch(data: v)));
+    onTypedAction<void>(AppTypedActions.centrarEnDispositivoRequested,(_) => _centrarEnDispositivo());
+    onTypedAction<LatLngBounds>(AppTypedActions.mediaGisBoundsRequested,(event) => _fitMediaBounds(event.data));
+    addWorker(ever<bool>(isSaving, (v) => AppTypedActions.savingChanged.dispatch(data: v)));
   }
 
   @override

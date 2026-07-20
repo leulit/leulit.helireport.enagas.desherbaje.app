@@ -201,7 +201,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 | `pkInicio/Fin` | `double?` | PK kilométrico |
 | `lat/lngInicio`, `lat/lngFin` | `double?` | |
 | `ubicacionGis` | `List<LatLng>` | Polilínea parseada de GeoJSON |
-| `tipoActividad` | `TipoActividad` | deshierbeSelectivo, desbroceManual… |
+| `tipoActividad` | `TipoActividad` | 11 tipos: desbroceManual, desbroceMecanico, tala, resiembre, posicionDesherbajeTraza (default), tratamientoAvispas/Aranas/Reptiles y sus variantes `…Otros` |
 | `estado` | `EstadoActividad` | propuesta, validada, ejecución, finalizada, cerrada |
 | `imagenes` | `List<ImagenSegmentoEntity>` | |
 | `mensajes` | `List<MensajeSegmentoEntity>` | |

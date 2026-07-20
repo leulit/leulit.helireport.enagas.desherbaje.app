@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
@@ -10,6 +11,7 @@ import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
+import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'layers/gasoductos_map_layer.dart';
@@ -133,17 +135,35 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                 PksMapLayer(currentZoom: controller.currentZoom),
                 HitosMapLayer(currentZoom: controller.currentZoom),
                 PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
-                MyCurrentLocationLayer(
-                  alignDirectionOnUpdate: AlignOnUpdate.always,
-                  alignPositionOnUpdate: AlignOnUpdate.always,
-                  alignPositionStream: controller.alignPositionStream,
+                ValueListenableBuilder<bool>(
+                  valueListenable: controller.followHeading,
+                  builder: (_, follow, __) => MyCurrentLocationLayer(
+                    alignDirectionOnUpdate:
+                        follow ? AlignOnUpdate.always : AlignOnUpdate.never,
+                    // once: centra en el primer fix GPS al abrir el mapa;
+                    // después el usuario puede panear libre (always lo
+                    // bloquearía).
+                    alignPositionOnUpdate: AlignOnUpdate.once,
+                    alignPositionStream: controller.alignPositionStream,
+                  ),
                 ),
                 ...buildLinesCutMapLayers(controller.linesCut),
-                const MapCompass.cupertino(
-                  rotationDuration: Duration(milliseconds: 300),
-                  hideIfRotatedNorth: false,
-                  alignment: Alignment.bottomRight,
-                  padding: EdgeInsets.only(bottom: 48, right: 10),
+                ValueListenableBuilder<bool>(
+                  valueListenable: controller.followHeading,
+                  builder: (_, follow, __) => MapCompass(
+                    // -45: el icono cupertino ya viene rotado en el asset.
+                    rotationOffset: -45,
+                    icon: _CompassIcon(followHeading: follow),
+                    rotationDuration: const Duration(milliseconds: 300),
+                    hideIfRotatedNorth: false,
+                    alignment: Alignment.bottomRight,
+                    // Caja del IconButton interno = 50 (el icono supera el
+                    // mínimo táctil de 48). bottom 43 alinea su centro con el
+                    // del botón "mi ubicación" (48 + 40/2 = 68); right 5 deja
+                    // ~8px entre ambos círculos visibles.
+                    padding: const EdgeInsets.only(bottom: 43, right: 5),
+                    onPressed: controller.toggleFollowHeading,
+                  ),
                 ),
                 const _ZoomDisplay(),
               ],
@@ -212,24 +232,39 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
 
 // ─── Barra de filtros ─────────────────────────────────────────────────────────
 
-const Map<EstadoActividad, Color> _estadoFilterColors = {
-  EstadoActividad.propuesta: Color(0xFF78909C),
-  EstadoActividad.validada: Color(0xFF1976D2),
-  EstadoActividad.contratista: Color.fromARGB(255, 241, 70, 219),
-  EstadoActividad.ejecucion: Color(0xFFF57C00),
-  EstadoActividad.finalizada: Color(0xFF388E3C),
-  EstadoActividad.cerrada: Color(0xFF546E7A),
-};
+/// Icono de la brújula del mapa. Réplica del look `MapCompass.cupertino`, con
+/// la aguja en rojo cuando el mapa sigue el rumbo del dispositivo y en gris
+/// cuando está fijo al norte.
+class _CompassIcon extends StatelessWidget {
+  final bool followHeading;
 
-const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desbroceManual: Color(0xFF6D4C41),
-  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
-  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
-  TipoActividad.desratizacion: Color(0xFF6A1B9A),
-  TipoActividad.resiembre: Color(0xFF558B2F),
-  TipoActividad.talaArboles: Color(0xFF4E342E),
-};
+  const _CompassIcon({required this.followHeading});
+
+  /// Tamaño del glifo. El dibujo ocupa ~0.8 de su caja, así que 50 rinde un
+  /// círculo visible de ~40 — el diámetro del botón "mi ubicación"
+  /// (padding 9 + icono 22).
+  static const double _size = 50;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(
+          CupertinoIcons.compass,
+          color: followHeading ? Colors.red : Colors.blueGrey,
+          size: _size,
+        ),
+        const Icon(
+          CupertinoIcons.compass_fill,
+          color: Colors.white54,
+          size: _size,
+        ),
+        const Icon(CupertinoIcons.circle, color: Colors.black, size: _size),
+      ],
+    );
+  }
+}
 
 class _FiltrosBar extends GetView<SegmentosMapController> {
   const _FiltrosBar();
@@ -240,167 +275,31 @@ class _FiltrosBar extends GetView<SegmentosMapController> {
       valueListenable: controller.filtrosVisible,
       builder: (context, visible, _) {
         if (!visible) return const SizedBox.shrink();
+        // `SegmentoFiltrosRow` ya trae su propio Material sin elevación; se
+        // envuelve aquí en uno con elevation:2 para conservar la sombra que
+        // tenía la barra flotante sobre el mapa, sin duplicar bordes.
         return Material(
-          color: Colors.white.withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(14),
           elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _FilterDropdown<EstadoActividad>(
-                  icon: Icons.flag_outlined,
-                  label: '',
-                  groupColor: const Color(0xFF455A64),
-                  rxValue: controller.rxEstado,
-                  items: const [
-                    EstadoActividad.propuesta,
-                    EstadoActividad.contratista,
-                    EstadoActividad.validada,
-                    EstadoActividad.ejecucion,
-                    EstadoActividad.finalizada,
-                  ],
-                  itemLabel: (e) => e.etiqueta,
-                  itemColor: (e) =>
-                      _estadoFilterColors[e] ?? const Color(0xFF455A64),
-                  onChanged: controller.setEstado,
-                ),
-                _FilterDropdown<TipoActividad>(
-                  icon: Icons.construction_outlined,
-                  label: '',
-                  groupColor: const Color(0xFF2E7D32),
-                  rxValue: controller.rxTipo,
-                  items: TipoActividad.values,
-                  itemLabel: (t) => t.etiqueta,
-                  itemColor: (t) =>
-                      _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
-                  onChanged: controller.setTipo,
-                ),
-              ],
-            ),
-          ),
+          child: Obx(() => SegmentoFiltrosRow(
+                rxEstado: controller.rxEstado,
+                estadoItems: const [
+                  EstadoActividad.propuesta,
+                  EstadoActividad.contratista,
+                  EstadoActividad.validada,
+                  EstadoActividad.ejecucion,
+                  EstadoActividad.finalizada,
+                ],
+                onEstado: controller.setEstado,
+                rxTipo: controller.rxTipo,
+                onTipo: controller.setTipo,
+                rxCt: controller.rxCt,
+                ctItems: controller.ctsDisponibles,
+                ctLabel: controller.ctLabel,
+                onCt: controller.setCt,
+              )),
         );
       },
-    );
-  }
-}
-
-class _FilterDropdown<T> extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color groupColor;
-  final Rx<T?> rxValue;
-  final List<T> items;
-  final String Function(T) itemLabel;
-  final Color Function(T) itemColor;
-  final void Function(T?) onChanged;
-
-  const _FilterDropdown({
-    required this.icon,
-    required this.label,
-    required this.groupColor,
-    required this.rxValue,
-    required this.items,
-    required this.itemLabel,
-    required this.itemColor,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      decoration: BoxDecoration(
-        color: groupColor.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: groupColor),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: groupColor,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Obx(() {
-            final selected = rxValue.value;
-            final selectedColor =
-                selected != null ? itemColor(selected) : groupColor;
-            return DropdownButton<T?>(
-              value: selected,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              icon: Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
-              style: TextStyle(
-                fontSize: 12,
-                color: selectedColor,
-                fontWeight: FontWeight.w600,
-              ),
-              selectedItemBuilder: (_) => [
-                Text(
-                  'Todos',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: groupColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                ...items.map((e) => Text(
-                      itemLabel(e),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: itemColor(e),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )),
-              ],
-              items: [
-                DropdownMenuItem<T?>(
-                  value: null,
-                  child: Text(
-                    'Todos',
-                    style: TextStyle(fontSize: 12, color: groupColor),
-                  ),
-                ),
-                ...items.map((e) => DropdownMenuItem<T?>(
-                      value: e,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: itemColor(e),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            itemLabel(e),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: itemColor(e),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )),
-              ],
-              onChanged: onChanged,
-            );
-          }),
-        ],
-      ),
     );
   }
 }

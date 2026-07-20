@@ -85,7 +85,7 @@ class _StubMensajeRepo extends MensajeSegmentoRepository {
 SegmentoEntity _makeSegmento({int? id, EstadoActividad? estado}) {
   final s = SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, []);
   s.estado = estado ?? EstadoActividad.ejecucion;
-  s.tipoActividad = TipoActividad.desherbajeSelectivo;
+  s.tipoActividad = TipoActividad.posicionDesherbajeTraza;
   s.descripcion = 'desc';
   return s;
 }

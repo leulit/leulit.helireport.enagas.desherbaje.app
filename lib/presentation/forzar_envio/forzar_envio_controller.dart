@@ -101,7 +101,7 @@ class ForzarEnvioController extends MyGetxController {
     switch (result) {
       case DataSuccess(:final data):
         segmentos.assignAll(
-          data.where((s) => s.estado == EstadoActividad.finalizada),
+          data.where((s) => [EstadoActividad.finalizada, EstadoActividad.contratista].contains(s.estado)),
         );
         _applyFilter();
       case DataFailure(:final message):

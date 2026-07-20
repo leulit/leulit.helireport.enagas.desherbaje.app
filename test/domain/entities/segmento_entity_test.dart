@@ -11,7 +11,7 @@ Map<String, dynamic> _minimalJson({String clientId = 'test-client-id'}) => {
       'ctname': 'CT12',
       'tipo_instalacion': 'lineal',
       'estado': 'propuesta',
-      'tipo_actividad': 'deshierbe_selectivo',
+      'tipo_actividad': 'posicion_desherbaje_traza',
       'descripcion': '',
     };
 
@@ -286,19 +286,19 @@ void main() {
             equals(TipoActividad.desbroceManual)));
 
     test(
-        'parses deshierbe_selectivo',
-        () => expect(TipoActividad.fromString('deshierbe_selectivo'),
-            equals(TipoActividad.desherbajeSelectivo)));
+        'parses posicion_desherbaje_traza',
+        () => expect(TipoActividad.fromString('posicion_desherbaje_traza'),
+            equals(TipoActividad.posicionDesherbajeTraza)));
 
     test(
-        'defaults to desherbajeSelectivo for null',
+        'defaults to posicionDesherbajeTraza for null',
         () => expect(TipoActividad.fromString(null),
-            equals(TipoActividad.desherbajeSelectivo)));
+            equals(TipoActividad.posicionDesherbajeTraza)));
 
     test(
-        'defaults to desherbajeSelectivo for unknown',
+        'defaults to posicionDesherbajeTraza for unknown',
         () => expect(TipoActividad.fromString('???'),
-            equals(TipoActividad.desherbajeSelectivo)));
+            equals(TipoActividad.posicionDesherbajeTraza)));
   });
 
   group('TipoInstalacion.fromString', () {

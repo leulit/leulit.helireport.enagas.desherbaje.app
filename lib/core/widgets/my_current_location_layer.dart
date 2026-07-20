@@ -21,8 +21,8 @@ class MyCurrentLocationLayer extends StatelessWidget {
     final size = Size(nsize, nsize);
     return CurrentLocationLayer(
       alignPositionStream: alignPositionStream,
-      alignPositionOnUpdate: AlignOnUpdate.never,
-      alignDirectionOnUpdate: AlignOnUpdate.never,
+      alignPositionOnUpdate: alignPositionOnUpdate,
+      alignDirectionOnUpdate: alignDirectionOnUpdate,
       style: LocationMarkerStyle(
         marker: DefaultLocationMarker(
           child: Icon(

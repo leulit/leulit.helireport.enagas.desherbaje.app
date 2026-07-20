@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
+import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'forzar_envio_controller.dart';
 
@@ -69,7 +70,8 @@ class ForzarEnvioPage extends GetView<ForzarEnvioController> {
             child: Obx(() {
               if (controller.isLoading.value) {
                 return const Center(
-                  child: CircularProgressIndicator(color: AppColors.moduleGreen),
+                  child:
+                      CircularProgressIndicator(color: AppColors.moduleGreen),
                 );
               }
               if (controller.error.value != null) {
@@ -131,8 +133,7 @@ class _FiltrosBar extends StatelessWidget {
                     prefixIcon: const Icon(Icons.search,
                         color: AppColors.moduleGreen, size: 20),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     border: _border,
                     enabledBorder: _border,
                     focusedBorder: _borderFocused,
@@ -164,165 +165,29 @@ class _FiltrosBar extends StatelessWidget {
                         )
                       : const Icon(Icons.cloud_upload_outlined, size: 18),
                   label: const Text('Enviar todos',
-                      style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700)),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                 );
               }),
             ],
           ),
           const SizedBox(height: 6),
-          _DropdownsBar(controller: controller),
-        ],
-      ),
-    );
-  }
-}
-
-const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desbroceManual: Color(0xFF6D4C41),
-  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
-  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
-  TipoActividad.desratizacion: Color(0xFF6A1B9A),
-  TipoActividad.resiembre: Color(0xFF558B2F),
-  TipoActividad.talaArboles: Color(0xFF4E342E),
-};
-
-class _DropdownsBar extends StatelessWidget {
-  final ForzarEnvioController controller;
-  const _DropdownsBar({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(14),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            _FilterDropdown<TipoActividad>(
-              icon: Icons.construction_outlined,
-              groupColor: const Color(0xFF2E7D32),
-              rxValue: controller.selectedTipo,
-              items: TipoActividad.values,
-              itemLabel: (t) => t.etiqueta,
-              itemColor: (t) =>
-                  _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
-              onChanged: controller.filterByTipo,
-            ),
-            Obx(() => _FilterDropdown<String>(
-                  icon: Icons.business_outlined,
-                  groupColor: const Color(0xFF1565C0),
-                  rxValue: controller.selectedCt,
-                  items: controller.ctsDisponibles,
-                  itemLabel: controller.ctLabel,
-                  itemColor: (_) => const Color(0xFF1565C0),
-                  onChanged: controller.filterByCt,
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterDropdown<T> extends StatelessWidget {
-  final IconData icon;
-  final Color groupColor;
-  final Rx<T?> rxValue;
-  final List<T> items;
-  final String Function(T) itemLabel;
-  final Color Function(T) itemColor;
-  final void Function(T?) onChanged;
-
-  const _FilterDropdown({
-    required this.icon,
-    required this.groupColor,
-    required this.rxValue,
-    required this.items,
-    required this.itemLabel,
-    required this.itemColor,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-      decoration: BoxDecoration(
-        color: groupColor.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: groupColor),
-          const SizedBox(width: 6),
-          Obx(() {
-            final selected = rxValue.value;
-            final selectedColor =
-                selected != null ? itemColor(selected) : groupColor;
-            return DropdownButton<T?>(
-              value: selected,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              icon:
-                  Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
-              style: TextStyle(
-                fontSize: 12,
-                color: selectedColor,
-                fontWeight: FontWeight.w600,
-              ),
-              selectedItemBuilder: (_) => [
-                Text('Todos',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: groupColor,
-                        fontWeight: FontWeight.w600)),
-                ...items.map((e) => Text(
-                      itemLabel(e),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: itemColor(e),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )),
-              ],
-              items: [
-                DropdownMenuItem<T?>(
-                  value: null,
-                  child: Text('Todos',
-                      style: TextStyle(fontSize: 12, color: groupColor)),
-                ),
-                ...items.map((e) => DropdownMenuItem<T?>(
-                      value: e,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: itemColor(e),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(itemLabel(e),
-                              style: TextStyle(
-                                  fontSize: 12, color: itemColor(e))),
-                        ],
-                      ),
-                    )),
-              ],
-              onChanged: onChanged,
-            );
-          }),
+          Obx(() => SegmentoFiltrosRow(
+                rxEstado: controller.selectedEstado,
+                // El controller solo carga contratista/finalizada
+                // (`loadSegmentos`); ofrecer más estados nunca filtraría nada.
+                estadoItems: const [
+                  EstadoActividad.contratista,
+                  EstadoActividad.finalizada,
+                ],
+                onEstado: controller.filterByEstado,
+                rxTipo: controller.selectedTipo,
+                onTipo: controller.filterByTipo,
+                rxCt: controller.selectedCt,
+                ctItems: controller.ctsDisponibles,
+                ctLabel: controller.ctLabel,
+                onCt: controller.filterByCt,
+              )),
         ],
       ),
     );
@@ -377,11 +242,15 @@ const Map<EstadoActividad, Color> _estadoBgColors = {
 const Map<TipoActividad, Color> _tipoColors = {
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
-  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
-  TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.tala: Color(0xFF4E342E),
   TipoActividad.resiembre: Color(0xFF558B2F),
-  TipoActividad.talaArboles: Color(0xFF4E342E),
+  TipoActividad.posicionDesherbajeTraza: Color(0xFF00796B),
+  TipoActividad.tratamientoAvispas: Color(0xFFF9A825),
+  TipoActividad.tratamientoAranas: Color(0xFF6A1B9A),
+  TipoActividad.tratamientoReptiles: Color(0xFF0277BD),
+  TipoActividad.tratamientoAvispasOtros: Color(0xFFEF6C00),
+  TipoActividad.tratamientoAranasOtros: Color(0xFF4527A0),
+  TipoActividad.tratamientoReptilesOtros: Color(0xFF01579B),
 };
 
 class _SegmentCard extends StatelessWidget {
@@ -436,73 +305,57 @@ class _SegmentCard extends StatelessWidget {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          segmento.id != null ? '#${segmento.id}' : 'Sin ID',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade400,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const Spacer(),
-                        _Metric(
-                          icon: Icons.straighten,
-                          label: 'Long.',
-                          value:
-                              '${(segmento.longitud / 1000).toStringWithComma(decimals: 2)} km',
-                        ),
-                        const SizedBox(width: 12),
-                        _Metric(
-                          icon: Icons.square_foot,
-                          label: 'Sup.',
-                          value:
-                              '${segmento.superficie.toStringWithComma(decimals: 0)} m²',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      segmento.descripcion.isEmpty
-                          ? '....'
-                          : segmento.descripcion,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade900,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.business,
-                            size: 14, color: Colors.blueGrey.shade600),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            ctName,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            segmento.id != null ? '#${segmento.id}' : 'Sin ID',
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blueGrey.shade800,
+                              fontSize: 11,
+                              color: Colors.grey.shade400,
+                              fontWeight: FontWeight.w500,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
+                          const Spacer(),
+                          _Metric(
+                            icon: Icons.straighten,
+                            label: 'Long.',
+                            value:
+                                '${(segmento.longitud / 1000).toStringWithComma(decimals: 2)} km',
+                          ),
+                          const SizedBox(width: 12),
+                          _Metric(
+                            icon: Icons.square_foot,
+                            label: 'Sup.',
+                            value:
+                                '${segmento.superficie.toStringWithComma(decimals: 0)} m²',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        segmento.descripcion.isEmpty
+                            ? '....'
+                            : segmento.descripcion,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade900,
                         ),
-                        if ((segmento.traza ?? '').isNotEmpty) ...[
-                          const SizedBox(width: 10),
-                          Icon(Icons.timeline,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.business,
                               size: 14, color: Colors.blueGrey.shade600),
                           const SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              segmento.traza!,
+                              ctName,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -511,70 +364,85 @@ class _SegmentCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if ((segmento.traza ?? '').isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Icon(Icons.timeline,
+                                size: 14, color: Colors.blueGrey.shade600),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                segmento.traza!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.blueGrey.shade800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(height: 1, color: Colors.grey.shade200),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              _Badge(
-                                prefix: 'Estado:',
-                                label: segmento.estado.etiqueta,
-                                color: estadoColor,
-                                bg: estadoBg,
-                              ),
-                              _Badge(
-                                prefix: 'Tipo:',
-                                label: segmento.tipoActividad.etiqueta,
-                                color: tipoColor,
-                                outlined: true,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        ElevatedButton.icon(
-                          onPressed: isSending ? null : onEnviar,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.moduleGreen,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            minimumSize: const Size(0, 32),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      ),
+                      const SizedBox(height: 8),
+                      Divider(height: 1, color: Colors.grey.shade200),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                _Badge(
+                                  prefix: 'Estado:',
+                                  label: segmento.estado.etiqueta,
+                                  color: estadoColor,
+                                  bg: estadoBg,
+                                ),
+                                _Badge(
+                                  prefix: 'Tipo:',
+                                  label: segmento.tipoActividad.etiqueta,
+                                  color: tipoColor,
+                                  outlined: true,
+                                ),
+                              ],
                             ),
                           ),
-                          icon: isSending
-                              ? const SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.cloud_upload_outlined,
-                                  size: 14),
-                          label: const Text('Enviar',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 6),
+                          ElevatedButton.icon(
+                            onPressed: isSending ? null : onEnviar,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.moduleGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
+                              minimumSize: const Size(0, 32),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            icon: isSending
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.cloud_upload_outlined,
+                                    size: 14),
+                            label: const Text('Enviar',
+                                style: TextStyle(
+                                    fontSize: 11, fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -637,15 +505,15 @@ class _Badge extends StatelessWidget {
             ? Colors.transparent
             : (bg ?? color.withValues(alpha: 0.12)),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: color.withValues(alpha: outlined ? 0.45 : 0.3)),
+        border:
+            Border.all(color: color.withValues(alpha: outlined ? 0.45 : 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(prefix,
-              style: TextStyle(
-                  fontSize: 10, color: color.withValues(alpha: 0.7))),
+              style:
+                  TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
           const SizedBox(width: 3),
           Text(
             label,

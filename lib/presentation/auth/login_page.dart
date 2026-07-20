@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'login_page_controller.dart';
 
 class LoginPage extends GetView<LoginPageController> {
@@ -61,6 +62,22 @@ class _LoginBody extends StatelessWidget {
                     'Operadores de campo',
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
+                  const SizedBox(height: 8),
+                  Obx(() {
+                    final last = controller.lastSyncAt.value;
+                    return Text(
+                      last == null
+                          ? 'Sin datos sincronizados'
+                          : 'Datos sincronizados: '
+                              '${DateFormat('dd/MM/yyyy HH:mm').format(last)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: last == null
+                            ? Colors.orange.shade800
+                            : Colors.grey.shade600,
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 40),
                   TextFormField(
                     controller: controller.usuarioController,

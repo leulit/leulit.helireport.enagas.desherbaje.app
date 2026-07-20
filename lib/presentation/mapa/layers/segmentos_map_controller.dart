@@ -39,17 +39,33 @@ class SegmentosMapController extends MyGetxController {
 
   final rxEstado = Rx<EstadoActividad?>(null);
   final rxTipo = Rx<TipoActividad?>(null);
+  final rxCt = Rx<String?>(null);
 
   void setEstado(EstadoActividad? v) => rxEstado.value = v;
   void setTipo(TipoActividad? v) => rxTipo.value = v;
+  void setCt(String? v) => rxCt.value = v;
+
+  /// Etiqueta legible del CT. El nombre viaja en la propia entidad (§3/§8);
+  /// cae a 'CT desconocido' si viniera vacío.
+  String ctLabel(String ctname) =>
+      ctname.isNotEmpty ? ctname : 'CT desconocido';
+
+  /// Nombres de CT presentes en los segmentos cargados, ordenados alfabéticamente.
+  List<String> get ctsDisponibles {
+    final names = segmentos.map((i) => i.segmento.ctname).toSet().toList();
+    names.sort((a, b) => ctLabel(a).compareTo(ctLabel(b)));
+    return names;
+  }
 
   List<SegmentoMapInfo> get filteredSegmentos {
     final estado = rxEstado.value;
     final tipo = rxTipo.value;
-    if (estado == null && tipo == null) return segmentos.toList();
+    final ct = rxCt.value;
+    if (estado == null && tipo == null && ct == null) return segmentos.toList();
     return segmentos.where((info) {
       if (estado != null && info.segmento.estado != estado) return false;
       if (tipo != null && info.segmento.tipoActividad != tipo) return false;
+      if (ct != null && info.segmento.ctname != ct) return false;
       return true;
     }).toList();
   }

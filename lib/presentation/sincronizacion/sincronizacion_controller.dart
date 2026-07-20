@@ -32,7 +32,7 @@ class SincronizacionController extends MyGetxController {
         _hitos = hitosService ?? AppDI.hitosService,
         _connectivity = connectivity ?? AppDI.connectivityService;
 
-  static const String _lastDownloadPrefix = 'sync_master_last_download_';
+  static const String lastDownloadPrefix = 'sync_master_last_download_';
 
   final AuthRepository _auth;
   final GasoductosService _gasoductos;
@@ -72,7 +72,7 @@ class SincronizacionController extends MyGetxController {
   Future<void> _initRows() async {
     final prefs = await SharedPreferences.getInstance();
     rows.assignAll(MasterDataKind.values.map((k) {
-      final last = prefs.getString('$_lastDownloadPrefix${k.name}');
+      final last = prefs.getString('$lastDownloadPrefix${k.name}');
       return MasterDataRow(
         kind: k,
         status: MasterDataStatus.idle,
@@ -437,7 +437,7 @@ class SincronizacionController extends MyGetxController {
   Future<void> _persistLastDownload(MasterDataKind kind, DateTime when) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      '$_lastDownloadPrefix${kind.name}',
+      '$lastDownloadPrefix${kind.name}',
       when.toIso8601String(),
     );
   }

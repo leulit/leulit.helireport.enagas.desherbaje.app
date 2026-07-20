@@ -50,7 +50,7 @@ SegmentoEntity _seg({int? id, String? clientId}) {
   final s =
       SegmentoEntity(id, 'CT1', TipoInstalacion.lineal, [], clientId: clientId);
   s.estado = EstadoActividad.finalizada;
-  s.tipoActividad = TipoActividad.desherbajeSelectivo;
+  s.tipoActividad = TipoActividad.posicionDesherbajeTraza;
   s.descripcion = 'Segmento test';
   return s;
 }

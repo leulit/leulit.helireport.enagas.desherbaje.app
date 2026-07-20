@@ -27,23 +27,27 @@ enum TipoInstalacion {
 }
 
 enum TipoActividad {
-  desbroceManual('desbroce_manual', 'Desbroce Manual'),
-  desbroceMecanico('desbroce_mecanico', 'Desbroce Mecánico'),
-  deshierbePosiciones('deshierbe_posiciones', 'Deshierbe Posiciones'),
-  desherbajeSelectivo('deshierbe_selectivo', 'Deshierbe Selectivo'),
-  desratizacion('desratizacion', 'Desratización'),
-  resiembre('resiembre', 'Resiembre'),
-  talaArboles('tala_arboles', 'Tala de Árboles');
+  desbroceManual('desbroce_manual', 'Desbroce manual (gas.)'),
+  desbroceMecanico('desbroce_mecanico', 'Desbroce mecánico (gas.)'),
+  tala('tala', 'Tala (gas.)'),
+  resiembre('resiembre', 'Resiembre (gas.)'),
+  posicionDesherbajeTraza('posicion_desherbaje_traza', 'Posición + Desherbaje traza (gas. + pos.)'),
+  tratamientoAvispas('trat_avispas', 'Tratamiento de avispas (pos.)'),
+  tratamientoAranas('trat_aranas', 'Tratamiento de arañas (pos.)'),
+  tratamientoReptiles('trat_reptiles', 'Tratamiento de reptiles (pos.)'),
+  tratamientoAvispasOtros('trat_avispas_otros', 'Tratamiento de avispas + otros (pos.)'),
+  tratamientoAranasOtros('trat_aranas_otros', 'Tratamiento de arañas + otros (pos.)'),
+  tratamientoReptilesOtros('trat_reptiles_otros', 'Tratamiento de reptiles + otros (pos.)');
 
   final String descripcion;
   final String etiqueta;
   const TipoActividad(this.descripcion, this.etiqueta);
 
   static TipoActividad fromString(String? value) {
-    if (value == null) return TipoActividad.desherbajeSelectivo;
+    if (value == null) return TipoActividad.posicionDesherbajeTraza;
     return TipoActividad.values.firstWhere(
       (e) => e.descripcion == value,
-      orElse: () => TipoActividad.desherbajeSelectivo,
+      orElse: () => TipoActividad.posicionDesherbajeTraza,
     );
   }
 }
@@ -150,7 +154,7 @@ class SegmentoEntity extends AbsBaseModel
     nombre = null;
     descripcion = '';
     traza = null;
-    tipoActividad = TipoActividad.desherbajeSelectivo;
+    tipoActividad = TipoActividad.posicionDesherbajeTraza;
     estado = EstadoActividad.propuesta;
     imagenes = [];
     mensajes = [];
@@ -178,7 +182,7 @@ class SegmentoEntity extends AbsBaseModel
   double? latFin;
   double? lngFin;
   List<LatLng> ubicacionGis = [];
-  TipoActividad tipoActividad = TipoActividad.desherbajeSelectivo;
+  TipoActividad tipoActividad = TipoActividad.posicionDesherbajeTraza;
   EstadoActividad estado = EstadoActividad.propuesta;
   List<ImagenSegmentoEntity> imagenes = [];
   List<MensajeSegmentoEntity> mensajes = [];

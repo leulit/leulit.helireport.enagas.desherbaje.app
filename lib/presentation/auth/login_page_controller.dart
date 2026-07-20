@@ -5,6 +5,8 @@ import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../data/network/network_error.dart';
 import '../../data/repository/auth_repository_impl.dart';
+import '../sincronizacion/sincronizacion_controller.dart';
+import '../sincronizacion/sync_models.dart';
 
 class LoginPageController extends GetxController {
   final _repo = AuthRepositoryImpl();
@@ -18,6 +20,7 @@ class LoginPageController extends GetxController {
   final showPassword = false.obs;
   final rememberPassword = false.obs;
   final error = Rx<String?>(null);
+  final lastSyncAt = Rx<DateTime?>(null);
 
   static const _keyLastUsuario = 'last_usuario';
   static const _keyLastPassword = 'last_password';
@@ -27,6 +30,7 @@ class LoginPageController extends GetxController {
   void onInit() {
     super.onInit();
     _loadSavedCredentials();
+    _loadLastSync();
   }
 
   Future<void> _loadSavedCredentials() async {
@@ -41,6 +45,23 @@ class LoginPageController extends GetxController {
       final lastPassword = prefs.getString(_keyLastPassword);
       if (lastPassword != null) passwordController.text = lastPassword;
     }
+  }
+
+  /// Fecha de la descarga de datos maestros más reciente (máximo entre todos
+  /// los `MasterDataKind`). `null` si nunca se ha descargado nada.
+  Future<void> _loadLastSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    DateTime? newest;
+    for (final kind in MasterDataKind.values) {
+      final raw = prefs.getString(
+        '${SincronizacionController.lastDownloadPrefix}${kind.name}',
+      );
+      if (raw == null) continue;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) continue;
+      if (newest == null || parsed.isAfter(newest)) newest = parsed;
+    }
+    lastSyncAt.value = newest;
   }
 
   void toggleShowPassword() => showPassword.value = !showPassword.value;

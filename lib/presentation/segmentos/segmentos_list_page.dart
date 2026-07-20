@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
+import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../domain/entities/segmento_entity.dart';
 import 'segmentos_list_controller.dart';
 
@@ -23,7 +24,7 @@ class SegmentosListPage extends GetView<SegmentosListController> {
         leading: const Padding(
           padding: EdgeInsets.all(8.0),
           child: Icon(Icons.eco, color: AppColors.moduleGreen),
-        ),        
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.map_outlined, color: AppColors.moduleGreen),
@@ -53,7 +54,8 @@ class SegmentosListPage extends GetView<SegmentosListController> {
             child: Obx(() {
               if (controller.isLoading.value) {
                 return const Center(
-                  child: CircularProgressIndicator(color: AppColors.moduleGreen),
+                  child:
+                      CircularProgressIndicator(color: AppColors.moduleGreen),
                 );
               }
               if (controller.error.value != null) {
@@ -139,189 +141,22 @@ class _FiltrosBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          _DropdownsBar(controller: controller),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Barra de filtros por dropdowns (Estado / Tipo) ─────────────────────────
-
-const Map<EstadoActividad, Color> _estadoFilterColors = {
-  EstadoActividad.propuesta: Color(0xFF78909C),
-  EstadoActividad.validada: Color(0xFF1976D2),
-  EstadoActividad.contratista: Color.fromARGB(255, 241, 70, 219),
-  EstadoActividad.ejecucion: Color(0xFFF57C00),
-  EstadoActividad.finalizada: Color(0xFF388E3C),
-  EstadoActividad.cerrada: Color(0xFF546E7A),
-};
-
-const Map<TipoActividad, Color> _tipoFilterColors = {
-  TipoActividad.desbroceManual: Color(0xFF6D4C41),
-  TipoActividad.desbroceMecanico: Color(0xFFBF360C),
-  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
-  TipoActividad.desratizacion: Color(0xFF6A1B9A),
-  TipoActividad.resiembre: Color(0xFF558B2F),
-  TipoActividad.talaArboles: Color(0xFF4E342E),
-};
-
-class _DropdownsBar extends StatelessWidget {
-  final SegmentosListController controller;
-  const _DropdownsBar({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(14),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _FilterDropdown<EstadoActividad>(
-              icon: Icons.flag_outlined,
-              label: '',
-              groupColor: const Color(0xFF455A64),
-              rxValue: controller.selectedEstado,
-              items: const [
-                EstadoActividad.propuesta,
-                EstadoActividad.contratista,
-                EstadoActividad.validada,
-                EstadoActividad.ejecucion,
-              ],
-              itemLabel: (e) => e.etiqueta,
-              itemColor: (e) =>
-                  _estadoFilterColors[e] ?? const Color(0xFF455A64),
-              onChanged: controller.filterByEstado,
-            ),
-            _FilterDropdown<TipoActividad>(
-              icon: Icons.construction_outlined,
-              label: '',
-              groupColor: const Color(0xFF2E7D32),
-              rxValue: controller.selectedTipo,
-              items: TipoActividad.values,
-              itemLabel: (t) => t.etiqueta,
-              itemColor: (t) =>
-                  _tipoFilterColors[t] ?? const Color(0xFF2E7D32),
-              onChanged: controller.filterByTipo,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterDropdown<T> extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color groupColor;
-  final Rx<T?> rxValue;
-  final List<T> items;
-  final String Function(T) itemLabel;
-  final Color Function(T) itemColor;
-  final void Function(T?) onChanged;
-
-  const _FilterDropdown({
-    required this.icon,
-    required this.label,
-    required this.groupColor,
-    required this.rxValue,
-    required this.items,
-    required this.itemLabel,
-    required this.itemColor,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-      decoration: BoxDecoration(
-        color: groupColor.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: groupColor.withValues(alpha: 0.25), width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: groupColor),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: groupColor,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Obx(() {
-            final selected = rxValue.value;
-            final selectedColor =
-                selected != null ? itemColor(selected) : groupColor;
-            return DropdownButton<T?>(
-              value: selected,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              icon:
-                  Icon(Icons.arrow_drop_down, size: 16, color: selectedColor),
-              style: TextStyle(
-                fontSize: 12,
-                color: selectedColor,
-                fontWeight: FontWeight.w600,
-              ),
-              selectedItemBuilder: (_) => [
-                Text('Todos',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: groupColor,
-                        fontWeight: FontWeight.w600)),
-                ...items.map((e) => Text(
-                      itemLabel(e),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: itemColor(e),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )),
-              ],
-              items: [
-                DropdownMenuItem<T?>(
-                  value: null,
-                  child: Text('Todos',
-                      style: TextStyle(fontSize: 12, color: groupColor)),
-                ),
-                ...items.map((e) => DropdownMenuItem<T?>(
-                      value: e,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: itemColor(e),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(itemLabel(e),
-                              style: TextStyle(
-                                  fontSize: 12, color: itemColor(e))),
-                        ],
-                      ),
-                    )),
-              ],
-              onChanged: onChanged,
-            );
-          }),
+          Obx(() => SegmentoFiltrosRow(
+                rxEstado: controller.selectedEstado,
+                estadoItems: const [
+                  EstadoActividad.propuesta,
+                  EstadoActividad.contratista,
+                  EstadoActividad.validada,
+                  EstadoActividad.ejecucion,
+                ],
+                onEstado: controller.filterByEstado,
+                rxTipo: controller.selectedTipo,
+                onTipo: controller.filterByTipo,
+                rxCt: controller.selectedCt,
+                ctItems: controller.ctsDisponibles,
+                ctLabel: controller.ctLabel,
+                onCt: controller.filterByCt,
+              )),
         ],
       ),
     );
@@ -346,7 +181,8 @@ class _GroupedByCt extends StatelessWidget {
         final ct = ctNames[i];
         final list = grouped[ct]!;
         final totalLongitud = list.fold<double>(0, (s, e) => s + e.longitud);
-        final totalSuperficie = list.fold<double>(0, (s, e) => s + e.superficie);
+        final totalSuperficie =
+            list.fold<double>(0, (s, e) => s + e.superficie);
 
         return Obx(() {
           final isExpanded = controller.expandedCt.value == ct;
@@ -425,9 +261,8 @@ class _CtHeader extends StatelessWidget {
     // El color de fondo indica el estado del acordión: más intenso cuando
     // está abierto, claro cuando está cerrado. Sustituye al chevron para
     // que toda la información quepa en una sola línea.
-    final bg = isExpanded
-        ? const Color(0xFFC8E6C9)
-        : AppColors.moduleGreenLight;
+    final bg =
+        isExpanded ? const Color(0xFFC8E6C9) : AppColors.moduleGreenLight;
     return Material(
       color: bg,
       child: InkWell(
@@ -460,8 +295,7 @@ class _CtHeader extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               _HeaderBadge(
-                value:
-                    '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
+                value: '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
                 bold: false,
                 width: 90,
               ),
@@ -490,8 +324,7 @@ class _HeaderBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = strong ? AppColors.moduleGreen : Colors.white;
     final fg = strong ? Colors.white : AppColors.moduleGreenText;
-    final border =
-        strong ? AppColors.moduleGreen : const Color(0xFFA5D6A7);
+    final border = strong ? AppColors.moduleGreen : const Color(0xFFA5D6A7);
 
     return Container(
       width: width,
@@ -537,11 +370,15 @@ const Map<EstadoActividad, Color> _estadoBgColors = {
 const Map<TipoActividad, Color> _tipoColors = {
   TipoActividad.desbroceManual: Color(0xFF6D4C41),
   TipoActividad.desbroceMecanico: Color(0xFFBF360C),
-  TipoActividad.deshierbePosiciones: Color(0xFF0277BD),
-  TipoActividad.desherbajeSelectivo: Color(0xFF00796B),
-  TipoActividad.desratizacion: Color(0xFF6A1B9A),
+  TipoActividad.tala: Color(0xFF4E342E),
   TipoActividad.resiembre: Color(0xFF558B2F),
-  TipoActividad.talaArboles: Color(0xFF4E342E),
+  TipoActividad.posicionDesherbajeTraza: Color(0xFF00796B),
+  TipoActividad.tratamientoAvispas: Color(0xFFF9A825),
+  TipoActividad.tratamientoAranas: Color(0xFF6A1B9A),
+  TipoActividad.tratamientoReptiles: Color(0xFF0277BD),
+  TipoActividad.tratamientoAvispasOtros: Color(0xFFEF6C00),
+  TipoActividad.tratamientoAranasOtros: Color(0xFF4527A0),
+  TipoActividad.tratamientoReptilesOtros: Color(0xFF01579B),
 };
 
 class _SegmentCard extends StatelessWidget {
@@ -743,8 +580,8 @@ class _Badge extends StatelessWidget {
             ? Colors.transparent
             : (bg ?? color.withValues(alpha: 0.12)),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: color.withValues(alpha: outlined ? 0.45 : 0.3)),
+        border:
+            Border.all(color: color.withValues(alpha: outlined ? 0.45 : 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

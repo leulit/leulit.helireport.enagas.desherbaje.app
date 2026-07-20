@@ -34,7 +34,7 @@ class PolylineSegment {
         ctname = ctname ?? _extractCtName(originalPolyline),
         traza = traza ?? _extractTraza(originalPolyline),
         name = name ?? _extractName(originalPolyline),
-        tipoActividad = tipoActividad ?? TipoActividad.desherbajeSelectivo,
+        tipoActividad = tipoActividad ?? TipoActividad.posicionDesherbajeTraza,
         estado = estado ?? EstadoActividad.propuesta;
 
   final int id;

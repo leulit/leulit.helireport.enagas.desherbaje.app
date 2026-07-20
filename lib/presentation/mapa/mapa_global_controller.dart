@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:helireport_desherbaje/core/my_getx_controller.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,7 +26,7 @@ import 'lines_cut/lines_cut_dialog.dart';
 
 
 
-class MapaGlobalController extends GetxController {
+class MapaGlobalController extends MyGetxController {
   final mapController = MapController();
 
   /// Empuja un zoom para recentrar el marcador de ubicación en la posición
@@ -36,6 +37,19 @@ class MapaGlobalController extends GetxController {
   /// Recentra el mapa en la posición GPS actual manteniendo el zoom.
   void centerOnMyLocation() =>
       _alignPositionCtrl.add(mapController.camera.zoom);
+
+  /// `true`: el mapa gira con la brújula del dispositivo. `false`: norte
+  /// arriba. Lo alterna el botón de brújula del mapa.
+  final followHeading = ValueNotifier<bool>(true);
+
+  /// Alterna seguimiento de rumbo. Al desactivarlo devuelve la cámara al norte
+  /// (con `followHeading` activo el layer volvería a rotarla en el siguiente
+  /// fix de brújula).
+  void toggleFollowHeading() {
+    final next = !followHeading.value;
+    followHeading.value = next;
+    if (!next) mapController.rotate(0);
+  }
 
   late final LinesCutController linesCut;
 
@@ -108,6 +122,7 @@ class MapaGlobalController extends GetxController {
   void onClose() {
     _saveDebounce?.cancel();
     _alignPositionCtrl.close();
+    followHeading.dispose();
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
@@ -386,5 +401,10 @@ class MapaGlobalController extends GetxController {
         ),
       );
     } catch (_) {}
+  }
+  
+  @override
+  void myOnInit() {
+    // TODO: implement myOnInit
   }
 }
