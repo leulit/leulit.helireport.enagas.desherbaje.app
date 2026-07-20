@@ -16,6 +16,7 @@ class SegmentosListController extends MyGetxController {
   final error = Rx<String?>(null);
   final selectedEstado = Rx<EstadoActividad?>(null);
   final selectedTipo = Rx<TipoActividad?>(null);
+  final selectedCt = Rx<String?>(null);
   final filterDescripcion = ''.obs;
 
   /// CT cuya tarjeta de grupo está expandida en el acordeón. `null` colapsa
@@ -63,6 +64,18 @@ class SegmentosListController extends MyGetxController {
     _applyFilter();
   }
 
+  void filterByCt(String? ctname) {
+    selectedCt.value = ctname;
+    _applyFilter();
+  }
+
+  /// Nombres de CT presentes en los segmentos cargados, ordenados alfabéticamente.
+  List<String> get ctsDisponibles {
+    final names = segmentos.map((s) => s.ctname).toSet().toList();
+    names.sort((a, b) => ctLabel(a).compareTo(ctLabel(b)));
+    return names;
+  }
+
   void toggleCtExpanded(String ctname) {
     expandedCt.value = expandedCt.value == ctname ? null : ctname;
   }
@@ -80,6 +93,7 @@ class SegmentosListController extends MyGetxController {
     final query = filterDescripcion.value.trim().toLowerCase();
     final estado = selectedEstado.value;
     final tipo = selectedTipo.value;
+    final ct = selectedCt.value;
 
     filtradas.assignAll(segmentos.where((s) {
       // Los segmentos finalizados no aparecen en el listado del operario:
@@ -87,6 +101,7 @@ class SegmentosListController extends MyGetxController {
       if (s.estado == EstadoActividad.finalizada) return false;
       if (estado != null && s.estado != estado) return false;
       if (tipo != null && s.tipoActividad != tipo) return false;
+      if (ct != null && s.ctname != ct) return false;
       if (query.isNotEmpty && !s.descripcion.toLowerCase().contains(query)) {
         return false;
       }
@@ -103,7 +118,10 @@ class SegmentosListController extends MyGetxController {
     }
   }
 
+  /// Al volver del detalle se recarga desde SQLite: el segmento puede haberse
+  /// editado o eliminado allí, y la lista en memoria quedaría obsoleta.
   void goToDetalle(SegmentoEntity segmento) {
-    Get.toNamed(AppRoutes.detalle, arguments: segmento);
+    Get.toNamed(AppRoutes.detalle, arguments: segmento)
+        ?.then((_) => loadSegmentos());
   }
 }

@@ -66,7 +66,7 @@ class SegmentoDetalleController extends MyGetxController {
   Stream<double?> get alignEnDispositivoStream => _alignEnDispositivo.stream;
 
   final estado = Rx<EstadoActividad>(EstadoActividad.propuesta);
-  final tipoActividad = Rx<TipoActividad>(TipoActividad.desherbajeSelectivo);
+  final tipoActividad = Rx<TipoActividad>(TipoActividad.posicionDesherbajeTraza);
   final descripcion = ''.obs;
   final isSaving = false.obs;
 
@@ -120,6 +120,8 @@ class SegmentoDetalleController extends MyGetxController {
     _ensureGasoductos();
 
     onTypedAction<void>(AppTypedActions.guardarRequested, (_) => guardar());
+    onTypedAction<void>(
+        AppTypedActions.deleteSegmento, (_) => eliminarSegmento());
     onTypedAction<void>(
         AppTypedActions.editarExtremosRequested, (_) => abrirEdicionExtremos());
     onTypedAction<TipoFoto>(AppTypedActions.capturaRequested, (event) {
@@ -689,6 +691,63 @@ class SegmentoDetalleController extends MyGetxController {
       _showSnack(
         title: 'Error',
         message: 'No se han podido guardar los cambios: $e',
+        isError: true,
+      );
+    } finally {
+      isSaving.value = false;
+    }
+  }
+
+  /// Borra del dispositivo un segmento creado en campo que aún no existe en
+  /// backend, con todo su contenido: fotos, vídeos, mensajes y la propia fila,
+  /// más los jobs de outbox asociados. No encola ningún borrado remoto.
+  ///
+  /// Guarda de seguridad: solo procede si el id remoto es `null` o `0`. Un
+  /// segmento ya sincronizado no se puede eliminar desde la app de campo.
+  Future<void> eliminarSegmento() async {
+    final id = segmento.id;
+    if (id != null && id != 0) {
+      _showSnack(
+        title: 'No se puede eliminar',
+        message: 'El segmento ya existe en el servidor',
+        isError: true,
+      );
+      return;
+    }
+
+    isSaving.value = true;
+    try {
+      // Hijos primero: si algo falla a media, el segmento sigue en local y el
+      // borrado se puede reintentar sin dejar huérfanos irrecuperables.
+      for (final i in await _imagenRepo.getAllByClientId(segmento.clientId)) {
+        await _imagenRepo.purgeLocal(i);
+        await _deleteLocalFile(i.ruta);
+      }
+      for (final v in await _videoRepo.getAllByClientId(segmento.clientId)) {
+        await _videoRepo.purgeLocal(v);
+        await _deleteLocalFile(v.ruta);
+      }
+      for (final m
+          in await _mensajeRepo.getAllBySegmentoClientId(segmento.clientId)) {
+        await _mensajeRepo.purgeLocal(m);
+      }
+      await _segmentoRepo.purgeLocal(segmento);
+
+      imagenes.clear();
+      videos.clear();
+      mensajes.clear();
+      Get.back<void>();
+      _showSnack(
+        title: 'Eliminado',
+        message: 'El segmento se ha eliminado del dispositivo',
+        isError: false,
+      );
+    } catch (e, st) {
+      _log.e('SegmentoDetalleController: error al eliminar segmento',
+          error: e, stackTrace: st);
+      _showSnack(
+        title: 'Error',
+        message: 'No se ha podido eliminar el segmento: $e',
         isError: true,
       );
     } finally {

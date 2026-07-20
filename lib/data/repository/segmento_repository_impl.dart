@@ -76,6 +76,11 @@ class SegmentoRepositoryImpl implements SegmentoRepository {
     return entity;
   }
 
+  /// Borra el segmento del store local junto con sus jobs de outbox, sin
+  /// encolar ninguna operación de borrado remoto. Solo tiene sentido para
+  /// segmentos que nunca llegaron al backend (`id == null`).
+  Future<void> purgeLocal(SegmentoEntity entity) => _offline.purgeLocal(entity);
+
   /// Actualiza el estado de un segmento que ya tiene id remoto asignado.
   ///
   /// Solo aplica a segmentos con id remoto (`remoteId != null`). Los segmentos

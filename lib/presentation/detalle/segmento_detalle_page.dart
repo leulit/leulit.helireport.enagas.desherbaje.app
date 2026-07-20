@@ -326,6 +326,10 @@ class _GuardarBarState extends State<_GuardarBar> {
         Get.find<SegmentoDetalleController>().segmento.estado ==
             EstadoActividad.contratista;
     final tipo = _index == 3 ? TipoFoto.despues : TipoFoto.antes;
+    // Solo un segmento que nunca llegó al backend (sin id remoto) se puede
+    // eliminar del dispositivo.
+    final remoteId = Get.find<SegmentoDetalleController>().segmento.id;
+    final showEliminar = remoteId == null || remoteId == 0;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -335,6 +339,10 @@ class _GuardarBarState extends State<_GuardarBar> {
       child: Row(
         children: [
           _guardarButton(),
+          if (showEliminar) ...[
+            const SizedBox(width: 8),
+            _eliminarButton(),
+          ],
           if (showExtremos) ...[
             const SizedBox(width: 8),
             Expanded(child: _extremosButton()),
@@ -362,6 +370,42 @@ class _GuardarBarState extends State<_GuardarBar> {
           : const Icon(Icons.check, size: 18),
       label: const Text('Guardar'),
     );
+  }
+
+  Widget _eliminarButton() {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.red.shade700,
+        foregroundColor: Colors.white,
+      ),
+      onPressed: _saving ? null : _confirmarEliminar,
+      icon: const Icon(Icons.delete_outline, size: 18),
+      label: const Text('Eliminar'),
+    );
+  }
+
+  Future<void> _confirmarEliminar() async {
+    final ok = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('Eliminar segmento'),
+        content: const Text(
+          '¿Seguro que quieres eliminar este segmento? Se borrarán del '
+          'dispositivo sus datos, fotos, vídeos y mensajes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<bool>(result: false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Get.back<bool>(result: true),
+            child: const Text('Sí', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    if (ok ?? false) AppTypedActions.deleteSegmento.dispatch();
   }
 
   Widget _extremosButton() {

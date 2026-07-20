@@ -58,6 +58,10 @@ class AppTypedActions {
   static const guardarRequested =
       TypedAction<void>('SegDetalle.guardarRequested');
 
+  /// El usuario confirmó "Eliminar" en la barra global. Solo se ofrece para
+  /// segmentos que aún no existen en backend (id remoto null o 0). Sin payload.
+  static const deleteSegmento = TypedAction<void>('SegDetalle.deleteSegmento');
+
   /// El usuario pulsó "Editar extremos" (tab Datos). Sin payload.
   static const editarExtremosRequested =
       TypedAction<void>('SegDetalle.editarExtremosRequested');

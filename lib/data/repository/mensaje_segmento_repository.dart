@@ -26,6 +26,11 @@ class MensajeSegmentoRepository {
   ) =>
       _offline.findWhere('segmento_client_id', segmentoClientId);
 
+  /// Borra el mensaje del store local junto con sus jobs de outbox, sin
+  /// encolar borrado remoto.
+  Future<void> purgeLocal(MensajeSegmentoEntity mensaje) =>
+      _offline.purgeLocal(mensaje);
+
   Future<DataResult<MensajeSegmentoEntity>> add({
     required int segmentoId,
     required String segmentoClientId,

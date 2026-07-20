@@ -1,5 +1,22 @@
 # DEVLOG
 
+## 2026-07-20 — Eliminar segmento local (sin id remoto)
+
+Botón "Eliminar" en la barra de acciones de `segmento_detalle_page`, visible solo cuando
+`segmento.id` es `null` o `0` (segmento creado en campo que nunca llegó al backend).
+Diálogo Sí/No; "Sí" dispara `AppTypedActions.deleteSegmento` (nueva TypedAction sin payload).
+
+`SegmentoDetalleController.eliminarSegmento()` escucha la acción y purga en local: fotos,
+vídeos (más sus ficheros en disco), mensajes y la fila del segmento, cada uno vía
+`purgeLocal` del `OfflineRepository` correspondiente (borra fila + jobs de outbox en una
+transacción, sin encolar borrado remoto). Guarda de seguridad redundante en el controller:
+si `id != null && id != 0` aborta con snack. Añadidos `purgeLocal` passthrough en
+`SegmentoRepositoryImpl` y `MensajeSegmentoRepository`.
+
+`segmentos_list_controller.goToDetalle` recarga al volver (`Get.toNamed(...)?.then((_) =>
+loadSegmentos())`): tras eliminar (o editar) en el detalle, la lista en memoria quedaba
+obsoleta y seguía mostrando el segmento borrado. Lectura local, coste despreciable.
+
 ## 2026-07-16 — Fix: alinear cliente sync con contrato backend (4 bugs HIGH)
 
 Validación de la capa de sync contra la guía de cliente del backend (`/api/enagas/v1`).
@@ -894,3 +911,29 @@ NO tocados (correcto): `HitoEntity`/`PkEntity`/`GasoductoEntity` y sus tablas co
 `SegmentoEntity.ctId` migrados: `app_di`, `mapa_global_controller`, `forzar_envio` (filtro por nombre),
 `segmento_detalle_controller`, `segmento_list_card_widget`, `segmentos_list_controller` (agrupa por
 nombre). Docs: `ARCHITECTURE_REFERENCE.md` actualizado.
+
+---
+
+## 2026-07-20 — Nuevo catálogo de `TipoActividad` (11 tipos, sin mapeo legacy)
+
+Sustitución completa del enum `TipoActividad` (`lib/domain/entities/segmento_entity.dart`). Los 7
+valores anteriores se eliminan **sin mapeo legacy**: `deshierbe_posiciones`, `deshierbe_selectivo`,
+`desratizacion` y `tala_arboles` desaparecen y cualquier string desconocido cae al default vía el
+`orElse` de `fromString`.
+
+Nuevos wire values (snake_case, campo `tipo_actividad`), agrupados por ámbito:
+
+- Gasoducto: `desbroce_manual`, `desbroce_mecanico`, `tala`, `resiembre`.
+- Gasoducto + posición: `posicion_desherbaje_traza` (**nuevo default** de `fromString`, sustituye a
+  `deshierbe_selectivo`).
+- Posición: `trat_avispas`, `trat_aranas`, `trat_reptiles` y sus variantes con otros tratamientos
+  `trat_avispas_otros`, `trat_aranas_otros`, `trat_reptiles_otros`.
+
+Propagado a los 5 mapas de color (`_tipoFilterColors` / `_tipoColors` en `mapa_global_page`,
+`forzar_envio_page` ×2, `segmentos_list_page` ×2) con paleta de 11 entradas, y a todos los usos de
+`TipoActividad.desherbajeSelectivo` → `TipoActividad.posicionDesherbajeTraza` en lib/ y test/.
+
+**Pendiente:** confirmar con backend que acepta estas claves en `tipo_actividad`. El DEFAULT SQL de la
+columna en `SegmentoLocalStore` sigue siendo `'deshierbe_selectivo'` (string ya inexistente en el enum;
+inocuo porque `fromString` lo resuelve al default, pero conviene alinearlo en la próxima migración de
+schema).
