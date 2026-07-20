@@ -30,7 +30,8 @@ const String kFileGroupHitos = 'hitos';
 /// `HitoEntity` (puntos para una capa de marcadores).
 class HitosService extends GetxService {
   /// Hitos disponibles en sesión (después de cargar online o desde caché).
-  final hitos = <HitoEntity>[].obs;
+  final ValueNotifier<List<HitoEntity>> hitos =
+      ValueNotifier<List<HitoEntity>>(const []);
   final isLoading = false.obs;
   /// Total de ficheros del lote en curso (0 cuando no hay carga activa).
   final totalFiles = 0.obs;
@@ -112,7 +113,7 @@ class HitosService extends GetxService {
         await _loadFromCache(ctInfos.map((c) => c.id).toList());
         _loaded = true;
         resultSource = MasterDataSource.cache;
-        fetchedCount = hitos.length;
+        fetchedCount = hitos.value.length;
         return MasterDataLoadResult(resultSource, fetchedCount);
       }
 
@@ -122,7 +123,7 @@ class HitosService extends GetxService {
           await _loadFromCache(ctIds);
           _loaded = true;
           resultSource = MasterDataSource.cache;
-          fetchedCount = hitos.length;
+          fetchedCount = hitos.value.length;
           return MasterDataLoadResult(resultSource, fetchedCount);
         }
       }
@@ -171,7 +172,7 @@ class HitosService extends GetxService {
       fetchedCount = _entitiesBuffer.length;
       resultSource = MasterDataSource.network;
 
-      hitos.assignAll(_entitiesBuffer);
+      hitos.value = List<HitoEntity>.unmodifiable(_entitiesBuffer);
       if (_entitiesBuffer.isNotEmpty) {
         await _cacheHitos(_entitiesBuffer);
       }
@@ -246,7 +247,7 @@ class HitosService extends GetxService {
 
   Future<void> _loadFromCache(List<int> ctIds) async {
     if (ctIds.isEmpty) {
-      hitos.clear();
+      hitos.value = const [];
       return;
     }
     final db = await LocalDatabase.instance.database;
@@ -256,7 +257,8 @@ class HitosService extends GetxService {
       where: 'ct_id IN ($placeholders)',
       whereArgs: ctIds,
     );
-    hitos.assignAll(rows.map(_rowToHito).toList());
+    hitos.value =
+        List<HitoEntity>.unmodifiable(rows.map(_rowToHito));
   }
 
   Future<void> _cacheHitos(List<HitoEntity> entities) async {

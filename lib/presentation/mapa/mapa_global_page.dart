@@ -132,8 +132,8 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
                 ),
                 const GasoductosMapLayer(),
                 SegmentosMapLayer(currentZoom: controller.currentZoom),
-                PksMapLayer(currentZoom: controller.currentZoom),
-                HitosMapLayer(currentZoom: controller.currentZoom),
+                const PksMapLayer(),
+                const HitosMapLayer(),
                 PosicionesFijasMapLayer(currentZoom: controller.currentZoom),
                 ValueListenableBuilder<bool>(
                   valueListenable: controller.followHeading,

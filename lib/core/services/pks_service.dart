@@ -30,7 +30,8 @@ const String kFileGroupPk = 'pk';
 /// `PkEntity` (puntos para una capa de marcadores).
 class PksService extends GetxService {
   /// PKs disponibles en sesión (después de cargar online o desde caché).
-  final pks = <PkEntity>[].obs;
+  final ValueNotifier<List<PkEntity>> pks =
+      ValueNotifier<List<PkEntity>>(const []);
   final isLoading = false.obs;
   /// Total de ficheros del lote en curso (0 cuando no hay carga activa).
   final totalFiles = 0.obs;
@@ -112,7 +113,7 @@ class PksService extends GetxService {
         await _loadFromCache(ctInfos.map((c) => c.id).toList());
         _loaded = true;
         resultSource = MasterDataSource.cache;
-        fetchedCount = pks.length;
+        fetchedCount = pks.value.length;
         return MasterDataLoadResult(resultSource, fetchedCount);
       }
 
@@ -122,7 +123,7 @@ class PksService extends GetxService {
           await _loadFromCache(ctIds);
           _loaded = true;
           resultSource = MasterDataSource.cache;
-          fetchedCount = pks.length;
+          fetchedCount = pks.value.length;
           return MasterDataLoadResult(resultSource, fetchedCount);
         }
       }
@@ -171,7 +172,7 @@ class PksService extends GetxService {
       fetchedCount = _entitiesBuffer.length;
       resultSource = MasterDataSource.network;
 
-      pks.assignAll(_entitiesBuffer);
+      pks.value = List<PkEntity>.unmodifiable(_entitiesBuffer);
       if (_entitiesBuffer.isNotEmpty) {
         await _cachePks(_entitiesBuffer);
       }
@@ -246,7 +247,7 @@ class PksService extends GetxService {
 
   Future<void> _loadFromCache(List<int> ctIds) async {
     if (ctIds.isEmpty) {
-      pks.clear();
+      pks.value = const [];
       return;
     }
     final db = await LocalDatabase.instance.database;
@@ -256,7 +257,7 @@ class PksService extends GetxService {
       where: 'ct_id IN ($placeholders)',
       whereArgs: ctIds,
     );
-    pks.assignAll(rows.map(_rowToPk).toList());
+    pks.value = List<PkEntity>.unmodifiable(rows.map(_rowToPk));
   }
 
   Future<void> _cachePks(List<PkEntity> entities) async {
