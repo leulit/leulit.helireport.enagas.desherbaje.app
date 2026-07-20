@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
@@ -29,7 +30,8 @@ class PosicionesFijasMapController extends GetxController {
 
   final PosicionFijaLocalStore _store;
 
-  final marcadores = <PosicionFijaMarkerInfo>[].obs;
+  final ValueNotifier<List<PosicionFijaMarkerInfo>> marcadores =
+      ValueNotifier<List<PosicionFijaMarkerInfo>>(const []);
   final isLoading = false.obs;
   final error = Rx<String?>(null);
 
@@ -46,7 +48,7 @@ class PosicionesFijasMapController extends GetxController {
           point: LatLng(p.displayLatitude!, p.displayLongitude!),
         ));
       }
-      marcadores.assignAll(mapped);
+      marcadores.value = List<PosicionFijaMarkerInfo>.unmodifiable(mapped);
     } catch (e, st) {
       error.value = 'Error cargando posiciones fijas';
       AppLog.w(

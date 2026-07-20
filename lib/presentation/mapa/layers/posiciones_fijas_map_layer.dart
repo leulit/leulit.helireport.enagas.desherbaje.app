@@ -15,16 +15,16 @@ class PosicionesFijasMapLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<PosicionesFijasMapController>();
-    return Obx(() {
-      return ClusteredMarkerLayer<PosicionFijaMarkerInfo>(
-        points: controller.marcadores.toList(growable: false),
+    return ValueListenableBuilder<List<PosicionFijaMarkerInfo>>(
+      valueListenable: Get.find<PosicionesFijasMapController>().marcadores,
+      builder: (_, points, __) => ClusteredMarkerLayer<PosicionFijaMarkerInfo>(
+        points: points,
         getPosition: (p) => p.point,
         markerWidth: (p) => PointLabelMarker.widthFor(p.label),
         buildMarker: (p) => PointLabelMarker(label: p.label, fill: _fill),
         clusterColor: _fill,
         minZoom: 12,
-      );
-    });
+      ),
+    );
   }
 }
