@@ -1,5 +1,35 @@
 # DEVLOG
 
+## 2026-07-21 — Fix: `gis_json` se generaba y persistía, pero NUNCA se enviaba
+
+**Síntoma:** toda la media subida desde el 2026-07-10 llegó al backend sin georreferencia, aunque
+en SQLite el `gis_json` estaba correctamente poblado y el mapa de Antes/Después lo pintaba bien.
+
+**Causa:** el campo se implementó en las entidades (`toJson`/`toMap`) y se documentó como contrato
+(`BACKEND_SYNC_CONTRACT.md` §4.3), pero **los adaptadores de push no usan `toJson`**: construyen su
+payload campo a campo. `ImagenRemoteAdapter` arma el mapa `fields` del multipart y
+`VideoRemoteAdapter._doInit` arma el body JSON del init. Ninguno de los dos listaba `gis_json`, así
+que el dato moría en el móvil. La entrada de DEVLOG del 2026-07-10 afirmaba "toJson envía `gis_json`
+al backend" — corregida en su sitio: es cierta sobre `toJson` y falsa sobre lo que viaja por el hilo.
+Lección: en este motor **el wire lo define el adaptador, no la entidad**; añadir un campo a `toJson`
+no es enviarlo.
+
+**Fix** (`lib/data/sync/imagen_remote_adapter.dart`, `lib/data/sync/video_remote_adapter.dart`):
+- Foto → campo multipart `gis_json` con el string GeoJSON tal cual (`entity.gisJson`), condicional a
+  `!= null` (mismo patrón que `subida_por`).
+- Vídeo → clave `gis_json` en el body del init (§6.1), condicional igual.
+- En ambos, opcional de verdad: sin GPS **no se incluye la clave**. Ni string vacío ni `"null"`, que
+  el backend persistiría como GIS válido y rompería el parseo del mapa.
+- Actualizado el comentario de `_doInit` que decía que mandar campos no declarados es inútil porque
+  ajv los borra: sigue valiendo para `id`/`clientId`, pero `gis_json` sí está declarado (`extraFields`
+  del backend, en implementación en paralelo con este contrato de wire).
+
+**Tests** (`test/data/sync/imagen_remote_adapter_test.dart` nuevo,
+`test/data/sync/video_remote_adapter_test.dart` ampliado): los cuatro casos — foto con `gisJson`
+(valor verbatim), foto sin `gisJson` (clave ausente), init de vídeo con y sin `gisJson`. El fake de
+`NetworkService` captura el payload real, no el `toJson` de la entidad: es la única forma de que este
+bug no vuelva. `flutter analyze` sin issues; 62 tests de los tres ficheros de adaptador en verde.
+
 ## 2026-07-20 — Editar extremos: markers pin + mirilla (precisión de drag)
 
 **Problema (UX, validado con responsable).** En `edit_extremos_dialog`, los extremos A/B eran
@@ -264,7 +294,10 @@ la media se guarda con `gis_json = null`. Media de galería → sin GIS. Diseño
 **Entidades y almacén:**
 - `ImagenSegmentoEntity` y `VideoSegmentoEntity`: **eliminados** `latitud`, `longitud`, `fixedLatitud`,
   `fixedLongitud` (ninguno se poblaba) + **añadido** `String? gisJson` (enum `gis_json`), en
-  `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`. `toJson` envía `gis_json` al backend.
+  `toMap`/`fromMap`/`toJson`/`fromJson`/`copyWith`. ~~`toJson` envía `gis_json` al backend.~~
+  **CORREGIDO 2026-07-21:** falso. `toJson` incluye `gis_json`, pero **ningún adaptador de push usa
+  `toJson`**: `ImagenRemoteAdapter` monta su multipart a mano y `VideoRemoteAdapter` monta el body del
+  init a mano, así que el campo nunca salió del móvil. Ver entrada del 2026-07-21.
 - `ImagenLocalStore` / `VideoLocalStore`: `schemaVersion 2 → 3`. Bloque nuevo `from < 3` con
   **table-rebuild** (`CREATE <t>_new` sin lat/lon + `gis_json TEXT` → `INSERT … SELECT` cols comunes →
   `DROP` → `RENAME` → recrear índices `seg`/`remote`/`segclient`), porque SQLite antiguo de Android no

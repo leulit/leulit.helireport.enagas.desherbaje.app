@@ -302,9 +302,11 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
     required String usuario,
     required int userId,
   }) async {
-    // §6.1: nombres exactos en camelCase. Cualquier campo no declarado lo borra
-    // ajv en silencio (200 igualmente), así que mandar `id`/`clientId` solo
-    // despistaría al siguiente lector.
+    // §6.1: nombres exactos en camelCase. Cualquier campo NO declarado en el
+    // esquema lo borra ajv en silencio (200 igualmente), así que mandar
+    // `id`/`clientId` solo despistaría al siguiente lector. `gis_json` SÍ está
+    // declarado (§4.3), por eso viaja; es opcional, así que sin GPS no se
+    // incluye la clave — nunca string vacío ni "null".
     final resp = await _network.initVideoUpload({
       'originalFilename': entity.filename,
       'totalBytes': totalBytes,
@@ -313,6 +315,7 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
       'tipoFoto': entity.tipoVideo.valor,
       'usuariologged': usuario,
       'idusuariologged': userId,
+      if (entity.gisJson != null) 'gis_json': entity.gisJson,
     });
 
     final body = _asMap(resp.data);

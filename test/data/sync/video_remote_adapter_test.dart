@@ -3,6 +3,8 @@
 // Covers:
 //   - mimeForExtension: .mp4, .mov, fallback
 //   - push(create): init → chunk(s) → complete → SyncSuccess with uploadId
+//   - push(create): init body carries `gis_json` verbatim when the entity has GIS
+//   - push(create): init body omits `gis_json` when the entity has no GIS
 //   - push(create): uploadId persisted to store after init
 //   - push(create): resume — uploadId present → GET status → continue from offset
 //   - push(create): re-init on 404 status (session expired)
@@ -131,6 +133,7 @@ VideoSegmentoEntity _entity({
   int uploadOffset = 0,
   String? uploadId,
   TipoVideo tipoVideo = TipoVideo.antes,
+  String? gisJson,
   required String ruta,
 }) {
   final e = VideoSegmentoEntity(
@@ -143,7 +146,8 @@ VideoSegmentoEntity _entity({
     capturadaAt: DateTime.utc(2026, 1, 1),
   )
     ..uploadOffset = uploadOffset
-    ..uploadId = uploadId;
+    ..uploadId = uploadId
+    ..gisJson = gisJson;
   return e;
 }
 
@@ -404,6 +408,39 @@ void main() {
       await adapter.push(entity: entity, operation: SyncOperation.create);
 
       expect(network.capturedChunks.first.offset, equals(0));
+    });
+
+    test('init body carries gis_json tal cual cuando la captura tiene GIS',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      const gis =
+          '{"type":"FeatureCollection","features":[{"type":"Feature",'
+          '"geometry":{"type":"LineString","coordinates":[[-3.7,40.4]]},'
+          '"properties":{}}]}';
+      final entity = _entity(ruta: f.path, gisJson: gis);
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(network.capturedInitBodies.first['gis_json'], equals(gis));
+    });
+
+    test('init body omite gis_json cuando la captura no tiene GIS', () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path, gisJson: null);
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      // Ausente: ni string vacío ni "null" — el backend guardaría GIS falso.
+      expect(
+        network.capturedInitBodies.first.containsKey('gis_json'),
+        isFalse,
+      );
     });
 
     test('complete is called after all chunks', () async {

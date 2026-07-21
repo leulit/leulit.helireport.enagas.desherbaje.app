@@ -18,7 +18,7 @@ import 'adapter_support.dart';
 /// Uploads to the segmento-scoped contract endpoint
 /// [ApiEndpoints.segmentoImagenes]:
 /// - endpoint: `POST /api/enagas/v1/segmentos/{id}/imagenes`
-/// - fields: `tipoFoto`, `capturada_at`, `subida_por`
+/// - fields: `tipoFoto`, `capturada_at`, `subida_por`, `gis_json`
 /// - file attached under the field name `file`
 ///
 /// Sin `Authorization`: esta API no tiene Bearer, la firma HMAC del
@@ -67,6 +67,9 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
         'tipoFoto': entity.tipoFoto.valor,
         'capturada_at': entity.capturadaAt.toIso8601String(),
         if (subidaPor != null) 'subida_por': subidaPor.toString(),
+        // §4.3: GeoJSON de la captura, opcional. Sin GPS no hay clave — nunca
+        // string vacío ni "null", que el backend guardaría como GIS válido.
+        if (entity.gisJson != null) 'gis_json': entity.gisJson,
       };
 
       final files = <NetworkFile>[
