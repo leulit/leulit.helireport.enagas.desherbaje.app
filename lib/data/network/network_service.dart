@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -84,7 +85,12 @@ class NetworkService extends GetxService {
     try {
       final response = await _dio.post<dynamic>(
         path,
-        data: body,
+        // Fastify rechaza con 400 `FST_ERR_CTP_EMPTY_JSON_BODY` todo POST que
+        // declare `application/json` y llegue con cuerpo vacío. Como el
+        // content-type se fija siempre aquí, un endpoint cuyo id viaja en el
+        // path (p.ej. `sync-complete`) se llamaba sin `body` y era rechazado
+        // SIEMPRE. Se manda `{}`: JSON válido, y ajv descarta lo no declarado.
+        data: body ?? const <String, dynamic>{},
         queryParameters: queryParameters,
         options: Options(
           headers: headers,
@@ -225,6 +231,10 @@ class NetworkService extends GetxService {
     try {
       final resp = await _videoDio.post<dynamic>(
         fullUrl,
+        // Cuerpo `{}` obligatorio: declara `application/json`, y Fastify
+        // rechaza con 400 `FST_ERR_CTP_EMPTY_JSON_BODY` un JSON vacío. El
+        // uploadId viaja en el path, así que no hay nada más que enviar.
+        data: const <String, dynamic>{},
         options: Options(
           headers: {
             ...hmacHeaders,
@@ -298,12 +308,17 @@ class NetworkService extends GetxService {
     return map;
   }
 
+  /// Tope del cuerpo de respuesta que se adjunta al mensaje de error. La
+  /// columna `last_error` del outbox y los logs se leen en campo: un volcado
+  /// completo los haría inservibles.
+  static const int _maxErrorBodyChars = 500;
+
   NetworkError _mapDioException(DioException e, [StackTrace? st]) {
     final status = e.response?.statusCode;
-    final baseMessage =
-        (e.response?.data is Map && (e.response!.data as Map)['message'] is String)
-            ? (e.response!.data as Map)['message'] as String
-            : e.message ?? 'Network error';
+    final data = e.response?.data;
+    final baseMessage = (data is Map && data['message'] is String)
+        ? data['message'] as String
+        : _messageWithBody(e, data);
 
     NetworkErrorCategory category;
     switch (e.type) {
@@ -335,6 +350,36 @@ class NetworkService extends GetxService {
       cause: e,
       stackTrace: st ?? e.stackTrace,
     );
+  }
+
+  /// Mensaje de error cuando el cuerpo NO trae un `message` legible.
+  ///
+  /// `e.message` es texto genérico de Dio ("Http status error [400]") que no
+  /// dice nada de la causa y acaba tal cual en el outbox: un 400 se vuelve
+  /// indiagnosticable. Se adjunta el cuerpo crudo recortado para conservar la
+  /// razón real del rechazo.
+  String _messageWithBody(DioException e, Object? data) {
+    final fallback = e.message ?? 'Network error';
+    if (data == null) return fallback;
+
+    String body;
+    if (data is Map || data is List) {
+      // Un cuerpo no serializable (referencias cíclicas, tipos raros) jamás
+      // debe hacer estallar el mapeador de errores: se degrada a toString().
+      try {
+        body = jsonEncode(data);
+      } catch (_) {
+        body = data.toString();
+      }
+    } else {
+      body = data.toString();
+    }
+
+    if (body.isEmpty) return fallback;
+    if (body.length > _maxErrorBodyChars) {
+      body = '${body.substring(0, _maxErrorBodyChars)}…';
+    }
+    return '$fallback — respuesta: $body';
   }
 
   NetworkErrorCategory _categoryForStatus(int? status) {

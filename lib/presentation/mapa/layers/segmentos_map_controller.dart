@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/app_log.dart';
 import '../../../core/app_router.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/my_getx_controller.dart';
+import '../../../core/screen_state.dart';
 import '../../../data/repository/segmento_repository_impl.dart';
 import '../../../domain/entities/segmento_entity.dart';
 import '../../../domain/usecases/get_segmentos_usecase.dart';
@@ -41,9 +45,32 @@ class SegmentosMapController extends MyGetxController {
   final rxTipo = Rx<TipoActividad?>(null);
   final rxCt = Rx<String?>(null);
 
-  void setEstado(EstadoActividad? v) => rxEstado.value = v;
-  void setTipo(TipoActividad? v) => rxTipo.value = v;
-  void setCt(String? v) => rxCt.value = v;
+  final _state = ScreenState('mapa_segmentos');
+
+  void setEstado(EstadoActividad? v) {
+    rxEstado.value = v;
+    _persistFiltros();
+  }
+
+  void setTipo(TipoActividad? v) {
+    rxTipo.value = v;
+    _persistFiltros();
+  }
+
+  void setCt(String? v) {
+    rxCt.value = v;
+    _persistFiltros();
+  }
+
+  /// Guarda los tres filtros juntos: `save()` es un debounce único, así que un
+  /// snapshot parcial por setter perdería los cambios encadenados.
+  void _persistFiltros() {
+    _state.save(() => {
+          'estado': rxEstado.value?.name,
+          'tipo': rxTipo.value?.name,
+          'ct': rxCt.value,
+        });
+  }
 
   /// Etiqueta legible del CT. El nombre viaja en la propia entidad (§3/§8);
   /// cae a 'CT desconocido' si viniera vacío.
@@ -78,6 +105,38 @@ class SegmentosMapController extends MyGetxController {
     onTypedAction(LinesCutTypedActions.endCutAction, (action) {
       filtrosVisible.value = true;
     });
+    unawaited(_restoreFiltros());
+  }
+
+  Future<void> _restoreFiltros() async {
+    await _state.load();
+    final estadoName = _state.text('estado');
+    if (estadoName != null) {
+      rxEstado.value = _parseEnum(EstadoActividad.values, estadoName);
+      if (rxEstado.value == null) {
+        AppLog.w('SegmentosMapController: estado guardado desconocido '
+            '"$estadoName", se ignora');
+      }
+    }
+    final tipoName = _state.text('tipo');
+    if (tipoName != null) {
+      rxTipo.value = _parseEnum(TipoActividad.values, tipoName);
+      if (rxTipo.value == null) {
+        AppLog.w('SegmentosMapController: tipo guardado desconocido '
+            '"$tipoName", se ignora');
+      }
+    }
+    rxCt.value = _state.text('ct');
+  }
+
+  /// Parse tolerante de un enum por `.name`: si no matchea ningún valor
+  /// (p.ej. cambió el catálogo entre versiones), devuelve `null` en lugar de
+  /// lanzar.
+  T? _parseEnum<T extends Enum>(List<T> values, String name) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return null;
   }
 
   Future<void> load() async {
@@ -128,6 +187,7 @@ class SegmentosMapController extends MyGetxController {
 
   @override
   void onClose() {
+    _state.dispose();
     segmentosHitNotifier.dispose();
     filtrosVisible.dispose();
     super.onClose();

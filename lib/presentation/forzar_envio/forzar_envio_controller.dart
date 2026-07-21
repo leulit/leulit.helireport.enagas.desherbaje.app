@@ -9,6 +9,7 @@ import '../../core/services/connectivity_service.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../../core/sync/engine/sync_engine.dart';
 import '../../core/sync/outbox/outbox_queue.dart';
+import '../../core/sync/sync_actions.dart';
 import '../../data/sync/imagen_local_store.dart';
 import '../../data/sync/mensaje_local_store.dart';
 import '../../data/sync/propagate_segmento_remote_id_usecase.dart';
@@ -63,7 +64,9 @@ class ForzarEnvioController extends MyGetxController {
   final selectedCt = Rx<String?>(null);
   final filterDescripcion = ''.obs;
 
-  final enviandoIds = <int>{}.obs;
+  /// Envíos en curso, por `clientId`. NO por `id` remoto: es null hasta el
+  /// primer upsert, así que todo segmento nuevo colisionaría en la misma clave.
+  final enviandoIds = <String>{}.obs;
   final isEnviandoTodos = false.obs;
 
   /// Último resumen de envío (subidos / reintentables / rechazados / conflictos).
@@ -71,6 +74,22 @@ class ForzarEnvioController extends MyGetxController {
 
   /// Mensaje de error del último envío (vacío si no hubo error).
   final lastError = ''.obs;
+
+  /// Mensaje informativo del último envío cuando NO hubo error: confirmación de
+  /// subida o "no había nada pendiente". Separado de [lastError] para que la
+  /// vista pueda distinguir éxito de fallo sin parsear texto.
+  final lastInfo = ''.obs;
+
+  /// Rechazos recibidos del motor durante el envío en curso. Traen el motivo
+  /// real del backend ([EntityRejectedEvent.errorMessageEs] + `statusCode`),
+  /// que el `DrainSummary` reduce a un simple contador.
+  final rechazos = <EntityRejectedEvent>[].obs;
+
+  /// Jobs del sobre que SIGUEN en `rejected` tras el envío, por tipo de
+  /// entidad. Un job rechazado es invisible para el drain pero cuenta como
+  /// no-sincronizado para la purga: sin reportarlo, el segmento queda
+  /// bloqueado en silencio.
+  final Map<String, int> _bloqueados = <String, int>{};
 
   /// Segmentos del envío en curso cuyo contenido subió pero cuyo `sync-complete`
   /// no respondió 200 ([PurgeStatus.finalizeFailed]). No es un éxito: el backend
@@ -85,6 +104,16 @@ class ForzarEnvioController extends MyGetxController {
       filterDescripcion,
       (_) => _applyFilter(),
       time: const Duration(milliseconds: 300),
+    );
+    // El motor emite un rechazo por job desde `DispatchActionTask`. El
+    // `DrainSummary` solo cuenta; el motivo legible viaja aquí.
+    onTypedAction<EntityRejectedEvent>(
+      SyncActions.entityRejected,
+      (event) {
+        final data = event.data;
+        if (data != null) rechazos.add(data);
+      },
+      debugLabel: 'ForzarEnvio.entityRejected',
     );
     loadSegmentos();
   }
@@ -174,6 +203,112 @@ class ForzarEnvioController extends MyGetxController {
   /// segmento aborta sin tocar los hijos; un fallo de un hijo deja el segmento
   /// pendiente sin tocar a los demás segmentos.
   Future<DrainSummary> _sendOne(SegmentoEntity s) async {
+    // Hijos del sobre. Se enumeran ANTES del drain porque sus `clientId` hacen
+    // falta ya para desatascar los jobs `rejected`. `propagate` (más abajo)
+    // solo reescribe `segmento_id` de estas filas, nunca su `clientId`, así que
+    // la lista sigue siendo válida después: no hace falta releerla.
+    final videoIds =
+        (await _videoStore.findWhere('segmento_client_id', s.clientId))
+            .map((e) => e.clientId)
+            .toSet();
+    final imagenIds =
+        (await _imagenStore.findWhere('segmento_client_id', s.clientId))
+            .map((e) => e.clientId)
+            .toSet();
+    final mensajeIds =
+        (await _mensajeStore.findWhere('segmento_client_id', s.clientId))
+            .map((e) => e.clientId)
+            .toSet();
+
+    final scopes = <(String, Set<String>)>[
+      ('video', videoIds),
+      ('imagen', imagenIds),
+      ('mensaje', mensajeIds),
+    ];
+
+    await _desatascarRechazados(s, scopes);
+
+    final summary = await _drenarSobre(s, scopes);
+
+    // Sin caminos silenciosos: si algo del sobre volvió a `rejected` (o nunca
+    // salió de ahí), se contabiliza para reportarlo al usuario. Se hace aquí y
+    // no dentro de `_drenarSobre` porque ese método tiene salidas tempranas.
+    final bloqueos = await _contarRechazadosDelSobre(s, scopes);
+    bloqueos.forEach((tipo, n) => _bloqueados[tipo] = (_bloqueados[tipo] ?? 0) + n);
+
+    return summary;
+  }
+
+  /// Devuelve a `pending` los jobs de ESTE sobre atascados en `rejected`.
+  ///
+  /// `OutboxQueue.nextPending` filtra por `status='pending'`, así que el drain
+  /// nunca vuelve a tocar un job rechazado; pero `readUnsyncedSets` sí lo
+  /// cuenta, de modo que la purga tampoco cierra el segmento. Resultado: sobre
+  /// bloqueado para siempre y en silencio. Reencolar el mismo triple
+  /// `(entity_type, client_id, operation)` lo devuelve a `pending` conservando
+  /// su `remote_id` (`ON CONFLICT` de [OutboxQueue.enqueue]).
+  ///
+  /// Reintento MANUAL: UNA pasada por pulsación del usuario. Si vuelve a
+  /// fallar, el job queda otra vez en `rejected` y se reporta el motivo. Sin
+  /// timers, sin backoff, sin reintentos en cadena.
+  Future<void> _desatascarRechazados(
+    SegmentoEntity s,
+    List<(String, Set<String>)> scopes,
+  ) async {
+    for (final (entityType, ids) in _ambitosDelSobre(s, scopes)) {
+      final propios = await _rechazadosDe(entityType, ids);
+      if (propios.isEmpty) continue;
+      for (final job in propios) {
+        await _outbox.enqueue(
+          entityType: entityType,
+          clientId: job.clientId,
+          operation: job.operation,
+        );
+      }
+      AppLog.w('ForzarEnvioController._sendOne(${s.id}): desatascados '
+          '${propios.length} job(s) "$entityType" de rejected → pending.');
+    }
+  }
+
+  /// Jobs del sobre que siguen en `rejected`, contados por tipo de entidad.
+  Future<Map<String, int>> _contarRechazadosDelSobre(
+    SegmentoEntity s,
+    List<(String, Set<String>)> scopes,
+  ) async {
+    final out = <String, int>{};
+    for (final (entityType, ids) in _ambitosDelSobre(s, scopes)) {
+      final propios = await _rechazadosDe(entityType, ids);
+      if (propios.isNotEmpty) out[entityType] = propios.length;
+    }
+    return out;
+  }
+
+  /// Ámbitos del sobre: el propio segmento más sus hijos. Los tipos sin hijos
+  /// se omiten — un `ids` vacío no acota nada y tocaría jobs ajenos.
+  List<(String, Set<String>)> _ambitosDelSobre(
+    SegmentoEntity s,
+    List<(String, Set<String>)> scopes,
+  ) =>
+      [
+        ('segmento', {s.clientId}),
+        ...scopes.where((e) => e.$2.isNotEmpty),
+      ];
+
+  /// Jobs `rejected` de [entityType] cuyo `clientId` pertenece al sobre. El
+  /// filtro es innegociable: jamás se tocan jobs de otros segmentos.
+  Future<List<SyncJob>> _rechazadosDe(
+    String entityType,
+    Set<String> ids,
+  ) async {
+    final rejected = await _outbox.rejectedJobs(entityType: entityType);
+    return rejected.where((j) => ids.contains(j.clientId)).toList();
+  }
+
+  /// Drenado del sobre: segmento (upsert) → propagación de id → hijos → purga.
+  Future<DrainSummary> _drenarSobre(
+    SegmentoEntity s,
+    List<(String, Set<String>)> scopes,
+  ) async {
     AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "segmento"...');
     final segSummary =
         await _engine.drain(entityType: 'segmento', onlyClientIds: {s.clientId});
@@ -193,22 +328,6 @@ class ForzarEnvioController extends MyGetxController {
     }
 
     await _propagate.propagate(s.clientId, backendId);
-
-    final videoIds = (await _videoStore.findWhere('segmento_client_id', s.clientId))
-        .map((e) => e.clientId)
-        .toSet();
-    final imagenIds = (await _imagenStore.findWhere('segmento_client_id', s.clientId))
-        .map((e) => e.clientId)
-        .toSet();
-    final mensajeIds = (await _mensajeStore.findWhere('segmento_client_id', s.clientId))
-        .map((e) => e.clientId)
-        .toSet();
-
-    final scopes = <(String, Set<String>)>[
-      ('video', videoIds),
-      ('imagen', imagenIds),
-      ('mensaje', mensajeIds),
-    ];
 
     // La unidad de sincronización es el SOBRE entero, no el adjunto suelto.
     // Un `upsert` entregado abre un intento nuevo en el backend y anula el
@@ -240,9 +359,11 @@ class ForzarEnvioController extends MyGetxController {
           );
         }
       }
+      final resumen = scopes
+          .map((e) => '${e.$2.length} ${e.$1}')
+          .join(', ');
       AppLog.i('ForzarEnvioController._sendOne(${s.id}): upsert entregado → '
-          'reencolado el sobre completo (${videoIds.length} vídeos, '
-          '${imagenIds.length} fotos, ${mensajeIds.length} mensajes).');
+          'reencolado el sobre completo ($resumen).');
     }
 
     var combined = segSummary;
@@ -272,34 +393,80 @@ class ForzarEnvioController extends MyGetxController {
     return combined;
   }
 
-  /// Traslada a [lastError] los cierres sin confirmar del envío en curso.
-  /// Nunca pisa un error ya reportado (una excepción es más específica).
-  void _reportFinalizeNoConfirmado() {
-    if (_finalizeNoConfirmado == 0 || lastError.value.isNotEmpty) return;
-    lastError.value = 'Contenido enviado, pero el servidor no confirmó el '
-        'cierre de $_finalizeNoConfirmado segmento(s): siguen pendientes en la '
-        'nube. Vuelve a enviarlos.';
+  /// Nombre en plural y en castellano de cada tipo de entidad, para mensajes
+  /// dirigidos a un operador de campo (no ve "imagen"/"video", ve "fotos").
+  static const Map<String, String> _etiquetasTipo = {
+    'segmento': 'datos del segmento',
+    'video': 'vídeos',
+    'imagen': 'fotos',
+    'mensaje': 'mensajes',
+  };
+
+  /// Cierra el aviso de resultado (botón de la vista). No cancela ni deshace
+  /// nada: el estado real vive en el outbox, esto solo oculta el banner.
+  void descartarResultado() {
+    lastError.value = '';
+    lastInfo.value = '';
+    lastDrainSummary.value = null;
+    rechazos.clear();
+  }
+
+  /// Estado inicial de cada envío. Sin esto, los rechazos y bloqueos de un
+  /// envío anterior contaminarían el siguiente.
+  void _resetResultado() {
+    lastError.value = '';
+    lastInfo.value = '';
+    lastDrainSummary.value = null;
+    rechazos.clear();
+    _bloqueados.clear();
+    _finalizeNoConfirmado = 0;
+  }
+
+  /// Cierra el envío dejando SIEMPRE un resultado legible: error, bloqueo,
+  /// cierre sin confirmar, o confirmación explícita. Un envío que no sube nada
+  /// no puede terminar indistinguible de uno correcto.
+  ///
+  /// [lastError] ya puede traer una excepción capturada; es más específica que
+  /// cualquier resumen, así que nunca se pisa.
+  void _reportarResultado(DrainSummary summary) {
+    if (lastError.value.isEmpty && _bloqueados.isNotEmpty) {
+      final detalle = _bloqueados.entries
+          .map((e) => '${e.value} ${_etiquetasTipo[e.key] ?? e.key}')
+          .join(', ');
+      lastError.value = 'No se ha podido subir parte del contenido ($detalle). '
+          'Sigue guardado en el móvil: revisa el motivo y vuelve a intentarlo.';
+    }
+
+    if (lastError.value.isEmpty && _finalizeNoConfirmado > 0) {
+      lastError.value = 'Contenido enviado, pero el servidor no confirmó el '
+          'cierre de $_finalizeNoConfirmado segmento(s): siguen pendientes en la '
+          'nube. Vuelve a enviarlos.';
+    }
+
+    if (lastError.value.isNotEmpty) return;
+
+    lastInfo.value = summary.succeeded > 0
+        ? 'Envío completado: ${summary.succeeded} elemento(s) subidos a la nube.'
+        : 'No había nada pendiente de enviar: ya estaba todo sincronizado.';
   }
 
   /// Envío de UN segmento (botón "enviar").
   Future<void> enviarCloud(SegmentoEntity segmento) async {
+    _resetResultado();
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
       AppLog.w('ForzarEnvioController.enviarCloud: sin red, abortando.');
       return;
     }
 
-    final displayId = segmento.id ?? -1;
-    if (enviandoIds.contains(displayId)) return; // guard re-entrancia
-    enviandoIds.add(displayId);
-    lastError.value = '';
-    lastDrainSummary.value = null;
-    _finalizeNoConfirmado = 0;
+    final key = segmento.clientId;
+    if (enviandoIds.contains(key)) return; // guard re-entrancia
+    enviandoIds.add(key);
 
     try {
       final summary = await _sendOne(segmento);
       lastDrainSummary.value = summary;
-      _reportFinalizeNoConfirmado();
+      _reportarResultado(summary);
       if (summary.rejected > 0 || summary.conflicts > 0) {
         AppLog.w(
           'ForzarEnvioController.enviarCloud: '
@@ -310,7 +477,7 @@ class ForzarEnvioController extends MyGetxController {
       lastError.value = e.toString();
       AppLog.e('ForzarEnvioController.enviarCloud', error: e, stackTrace: st);
     } finally {
-      enviandoIds.remove(displayId);
+      enviandoIds.remove(key);
       await loadSegmentos();
     }
   }
@@ -321,6 +488,7 @@ class ForzarEnvioController extends MyGetxController {
   /// cierre con el backend. Nunca aborta por un fallo de un segmento; sí por
   /// sesión caducada. El GPS (batches) es global → se drena una vez al final.
   Future<void> enviarAllCloud() async {
+    _resetResultado();
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
       AppLog.w('ForzarEnvioController.enviarAllCloud: sin red, abortando.');
@@ -328,9 +496,6 @@ class ForzarEnvioController extends MyGetxController {
     }
     if (isEnviandoTodos.value) return;
     isEnviandoTodos.value = true;
-    lastError.value = '';
-    lastDrainSummary.value = null;
-    _finalizeNoConfirmado = 0;
 
     try {
       // Segmentos pendientes: los que NO están totalmente sincronizados, más
@@ -375,7 +540,7 @@ class ForzarEnvioController extends MyGetxController {
       }
 
       lastDrainSummary.value = combined;
-      _reportFinalizeNoConfirmado();
+      _reportarResultado(combined);
       if (combined.rejected > 0 || combined.conflicts > 0) {
         AppLog.w(
           'ForzarEnvioController.enviarAllCloud: '

@@ -81,6 +81,24 @@ MensajeSegmentoEntity _msg(String clientId) =>
 const _noneUnsynced =
     UnsyncedSets(segmento: {}, imagen: {}, video: {}, mensaje: {});
 
+SyncJob _rejected({
+  required int id,
+  required String entityType,
+  required String clientId,
+  SyncOperation operation = SyncOperation.create,
+}) =>
+    SyncJob(
+      id: id,
+      entityType: entityType,
+      clientId: clientId,
+      operation: operation,
+      status: SyncStatus.rejected,
+      attempts: 1,
+      createdAt: DateTime.utc(2025, 1, 1),
+      lastError: 'HTTP 400',
+      statusCode: 400,
+    );
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 void main() {
@@ -121,6 +139,11 @@ void main() {
           clientId: any(named: 'clientId'),
           operation: any(named: 'operation'),
         )).thenAnswer((_) async => 1);
+
+    // Por defecto no hay nada atascado en `rejected`: cada test que lo necesite
+    // lo sobrescribe.
+    when(() => mockOutbox.rejectedJobs(entityType: any(named: 'entityType')))
+        .thenAnswer((_) async => []);
 
     when(() => mockUseCase.execute())
         .thenAnswer((_) async => const DataSuccess([]));
@@ -438,6 +461,127 @@ void main() {
       verifyNever(() => mockEngine.drain(
           entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
+    });
+  });
+
+  // Un job `rejected` es invisible para `nextPending` (solo lee `pending`) pero
+  // SÍ cuenta como no-sincronizado para la purga: sin desatascarlo, el sobre
+  // queda bloqueado para siempre y en silencio.
+  group('desatasco de jobs rejected', () {
+    test('(r1) un job rejected del sobre vuelve a pending (re-enqueue)',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      when(() => mockOutbox.rejectedJobs(entityType: 'video')).thenAnswer(
+          (_) async =>
+              [_rejected(id: 7, entityType: 'video', clientId: 'vid-1')]);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verify(() => mockOutbox.enqueue(
+            entityType: 'video',
+            clientId: 'vid-1',
+            operation: SyncOperation.create,
+          )).called(greaterThanOrEqualTo(1));
+    });
+
+    test('(r2) el desatasco ocurre ANTES del drain (si no, el drain no lo ve)',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockOutbox.rejectedJobs(entityType: 'segmento')).thenAnswer(
+          (_) async =>
+              [_rejected(id: 1, entityType: 'segmento', clientId: 'seg-1')]);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verifyInOrder([
+        () => mockOutbox.enqueue(
+              entityType: 'segmento',
+              clientId: 'seg-1',
+              operation: SyncOperation.create,
+            ),
+        () => mockEngine.drain(
+            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
+      ]);
+    });
+
+    test('(r3) un job rejected de OTRO segmento NO se toca', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      // El outbox devuelve rechazados de dos sobres distintos; solo 'vid-1'
+      // pertenece al que se está enviando.
+      when(() => mockOutbox.rejectedJobs(entityType: 'video'))
+          .thenAnswer((_) async => [
+                _rejected(id: 7, entityType: 'video', clientId: 'vid-1'),
+                _rejected(id: 8, entityType: 'video', clientId: 'vid-otro'),
+              ]);
+      when(() => mockOutbox.rejectedJobs(entityType: 'segmento'))
+          .thenAnswer((_) async => [
+                _rejected(id: 9, entityType: 'segmento', clientId: 'seg-otro'),
+              ]);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verifyNever(() => mockOutbox.enqueue(
+            entityType: any(named: 'entityType'),
+            clientId: 'vid-otro',
+            operation: any(named: 'operation'),
+          ));
+      verifyNever(() => mockOutbox.enqueue(
+            entityType: any(named: 'entityType'),
+            clientId: 'seg-otro',
+            operation: any(named: 'operation'),
+          ));
+    });
+
+    test('(r4) se respeta la operación original del job, no siempre create',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockOutbox.rejectedJobs(entityType: 'segmento')).thenAnswer(
+          (_) async => [
+                _rejected(
+                  id: 1,
+                  entityType: 'segmento',
+                  clientId: 'seg-1',
+                  operation: SyncOperation.update,
+                ),
+              ]);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verify(() => mockOutbox.enqueue(
+            entityType: 'segmento',
+            clientId: 'seg-1',
+            operation: SyncOperation.update,
+          )).called(1);
+    });
+
+    test('(r5) si tras el envío el sobre sigue bloqueado, lastError lo dice',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      // El job vuelve a fallar: sigue en `rejected` en la segunda consulta.
+      when(() => mockOutbox.rejectedJobs(entityType: 'video')).thenAnswer(
+          (_) async =>
+              [_rejected(id: 7, entityType: 'video', clientId: 'vid-1')]);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      expect(controller.lastError.value, contains('vídeos'));
+      expect(controller.lastInfo.value, isEmpty);
+    });
+
+    test('(r6) envío limpio sin nada pendiente deja un info distinguible',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      expect(controller.lastError.value, isEmpty);
+      expect(controller.lastInfo.value, isNotEmpty);
     });
   });
 

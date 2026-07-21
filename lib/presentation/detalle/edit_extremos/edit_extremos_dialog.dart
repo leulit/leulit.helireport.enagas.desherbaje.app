@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:get/get.dart';
+import 'package:helireport_desherbaje/core/api_endpoints.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_di.dart';
@@ -75,16 +79,10 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: 'https://www.ign.es/wmts/pnoa-ma?'
-                            'SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
-                            '&LAYER=OI.OrthoimageCoverage&STYLE=default'
-                            '&TILEMATRIXSET=GoogleMapsCompatible'
-                            '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
-                            '&FORMAT=image/png',
+                        urlTemplate: ApiEndpoints.pnoaWmts,
                         tileProvider: CancellableNetworkTileProvider(),
-                        userAgentPackageName:
-                            'com.leulit.enagas.helireport_desherbaje',
-                        maxNativeZoom: 20,
+                        userAgentPackageName:'com.leulit.enagas.helireport_desherbaje',
+                        additionalOptions: const {'User-Agent': 'helireport-desherbaje'},
                       ),
                       PolylineLayer(
                         polylines: AppDI.gasoductosService.polylines.toList(),
@@ -103,9 +101,9 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                         markers: [
                           Marker(
                             point: controller.inicio.value,
-                            width: 44,
-                            height: 44,
-                            alignment: Alignment.center,
+                            width: 48,
+                            height: 64,
+                            alignment: Alignment.topCenter,
                             child: _DragEndpointMarker(
                               kind: EndpointKind.inicio,
                               point: controller.inicio.value,
@@ -125,9 +123,9 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                           ),
                           Marker(
                             point: controller.fin.value,
-                            width: 44,
-                            height: 44,
-                            alignment: Alignment.center,
+                            width: 48,
+                            height: 64,
+                            alignment: Alignment.topCenter,
                             child: _DragEndpointMarker(
                               kind: EndpointKind.fin,
                               point: controller.fin.value,
@@ -154,11 +152,6 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                   left: 8,
                   right: 8,
                   child: _SnapBanner(controller: controller),
-                ),
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: _ZoomControls(mapController: _mapController),
                 ),
               ],
             ),
@@ -241,7 +234,7 @@ class _SnapBanner extends StatelessWidget {
               SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'Arrastra los puntos A y B sobre el gasoducto',
+                  'Arrastra los extremos (verde: inicio, rojo: fin) sobre el gasoducto',
                   style: TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
@@ -299,92 +292,18 @@ class _ActionBar extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Obx(() => ElevatedButton.icon(
-                  onPressed:
-                      controller.isSaving.value ? null : controller.guardar,
+                  onPressed: controller.isSaving.value ? null : controller.guardar,
                   icon: controller.isSaving.value
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.check, size: 18),
                   label: const Text('Guardar'),
                 )),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Zoom controls (mismo estilo que _ZoomControls de segmento_detalle_page).
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ZoomControls extends StatelessWidget {
-  const _ZoomControls({required this.mapController});
-  final MapController mapController;
-
-  void _zoomIn() {
-    final cam = mapController.camera;
-    mapController.move(cam.center, (cam.zoom + 1).clamp(5, 20));
-  }
-
-  void _zoomOut() {
-    final cam = mapController.camera;
-    mapController.move(cam.center, (cam.zoom - 1).clamp(5, 20));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ZoomButton(icon: Icons.add, onTap: _zoomIn, isTop: true),
-          Container(height: 1, color: Colors.grey.shade200),
-          _ZoomButton(icon: Icons.remove, onTap: _zoomOut, isTop: false),
-        ],
-      ),
-    );
-  }
-}
-
-class _ZoomButton extends StatelessWidget {
-  const _ZoomButton({
-    required this.icon,
-    required this.onTap,
-    required this.isTop,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isTop;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = isTop
-        ? const BorderRadius.vertical(top: Radius.circular(8))
-        : const BorderRadius.vertical(bottom: Radius.circular(8));
-    return Material(
-      color: Colors.white,
-      borderRadius: radius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, color: Colors.grey.shade800, size: 20),
-        ),
       ),
     );
   }
@@ -425,6 +344,7 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
   Offset? _startLocal;
   int _activePointer = -1;
   int _lastRevertTick = 0;
+  bool _dragging = false;
 
   @override
   void initState() {
@@ -454,6 +374,7 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
         _activePointer = event.pointer;
         _startLocal = event.localPosition;
         _accumulated = Offset.zero;
+        setState(() => _dragging = true);
         widget.onDragStart();
       },
       onPointerMove: (event) {
@@ -469,40 +390,153 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
         final base = camera.latLngToScreenOffset(widget.point);
         final target = base + _accumulated;
         final newPos = camera.offsetToCrs(target);
-        setState(() => _accumulated = Offset.zero);
+        setState(() {
+          _accumulated = Offset.zero;
+          _dragging = false;
+        });
         widget.onDragEnd(newPos);
       },
       onPointerCancel: (event) {
         if (event.pointer != _activePointer) return;
         _activePointer = -1;
         _startLocal = null;
-        setState(() => _accumulated = Offset.zero);
+        setState(() {
+          _accumulated = Offset.zero;
+          _dragging = false;
+        });
         widget.onDragCancel();
       },
+      // El punto real es el borde inferior (bottom-center) de la caja: en
+      // reposo, la punta del pin; en drag, el centro de la mirilla. El bulbo/
+      // agarre queda por encima, así el dedo nunca tapa el punto.
       child: Transform.translate(
         offset: _accumulated,
-        child: Container(
-          decoration: BoxDecoration(
-            color: widget.color,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: const [
-              BoxShadow(
-                  color: Colors.black54, blurRadius: 4, offset: Offset(0, 2)),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              widget.kind == EndpointKind.inicio ? 'A' : 'B',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
+        child: OverflowBox(
+          // La mirilla pinta fuera de la caja 48×64; no la recortes.
+          minWidth: 0,
+          maxWidth: double.infinity,
+          minHeight: 0,
+          maxHeight: double.infinity,
+          child: CustomPaint(
+            size: const Size(48, 64),
+            painter: _dragging
+                ? _CrosshairPainter(color: widget.color)
+                : _PinPainter(color: widget.color),
           ),
         ),
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Painters — el punto real es SIEMPRE bottom-center de la caja (24, 64):
+// en reposo la punta del pin; en drag el centro de la mirilla.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const Offset _kAnchor = Offset(24, 64); // punto real dentro de la caja 48×64
+
+/// Pin lágrima con punta abajo. La punta cae en [_kAnchor]; el bulbo (zona de
+/// agarre) queda arriba, así el dedo no tapa la coordenada.
+class _PinPainter extends CustomPainter {
+  const _PinPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const bulb = Offset(24, 18);
+    const r = 16.0;
+    final tip = _kAnchor;
+
+    // Silueta lágrima: dos tangentes desde la punta al círculo del bulbo +
+    // arco mayor por encima.
+    final d = (tip - bulb).distance;
+    final baseAngle = math.atan2(tip.dy - bulb.dy, tip.dx - bulb.dx);
+    final alpha = math.acos(r / d);
+    final a1 = baseAngle - alpha;
+    final a2 = baseAngle + alpha;
+    final p1 = Offset(bulb.dx + r * math.cos(a1), bulb.dy + r * math.sin(a1));
+
+    final path = ui.Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(p1.dx, p1.dy)
+      ..arcTo(
+        Rect.fromCircle(center: bulb, radius: r),
+        a1,
+        -(2 * math.pi - (a2 - a1)), // arco mayor: por encima del bulbo
+        false,
+      )
+      ..lineTo(tip.dx, tip.dy)
+      ..close();
+
+    canvas.drawShadow(path, Colors.black54, 3, false);
+    canvas.drawPath(path, Paint()..color = color);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = Colors.white,
+    );
+    // Punto blanco de realce en el bulbo.
+    canvas.drawCircle(bulb, 4.5, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(_PinPainter old) => old.color != color;
+}
+
+/// Mirilla tipo visor centrada en [_kAnchor]. Pinta fuera de la caja: como el
+/// dedo agarra el bulbo (parte alta), el centro queda ~30px por debajo del dedo
+/// y siempre visible.
+class _CrosshairPainter extends CustomPainter {
+  const _CrosshairPainter({required this.color});
+
+  final Color color;
+
+  static const double _ring = 22;
+  static const double _gap = 24; // hueco > anillo: brazos solo por fuera, interior limpio
+  static const double _arm = 40;
+
+  void _reticle(Canvas canvas, Offset c, Paint paint) {
+    canvas.drawCircle(c, _ring, paint);
+    // Cuatro brazos con hueco central.
+    canvas.drawLine(Offset(c.dx - _arm, c.dy), Offset(c.dx - _gap, c.dy), paint);
+    canvas.drawLine(Offset(c.dx + _gap, c.dy), Offset(c.dx + _arm, c.dy), paint);
+    canvas.drawLine(Offset(c.dx, c.dy - _arm), Offset(c.dx, c.dy - _gap), paint);
+    canvas.drawLine(Offset(c.dx, c.dy + _gap), Offset(c.dx, c.dy + _arm), paint);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const c = _kAnchor;
+
+    // Halo blanco (trazo grueso) debajo para contraste sobre la línea roja.
+    _reticle(
+      canvas,
+      c,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white,
+    );
+    // Trazo de color encima.
+    _reticle(
+      canvas,
+      c,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+    // Punto central exacto.
+    canvas.drawCircle(c, 4, Paint()..color = Colors.white);
+    canvas.drawCircle(c, 3, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_CrosshairPainter old) => old.color != color;
 }

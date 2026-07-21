@@ -1,5 +1,112 @@
 # DEVLOG
 
+## 2026-07-20 — Editar extremos: markers pin + mirilla (precisión de drag)
+
+**Problema (UX, validado con responsable).** En `edit_extremos_dialog`, los extremos A/B eran
+círculos 44×44 con el punto real en el centro. Al arrastrar, el dedo tapaba el punto exacto y no
+quedaba claro qué píxel del gasoducto se estaba seleccionando. El snap corrige el error
+perpendicular, pero el operador necesita ver **dónde a lo largo del tubo** cae el extremo, y eso
+es justo lo que el dedo ocultaba.
+
+**Diseño (tras grill-me, decisiones de UX del responsable).** Se descartó lupa tipo WhatsApp
+(`RawMagnifier` magnifica raster → ortofoto pixelado; mini-mapa secundario = peso extra) por bajo
+valor sobre el patrón de mirilla. Solución = patrón de precisión estándar (Google Maps / cursor
+iOS):
+
+- **Reposo:** pin teardrop con **punta abajo** = coordenada. El bulbo (zona de agarre) queda
+  arriba, así la punta cae ~40px por debajo del dedo desde el primer frame → punto visible sin
+  salto al tocar. Señal solo por color (verde inicio, rojo fin), sin letras A/B.
+- **Drag:** el pin se oculta y aparece una **mirilla** (crosshair) centrada en la punta; el punto
+  flota sobre el dedo por **geometría** (ancla en el borde inferior de la caja + agarre en el
+  bulbo), NO por un offset artificial → cero salto al iniciar el arrastre.
+
+**Implementación** (`edit_extremos_dialog.dart`, único fichero):
+- `_DragEndpointMarker` con `bool _dragging`; child = `Transform.translate(_accumulated)` →
+  `OverflowBox` (sin clip) → `CustomPaint(48×64, painter: _dragging ? _CrosshairPainter :
+  _PinPainter)`. La mirilla pinta fuera de la caja a propósito.
+- `_PinPainter`: teardrop, punta en `(24,64)`, relleno `color`, borde blanco + sombra.
+- `_CrosshairPainter`: reticón centrado en `(24,64)`, brazos ±40 + círculo r22 + punto central,
+  trazo de color con halo blanco debajo (contraste sobre la polilínea draft roja).
+- Los dos `Marker`: 44×44 `center` → **48×64 `topCenter`** (punta = `inicio/fin.value`).
+- Math del drag intacta (`base = latLngToScreenOffset(point)`, `target = base + accumulated`,
+  `newPos = offsetToCrs(target)`), sin lift → sin salto.
+- Banner reformulado: *"Arrastra los extremos (verde: inicio, rojo: fin) sobre el gasoducto"*.
+
+`flutter analyze`: sin issues. Ajustables si campo lo pide: brazos de la mirilla, r del círculo,
+altura de caja 64 (= cuánto flota el punto bajo el dedo).
+
+## 2026-07-20 — Forzar envío: sobre bloqueado por jobs `rejected` (pérdida silenciosa)
+
+**Síntoma:** en `forzar_envio_page`, "Enviar" no hacía nada. Ni spinner, ni error, ni cambio en
+la lista. Reproducible siempre sobre el mismo segmento.
+
+**Diagnóstico (medido en dispositivo, no deducido).** Se instrumentó `_sendOne` con cronómetros
+por tramo y un volcado del outbox por `client_id`. Dos hipótesis previas cayeron con los datos:
+
+- *"El drain bloquea el hilo de UI"* — FALSA. El envío entero tarda ~160 ms. El
+  `Skipped 1054 frames` del log venía del arranque, no del envío. Se descartó antes de mover
+  nada a isolates.
+- *"No hay jobs pendientes"* — FALSA a medias: había `pending=3` de segmento, 9 de vídeo, 16 de
+  imagen. Pero eran de OTROS segmentos. El careo por `client_id` fue lo que resolvió el caso:
+  del sobre 98 (`clientId 58d47c75-…`) lo único con job vivo eran sus dos vídeos, ambos en
+  `rejected` por un HTTP 400.
+
+**Causa raíz — cerrojo de tres piezas que se cierran entre sí:**
+
+1. El segmento no tiene job en el outbox → `drain` devuelve summary a cero → `succeeded == 0`.
+2. El reencolado del sobre está condicionado a `succeeded > 0`, así que NO se ejecuta.
+3. `OutboxQueue.nextPending` lee solo `status='pending'` → el drain no ve los `rejected` jamás.
+   Pero `PurgeSyncedSegmentoUseCase.readUnsyncedSets` SÍ los cuenta → `keptUnsynced` → no purga.
+
+Resultado: el segmento no se puede enviar ni cerrar, **para siempre**, y su contenido (dos vídeos
+de campo) nunca llega a la nube sin que nadie se entere. Nada en la app revertía `rejected` →
+`pending`: la única vía era `enqueue()` del mismo triple, y sus tres únicos call sites estaban o
+en la creación/edición de la entidad o tras el guarda `succeeded > 0`.
+
+**Solución (tres piezas):**
+
+- `network_service.dart` — `_mapDioException` solo rescataba `data['message']` si era `String`;
+  con cualquier otra forma de cuerpo caía al texto genérico de Dio. Por eso el motivo del 400
+  nunca llegaba al outbox. Nuevo `_messageWithBody`: adjunta el cuerpo (`jsonEncode` en
+  try/catch, degradando a `toString()`), recortado a 500 chars para no reventar `last_error`.
+- `forzar_envio_controller.dart` — `_desatascarRechazados` devuelve a `pending` los `rejected`
+  **del sobre** (filtro por `clientId`, innegociable: nunca toca jobs de otros segmentos),
+  conservando la `operation` original — `segmento` puede llevar `update`, y forzar `create`
+  habría creado otro triple dejando el job rechazado en su sitio. Reintento manual, uno por
+  pulsación: sin timers ni backoff, para no martillear un backend que rechaza de forma
+  determinista.
+- Visibilidad — el controller escucha `SyncActions.entityRejected` (que el motor YA emitía desde
+  `DispatchActionTask` y que nadie consumía) y lo expone en `.obs`; `_ResultadoEnvioBanner` lo
+  pinta. Nuevo `lastInfo` para que "no había nada pendiente" sea distinguible de "subido". El
+  cruce de capas va por `TypedAction`, el controller↔widget por observables.
+
+**Lección:** un guarda bien razonado (`reencolar solo si el upsert se entregó`, para no duplicar
+contenido ya subido) se convierte en cerrojo cuando aparece un estado que no se contempló: sobre
+cuyo padre no tiene nada que entregar y cuyos hijos están rechazados. Test `r1`–`r6` lo fija.
+
+**Causa del 400, identificada en cuanto la pieza 1 la hizo visible:**
+
+```
+{"error":"Body cannot be empty when content-type is set to 'application/json'",
+ "code":"FST_ERR_CTP_EMPTY_JSON_BODY"}
+```
+
+Fastify rechaza con 400 todo `POST` que declare `application/json` y llegue con cuerpo vacío. Dos
+sitios lo hacían:
+
+- `NetworkService.post` fija `contentType: 'application/json'` SIEMPRE, pero pasa `data: body`,
+  que es `null` cuando el id viaja en el path. `PurgeSyncedSegmentoUseCase._notifySyncComplete`
+  llama así → `sync-complete` era rechazado en TODOS los intentos → el segmento no se cerraba ni
+  se purgaba jamás. Segundo cerrojo, independiente del de `rejected`.
+- `NetworkService.completeVideoUpload` no pasaba `data` y declaraba JSON → ese era el 400
+  original de los dos vídeos. Quedó enmascarado al reintentar porque los bytes ya estaban en el
+  servidor y el adapter salió por la rama `getVideoStatus` → `complete == true`, sin llegar a
+  llamar al endpoint (`video_remote_adapter.dart:101`). El bug seguía vivo para vídeos nuevos.
+
+Fix: `data: body ?? const <String, dynamic>{}` en `post`, y `data: const <String, dynamic>{}` en
+`completeVideoUpload`. `{}` es JSON válido y ajv descarta lo no declarado. El resto de POST ya
+mandaban cuerpo (`initVideoUpload`, `postVideoChunk` con `octet-stream`, multipart con FormData).
+
 ## 2026-07-20 — Hitos/PKs en el mapa: clustering con supercluster
 
 **Síntoma:** los hitos no aparecían en `mapa_global_page`. Los PKs sí (a duras penas).
@@ -981,3 +1088,41 @@ Propagado a los 5 mapas de color (`_tipoFilterColors` / `_tipoColors` en `mapa_g
 columna en `SegmentoLocalStore` sigue siendo `'deshierbe_selectivo'` (string ya inexistente en el enum;
 inocuo porque `fromString` lo resuelve al default, pero conviene alinearlo en la próxima migración de
 schema).
+
+---
+
+## 2026-07-20 — Persistencia del estado de pantalla en el listado de segmentos
+
+`SegmentosListController` guarda ahora sus filtros y el CT desplegado entre navegaciones, con el
+mismo patrón que ya usaban `mapa_global` y `mapa_segmentos`: `ScreenState('segmentos_list')`
+(`lib/core/screen_state.dart`, SharedPreferences namespaceado + debounce de 400 ms).
+
+Claves persistidas: `estado`, `tipo`, `ct`, `descripcion`, `expanded_ct`.
+
+Decisiones de orden y de guardado:
+
+- **Restaurar antes de cargar.** `myOnInit` encadena `_restoreState().then((_) => loadSegmentos())`.
+  `loadSegmentos` aplica filtros y llama a `_ensureExpanded`, así que una restauración posterior
+  sería pisada por el CT por defecto (o lo pisaría ella).
+- **Un solo punto de guardado.** `ScreenState.save` es un debounce único, de modo que un snapshot
+  parcial por setter perdería los cambios encadenados. Se persiste en `_applyFilter()` (cubre los
+  tres `filterBy*` y el debounce de descripción) y en `toggleCtExpanded()`.
+- **`TextEditingController` para la descripción.** El `TextField` era no controlado; sin controller
+  el filtro restaurado se aplicaba pero no se veía en la caja. En la restauración se asigna
+  `filterDescripcion.value` directamente, no vía el campo, para no disparar el debounce y un
+  `_applyFilter` extra antes de que haya datos.
+- **Parse de enums tolerante** (`_parseEnum`): un valor guardado que ya no existe en el catálogo
+  cae a `null` con `AppLog.w`, no lanza.
+- `_state.dispose()` y `descripcionCtrl.dispose()` en `onClose` — sin el primero, salir de la
+  pantalla antes de que venza el debounce perdería el último cambio del usuario.
+
+De paso: el `debounce(...)` de `myOnInit` no estaba registrado con `addWorker`, así que no se
+liberaba en `onClose`. Corregido.
+
+**Comportamiento validado con el responsable:** `_ensureExpanded` sigue forzando siempre un CT
+abierto. Si el usuario colapsa todos y sale, al volver se reabre el primero — "todo colapsado" no
+persiste. Es la regla que ya existía y se mantiene deliberadamente; distinguir "nunca se fijó" de
+"el usuario cerró" sería un cambio de UX.
+
+`flutter analyze` sobre `lib/presentation/segmentos/` y `lib/core/screen_state.dart` → 0 issues.
+Sin verificación en runtime: no hay tests para este controller.

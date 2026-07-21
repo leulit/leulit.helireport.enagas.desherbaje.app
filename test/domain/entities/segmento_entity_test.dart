@@ -251,8 +251,13 @@ void main() {
           {EstadoActividad.finalizada});
       expect(EstadoActividad.finalizada.transicionesPermitidas,
           {EstadoActividad.cerrada, EstadoActividad.ejecucion});
-      expect(EstadoActividad.propuesta.transicionesPermitidas, isEmpty);
-      expect(EstadoActividad.validada.transicionesPermitidas, isEmpty);
+      expect(EstadoActividad.propuesta.transicionesPermitidas, {
+        EstadoActividad.contratista,
+        EstadoActividad.ejecucion,
+        EstadoActividad.finalizada,
+      });
+      expect(EstadoActividad.validada.transicionesPermitidas,
+          {EstadoActividad.ejecucion, EstadoActividad.finalizada});
       expect(EstadoActividad.cerrada.transicionesPermitidas, isEmpty);
     });
 
@@ -264,6 +269,12 @@ void main() {
       expect(EstadoActividad.contratista.puedeIrA(EstadoActividad.finalizada),
           isFalse);
       expect(EstadoActividad.propuesta.puedeIrA(EstadoActividad.contratista),
+          isTrue);
+      expect(EstadoActividad.propuesta.puedeIrA(EstadoActividad.validada),
+          isFalse);
+      expect(EstadoActividad.validada.puedeIrA(EstadoActividad.ejecucion),
+          isTrue);
+      expect(EstadoActividad.validada.puedeIrA(EstadoActividad.contratista),
           isFalse);
       expect(
           EstadoActividad.cerrada.puedeIrA(EstadoActividad.ejecucion), isFalse);
@@ -273,8 +284,8 @@ void main() {
       expect(EstadoActividad.contratista.esEditableDesdeApp, isTrue);
       expect(EstadoActividad.ejecucion.esEditableDesdeApp, isTrue);
       expect(EstadoActividad.finalizada.esEditableDesdeApp, isTrue);
-      expect(EstadoActividad.propuesta.esEditableDesdeApp, isFalse);
-      expect(EstadoActividad.validada.esEditableDesdeApp, isFalse);
+      expect(EstadoActividad.propuesta.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.validada.esEditableDesdeApp, isTrue);
       expect(EstadoActividad.cerrada.esEditableDesdeApp, isFalse);
     });
   });

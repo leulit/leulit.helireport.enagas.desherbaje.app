@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_di.dart';
 import '../../core/app_log.dart';
 import '../../core/app_theme.dart';
+import '../../core/screen_state.dart';
 import '../../core/services/gasoductos_service.dart';
 import '../../core/services/gps_background_service.dart';
 import '../../core/services/hitos_service.dart';
@@ -40,7 +41,7 @@ class MapaGlobalController extends MyGetxController {
 
   /// `true`: el mapa gira con la brújula del dispositivo. `false`: norte
   /// arriba. Lo alterna el botón de brújula del mapa.
-  final followHeading = ValueNotifier<bool>(true);
+  final followHeading = ValueNotifier<bool>(false);
 
   /// Alterna seguimiento de rumbo. Al desactivarlo devuelve la cámara al norte
   /// (con `followHeading` activo el layer volvería a rotarla en el siguiente
@@ -49,6 +50,7 @@ class MapaGlobalController extends MyGetxController {
     final next = !followHeading.value;
     followHeading.value = next;
     if (!next) mapController.rotate(0);
+    _persistViewDebounced();
   }
 
   late final LinesCutController linesCut;
@@ -120,7 +122,7 @@ class MapaGlobalController extends MyGetxController {
 
   @override
   void onClose() {
-    _saveDebounce?.cancel();
+    _state.dispose();
     _alignPositionCtrl.close();
     followHeading.dispose();
     if (Get.isRegistered<LinesCutController>()) {
@@ -134,28 +136,31 @@ class MapaGlobalController extends MyGetxController {
 
   // ─────────────────── Persistencia de la vista del mapa ───────────────────
 
-  static const _kMapLastLat = 'mapa_global_last_lat';
-  static const _kMapLastLng = 'mapa_global_last_lng';
-  static const _kMapLastZoom = 'mapa_global_last_zoom';
+  final _state = ScreenState('mapa_global');
 
   LatLng? _savedCenter;
   double? _savedZoom;
   bool _viewRestored = false;
   bool _mapReady = false;
-  Timer? _saveDebounce;
+
+  /// `false` hasta que se ha leído (e intentado aplicar) la vista guardada.
+  /// Mientras tanto no se persiste: los eventos que emite el mapa al montarse
+  /// llevan la cámara por defecto y pisarían el valor bueno antes de leerlo.
+  bool _viewLoadAttempted = false;
 
   Future<void> _loadSavedView() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lat = prefs.getDouble(_kMapLastLat);
-      final lng = prefs.getDouble(_kMapLastLng);
-      final zoom = prefs.getDouble(_kMapLastZoom);
-      if (lat != null && lng != null && zoom != null) {
-        _savedCenter = LatLng(lat, lng);
-        _savedZoom = zoom;
-        if (_mapReady) _restoreSavedView();
-      }
-    } catch (_) {}
+    await _state.load();
+    final lat = _state.number('lat');
+    final lng = _state.number('lng');
+    final zoom = _state.number('zoom');
+    if (lat != null && lng != null && zoom != null) {
+      _savedCenter = LatLng(lat, lng);
+      _savedZoom = zoom;
+      if (_mapReady) _restoreSavedView();
+    }
+    final followSaved = _state.boolean('follow_heading');
+    if (followSaved != null) followHeading.value = followSaved;
+    _viewLoadAttempted = true;
   }
 
   void _restoreSavedView() {
@@ -165,7 +170,10 @@ class MapaGlobalController extends MyGetxController {
     try {
       mapController.move(c, z);
       _viewRestored = true;
-    } catch (_) {}
+    } catch (e, s) {
+      AppLog.e('MapaGlobalController: fallo al restaurar la vista guardada',
+          error: e, stackTrace: s);
+    }
   }
 
   void onMapReady() {
@@ -174,15 +182,15 @@ class MapaGlobalController extends MyGetxController {
   }
 
   void _persistViewDebounced() {
-    _saveDebounce?.cancel();
-    _saveDebounce = Timer(const Duration(milliseconds: 400), () async {
-      try {
-        final cam = mapController.camera;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble(_kMapLastLat, cam.center.latitude);
-        await prefs.setDouble(_kMapLastLng, cam.center.longitude);
-        await prefs.setDouble(_kMapLastZoom, cam.zoom);
-      } catch (_) {}
+    if (!_viewLoadAttempted) return;
+    _state.save(() {
+      final cam = mapController.camera;
+      return {
+        'lat': cam.center.latitude,
+        'lng': cam.center.longitude,
+        'zoom': cam.zoom,
+        'follow_heading': followHeading.value,
+      };
     });
   }
 

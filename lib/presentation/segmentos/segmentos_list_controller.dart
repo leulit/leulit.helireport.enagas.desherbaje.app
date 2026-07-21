@@ -1,7 +1,12 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
+import '../../core/app_log.dart';
 import '../../core/app_router.dart';
 import '../../core/result/data_result.dart';
+import '../../core/screen_state.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
 
@@ -24,14 +29,82 @@ class SegmentosListController extends MyGetxController {
   /// con resultados al cargar.
   final expandedCt = Rx<String?>(null);
 
+  /// Controla el `TextField` de descripción: el filtro restaurado tiene que
+  /// verse en la caja, no solo aplicarse.
+  final descripcionCtrl = TextEditingController();
+
+  final _state = ScreenState('segmentos_list');
+
   @override
   void myOnInit() {
-    debounce(
+    addWorker(debounce(
       filterDescripcion,
       (_) => _applyFilter(),
       time: const Duration(milliseconds: 300),
-    );
-    loadSegmentos();
+    ));
+    // Restaurar ANTES de cargar: `loadSegmentos` aplica filtros y fija el CT
+    // expandido, así que si la restauración llegara después pisaría lo leído
+    // o sería pisada por el valor por defecto.
+    unawaited(_restoreState().then((_) => loadSegmentos()));
+  }
+
+  @override
+  void onClose() {
+    _state.dispose();
+    descripcionCtrl.dispose();
+    super.onClose();
+  }
+
+  // ─────────────────── Persistencia del estado de pantalla ───────────────────
+
+  Future<void> _restoreState() async {
+    await _state.load();
+    final estadoName = _state.text('estado');
+    if (estadoName != null) {
+      selectedEstado.value = _parseEnum(EstadoActividad.values, estadoName);
+      if (selectedEstado.value == null) {
+        AppLog.w('SegmentosListController: estado guardado desconocido '
+            '"$estadoName", se ignora');
+      }
+    }
+    final tipoName = _state.text('tipo');
+    if (tipoName != null) {
+      selectedTipo.value = _parseEnum(TipoActividad.values, tipoName);
+      if (selectedTipo.value == null) {
+        AppLog.w('SegmentosListController: tipo guardado desconocido '
+            '"$tipoName", se ignora');
+      }
+    }
+    selectedCt.value = _state.text('ct');
+    expandedCt.value = _state.text('expanded_ct');
+    final descripcion = _state.text('descripcion') ?? '';
+    descripcionCtrl.text = descripcion;
+    // Asignación directa: pasar por `filterDescripcion` dispararía el debounce
+    // y un `_applyFilter` extra antes de que haya datos cargados.
+    filterDescripcion.value = descripcion;
+  }
+
+  /// Guarda todo el estado junto: `save()` es un debounce único, así que un
+  /// snapshot parcial por setter perdería los cambios encadenados.
+  void _persistState() {
+    _state.save(() => {
+          'estado': selectedEstado.value?.name,
+          'tipo': selectedTipo.value?.name,
+          'ct': selectedCt.value,
+          'descripcion':
+              filterDescripcion.value.isEmpty ? null : filterDescripcion.value,
+          'expanded_ct': expandedCt.value,
+        });
+  }
+
+  /// Parse tolerante de un enum por `.name`: si no matchea ningún valor
+  /// (p.ej. cambió el catálogo entre versiones), devuelve `null` en lugar de
+  /// lanzar.
+  T? _parseEnum<T extends Enum>(List<T> values, String name) {
+    for (final v in values) {
+      if (v.name == name) return v;
+    }
+    return null;
   }
 
   /// Etiqueta legible del CT. El nombre viaja en la propia entidad (§3/§8);
@@ -78,6 +151,7 @@ class SegmentosListController extends MyGetxController {
 
   void toggleCtExpanded(String ctname) {
     expandedCt.value = expandedCt.value == ctname ? null : ctname;
+    _persistState();
   }
 
   /// Mapa CT → segmentos, para el render agrupado. La clave es el nombre de CT.
@@ -108,6 +182,10 @@ class SegmentosListController extends MyGetxController {
       return true;
     }));
     _ensureExpanded();
+    // Un solo punto de guardado: todos los setters de filtro y el debounce de
+    // descripción pasan por aquí, y así se persiste también la corrección de
+    // `_ensureExpanded` cuando el CT guardado ya no tiene resultados.
+    _persistState();
   }
 
   void _ensureExpanded() {

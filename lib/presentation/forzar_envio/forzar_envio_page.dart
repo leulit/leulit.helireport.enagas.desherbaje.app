@@ -66,6 +66,7 @@ class ForzarEnvioPage extends GetView<ForzarEnvioController> {
       body: Column(
         children: [
           _FiltrosBar(controller: controller),
+          const _ResultadoEnvioBanner(),
           Expanded(
             child: Obx(() {
               if (controller.isLoading.value) {
@@ -194,6 +195,115 @@ class _FiltrosBar extends StatelessWidget {
   }
 }
 
+// ─── Resultado del último envío ─────────────────────────────────────────────
+
+/// Banner con el desenlace del último envío. Hasta ahora `lastError` y
+/// `lastDrainSummary` se calculaban y se descartaban: un envío que no subía
+/// nada era indistinguible de uno correcto. Solo lee observables del
+/// controller — ni `TypedAction` ni servicios en el widget.
+class _ResultadoEnvioBanner extends GetView<ForzarEnvioController> {
+  const _ResultadoEnvioBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final error = controller.lastError.value;
+      final info = controller.lastInfo.value;
+      if (error.isEmpty && info.isEmpty) return const SizedBox.shrink();
+
+      final isError = error.isNotEmpty;
+      final color = isError ? const Color(0xFFC62828) : AppColors.moduleGreen;
+      final bg = isError ? const Color(0xFFFFEBEE) : AppColors.moduleGreenLight;
+      final summary = controller.lastDrainSummary.value;
+      // Motivos reales del backend: el summary solo cuenta, `rechazos` explica.
+      final motivos = controller.rechazos
+          .map((r) => [
+                r.statusCode == null ? null : 'HTTP ${r.statusCode}',
+                r.errorMessageEs,
+              ].whereType<String>().join(' — '))
+          .where((m) => m.isNotEmpty)
+          .toSet()
+          .toList();
+
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  isError ? Icons.error_outline : Icons.cloud_done_outlined,
+                  size: 18,
+                  color: color,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isError ? error : info,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, size: 16, color: color),
+                  tooltip: 'Cerrar aviso',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(
+                      minWidth: 48, minHeight: 48),
+                  onPressed: controller.descartarResultado,
+                ),
+              ],
+            ),
+            if (motivos.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              ...motivos.map(
+                (m) => Padding(
+                  padding: const EdgeInsets.only(left: 26, bottom: 2),
+                  child: Text(
+                    '• $m',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: color.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (summary != null) ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 26),
+                child: Text(
+                  'Subidos: ${summary.succeeded} · '
+                  'Reintentables: ${summary.retryable} · '
+                  'Rechazados: ${summary.rejected} · '
+                  'Conflictos: ${summary.conflicts}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.blueGrey.shade700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+}
+
 // ─── Lista plana (sin agrupar por CT) ───────────────────────────────────────
 
 class _FlatList extends StatelessWidget {
@@ -210,7 +320,7 @@ class _FlatList extends StatelessWidget {
         return _SegmentCard(
           segmento: s,
           ctName: controller.ctLabel(s.ctname),
-          isSending: controller.enviandoIds.contains(s.id ?? -1),
+          controller: controller,
           onEnviar: () => controller.enviarCloud(s),
           onTap: () => Get.toNamed(AppRoutes.detalle, arguments: s),
         );
@@ -256,14 +366,14 @@ const Map<TipoActividad, Color> _tipoColors = {
 class _SegmentCard extends StatelessWidget {
   final SegmentoEntity segmento;
   final String ctName;
-  final bool isSending;
+  final ForzarEnvioController controller;
   final VoidCallback onEnviar;
   final VoidCallback onTap;
 
   const _SegmentCard({
     required this.segmento,
     required this.ctName,
-    required this.isSending,
+    required this.controller,
     required this.onEnviar,
     required this.onTap,
   });
@@ -409,31 +519,40 @@ class _SegmentCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          ElevatedButton.icon(
-                            onPressed: isSending ? null : onEnviar,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.moduleGreen,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
-                              minimumSize: const Size(0, 32),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                          // Obx propio: el `itemBuilder` del ListView corre en
+                          // layout, fuera del build del Obx de la página, así
+                          // que leer `enviandoIds` allí no registra dependencia
+                          // y el spinner nunca se pintaría.
+                          Obx(() {
+                            final isSending = controller.enviandoIds
+                                .contains(segmento.clientId);
+                            return ElevatedButton.icon(
+                              onPressed: isSending ? null : onEnviar,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.moduleGreen,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                minimumSize: const Size(0, 32),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
-                            ),
-                            icon: isSending
-                                ? const SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.cloud_upload_outlined,
-                                    size: 14),
-                            label: const Text('Enviar',
-                                style: TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.w700)),
-                          ),
+                              icon: isSending
+                                  ? const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.cloud_upload_outlined,
+                                      size: 14),
+                              label: const Text('Enviar',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700)),
+                            );
+                          }),
                         ],
                       ),
                     ],

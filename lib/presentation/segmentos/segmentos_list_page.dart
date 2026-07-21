@@ -125,6 +125,7 @@ class _FiltrosBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
+            controller: controller.descripcionCtrl,
             onChanged: (v) => controller.filterDescripcion.value = v,
             decoration: InputDecoration(
               hintText: 'Buscar por descripción…',
@@ -269,35 +270,46 @@ class _CtHeader extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Badge del contador en la cabecera (sustituye al icono).
-              _HeaderBadge(value: '$total', strong: true),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  ctName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.moduleGreenText,
+              Row(
+                children: [
+                  // Badge del contador en la cabecera (sustituye al icono).
+                  _HeaderBadge(value: '$total', strong: true),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      ctName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.moduleGreenText,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                ],
               ),
-              const SizedBox(width: 10),
-              _HeaderBadge(
-                value:
-                    '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
-                bold: false,
-                width: 90,
-              ),
-              const SizedBox(width: 6),
-              _HeaderBadge(
-                value: '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
-                bold: false,
-                width: 90,
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  _HeaderBadge(
+                    value:
+                        '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
+                    bold: false,
+                    width: 90,
+                  ),
+                  const SizedBox(width: 6),
+                  _HeaderBadge(
+                    value:
+                        '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
+                    bold: false,
+                    width: 90,
+                  ),
+                ],
               ),
             ],
           ),

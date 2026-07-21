@@ -65,12 +65,11 @@ enum EstadoActividad {
   const EstadoActividad(this.descripcion, this.etiqueta);
 
   /// Estados destino permitidos desde este estado — matriz SSOT (regla de
-  /// negocio desherbaje para la app de campo). Los estados gestionados por el
-  /// gestor de la infraestructura (`propuesta`, `validada`) y el estado
-  /// terminal (`cerrada`) no admiten transición ni edición desde la app móvil.
+  /// negocio desherbaje para la app de campo). Solo el estado terminal
+  /// `cerrada` no admite transición ni edición desde la app móvil.
   Set<EstadoActividad> get transicionesPermitidas => switch (this) {
-        propuesta => const <EstadoActividad>{},
-        validada => const <EstadoActividad>{},
+        propuesta => const {contratista, ejecucion, finalizada},
+        validada => const {ejecucion, finalizada},
         contratista => const {ejecucion},
         ejecucion => const {finalizada},
         finalizada => const {cerrada, ejecucion},
