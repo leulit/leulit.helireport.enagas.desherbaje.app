@@ -13,15 +13,15 @@ import '../data/sync/mensaje_local_store.dart';
 import '../data/sync/video_local_store.dart';
 import '../data/sync/video_remote_adapter.dart';
 import '../data/sync/mensaje_remote_adapter.dart';
-import '../data/sync/position_batch_remote_adapter.dart';
-import '../data/sync/position_local_store.dart';
+import '../data/sync/traza_remote_adapter.dart';
+import '../data/sync/traza_local_store.dart';
 import '../data/sync/posicion_fija_local_store.dart';
 import '../data/sync/posicion_fija_remote_fetcher.dart';
 import '../data/sync/segmento_local_store.dart';
 import '../data/sync/segmento_remote_adapter.dart';
 import '../data/sync/segmento_remote_fetcher.dart';
 import '../domain/entities/imagen_segmento_entity.dart';
-import '../domain/entities/position_batch_entity.dart';
+import '../domain/entities/traza_entity.dart';
 import '../domain/entities/posicion_fija_entity.dart';
 import '../domain/entities/segmento_entity.dart';
 import '../domain/entities/video_segmento_entity.dart';
@@ -89,7 +89,8 @@ class AppDI {
     // get_it NO dispara el lifecycle de GetxService: hay que llamar onInit() a
     // mano o estos services nunca se suscriben a geoJsonLoaded/Completed y el
     // progreso queda en 0/N con _entitiesBuffer vacío (descarga sin efecto).
-    DI.registerLazySingleton<GasoductosService>(() => GasoductosService()..onInit());
+    DI.registerLazySingleton<GasoductosService>(
+        () => GasoductosService()..onInit());
     DI.registerLazySingleton<PksService>(() => PksService()..onInit());
     DI.registerLazySingleton<HitosService>(() => HitosService()..onInit());
 
@@ -131,8 +132,7 @@ class AppDI {
 
   static NetworkService get networkService => di.get<NetworkService>();
 
-  static GasoductosService get gasoductosService =>
-      di.get<GasoductosService>();
+  static GasoductosService get gasoductosService => di.get<GasoductosService>();
 
   static PksService get pksService => di.get<PksService>();
 
@@ -147,8 +147,7 @@ class AppDI {
 
   static SessionState get sessionState => di.get<SessionState>();
 
-  static JsonLoaderService get jsonLoaderService =>
-      di.get<JsonLoaderService>();
+  static JsonLoaderService get jsonLoaderService => di.get<JsonLoaderService>();
 
   static TypeRegistry get typeRegistry => di.get<TypeRegistry>();
 
@@ -192,14 +191,14 @@ class AppDI {
       fromJson: MensajeSegmentoEntity.fromJson,
     );
 
-    final positionStore = PositionLocalStore(db);
-    DI.registerLazySingleton<PositionLocalStore>(() => positionStore);
-    await OfflineModule.registerEntity<PositionBatchEntity>(
-      entityType: 'position_batch',
-      store: positionStore,
-      adapter: PositionBatchRemoteAdapter(network),
-      conflictResolver: const ServerWinsResolver<PositionBatchEntity>(),
-      fromJson: PositionBatchEntity.fromJson,
+    final trazaStore = TrazaLocalStore(db);
+    DI.registerLazySingleton<TrazaLocalStore>(() => trazaStore);
+    await OfflineModule.registerEntity<TrazaEntity>(
+      entityType: 'traza',
+      store: trazaStore,
+      adapter: TrazaRemoteAdapter(network),
+      conflictResolver: const ServerWinsResolver<TrazaEntity>(),
+      fromJson: TrazaEntity.fromJson,
     );
 
     final videoStore = VideoLocalStore(db);
@@ -222,7 +221,8 @@ class AppDI {
       fromJson: PosicionFijaEntity.fromJson,
     );
 
-    DI.registerLazySingleton<GpsBackgroundService>(() => GpsBackgroundService());
+    DI.registerLazySingleton<GpsBackgroundService>(
+        () => GpsBackgroundService());
   }
 
   static Map<String, String> _formatSegmentoForDisplay(SegmentoEntity s) => {

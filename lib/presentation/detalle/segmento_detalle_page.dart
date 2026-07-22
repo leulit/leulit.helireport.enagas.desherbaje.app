@@ -18,6 +18,8 @@ import '../../core/widgets/my_current_location_layer.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
+import '../widgets/logout_button.dart';
+import '../widgets/track_record_button.dart';
 import 'media_gis_layer.dart';
 import 'segmento_detalle_controller.dart';
 import 'segmento_media_item.dart';
@@ -70,31 +72,9 @@ class SegmentoDetallePage extends GetView<SegmentoDetalleController> {
           tooltip: 'Forzar envío a nube',
           onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
         ),
-        IconButton(
-          icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-          tooltip: 'Salir',
-          onPressed: _logout,
-        ),
+        const TrackRecordButton(),
+        const LogoutButton(),
       ],
-    );
-  }
-
-  void _logout() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Seguro que quieres cerrar sesión?'),
-        actions: [
-          TextButton(onPressed: Get.back, child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              Get.offAllNamed(AppRoutes.login);
-            },
-            child: const Text('Salir', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -173,94 +153,92 @@ class _DatosTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFA5D6A7)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _InfoRow(
-                        icon: Icons.timeline,
-                        label: 'Traza',
-                        value: (s.traza ?? '').isNotEmpty ? s.traza! : '—',
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFA5D6A7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(
+                  icon: Icons.timeline,
+                  label: 'Traza',
+                  value: (s.traza ?? '').isNotEmpty ? s.traza! : '—',
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.straighten,
+                        size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
+                    const Text('Long: ',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(lengthText, style: const TextStyle(fontSize: 13)),
+                    const Text('  -  ',
+                        style: TextStyle(fontSize: 13, color: Colors.grey)),
+                    Icon(Icons.square_foot,
+                        size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
+                    const Text('Sup: ',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    Flexible(
+                      child: Text(
+                        superficieText,
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.straighten,
-                              size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          const Text('Long: ',
-                              style: TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w600)),
-                          Text(lengthText,
-                              style: const TextStyle(fontSize: 13)),
-                          const Text('  -  ',
-                              style:
-                                  TextStyle(fontSize: 13, color: Colors.grey)),
-                          Icon(Icons.square_foot,
-                              size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          const Text('Sup: ',
-                              style: TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w600)),
-                          Flexible(
-                            child: Text(
-                              superficieText,
-                              style: const TextStyle(fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _DropdownInlineField<TipoActividad>(
-                  label: 'Tipo actividad',
-                  icon: Icons.category_outlined,
-                  rx: controller.tipoActividad,
-                  values: TipoActividad.values,
-                  labelOf: (t) => t.etiqueta,
-                ),
-                const SizedBox(height: 12),
-                _DropdownInlineField<EstadoActividad>(
-                  label: 'Estado',
-                  icon: Icons.flag_outlined,
-                  rx: controller.estado,
-                  values: _estadosEditables(controller.segmento.estado),
-                  labelOf: (e) => e.etiqueta,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Descripción',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  initialValue: controller.descripcion.value,
-                  onChanged: (v) => controller.descripcion.value = v,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Describe el área de trabajo o las características del tramo...',
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                    contentPadding: const EdgeInsets.all(12),
-                  ),
+                  ],
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _DropdownInlineField<TipoActividad>(
+            label: 'Tipo actividad',
+            icon: Icons.category_outlined,
+            rx: controller.tipoActividad,
+            values: TipoActividad.values,
+            labelOf: (t) => t.etiqueta,
+          ),
+          const SizedBox(height: 12),
+          _DropdownInlineField<EstadoActividad>(
+            label: 'Estado',
+            icon: Icons.flag_outlined,
+            rx: controller.estado,
+            values: _estadosEditables(controller.segmento.estado),
+            labelOf: (e) => e.etiqueta,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Descripción',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: controller.descripcion.value,
+            onChanged: (v) => controller.descripcion.value = v,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText:
+                  'Describe el área de trabajo o las características del tramo...',
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+          ),
         ],
       ),
     );
@@ -1184,6 +1162,8 @@ class _MapaSegmento extends StatelessWidget {
           children: [
             TileLayer(
               urlTemplate: ApiEndpoints.pnoaWmts,
+              fallbackUrl: ApiEndpoints.arcgisImagery,
+              maxNativeZoom: 20,
               tileProvider: CancellableNetworkTileProvider(),
               userAgentPackageName: 'com.leulit.enagas.helireport_desherbaje',
               additionalOptions: const {'User-Agent': 'helireport-desherbaje'},

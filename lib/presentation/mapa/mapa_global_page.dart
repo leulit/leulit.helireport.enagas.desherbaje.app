@@ -14,6 +14,8 @@ import '../../core/app_theme.dart';
 import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../core/widgets/my_current_location_layer.dart';
 import '../../domain/entities/segmento_entity.dart';
+import '../widgets/logout_button.dart';
+import '../widgets/track_record_button.dart';
 import 'layers/gasoductos_map_layer.dart';
 import 'layers/pks_map_layer.dart';
 import 'layers/hitos_map_layer.dart';
@@ -26,207 +28,181 @@ import 'mapa_global_controller.dart';
 class MapaGlobalPage extends GetView<MapaGlobalController> {
   const MapaGlobalPage({super.key});
 
-  void _logout() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Seguro que quieres cerrar sesión?'),
+  @override
+  Widget build(BuildContext context) {
+    // El registro de traza ya no está atado a esta pantalla: lo gobierna
+    // TrackRecordButton y sobrevive a la navegación.
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: AppColors.moduleGreenLight,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 2, color: const Color(0xFFA5D6A7)),
+        ),
+        leading: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.eco, color: AppColors.moduleGreen),
+        ),
         actions: [
-          TextButton(onPressed: Get.back, child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              Get.offAllNamed(AppRoutes.login);
-            },
-            child: const Text('Salir', style: TextStyle(color: Colors.red)),
+          IconButton(
+            icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
+            tooltip: 'Ver listado',
+            onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
+          ),
+          IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined,
+                color: AppColors.moduleGreen),
+            tooltip: 'Forzar envío',
+            onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
+          ),
+          Obx(() {
+            if (controller.isLoading) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.moduleGreen,
+                  ),
+                ),
+              );
+            }
+            return IconButton(
+              icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
+              onPressed: controller.reloadAll,
+            );
+          }),
+          _LeyendaButton(),
+          const TrackRecordButton(),
+          const LogoutButton(),
+        ],
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: controller.mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(40.4168, -3.7038),
+              initialZoom: 7,
+              minZoom: 5,
+              maxZoom: 20,
+              onMapReady: controller.onMapReady,
+              onMapEvent: controller.onMapEvent,
+              onTap: controller.onMapTap,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all,
+              ),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: ApiEndpoints.pnoaWmts,
+                fallbackUrl: ApiEndpoints.arcgisImagery,
+                maxNativeZoom: 20,
+                tileProvider: CancellableNetworkTileProvider(),
+                userAgentPackageName: 'com.leulit.enagas.helireport_desherbaje',
+                additionalOptions: const {
+                  'User-Agent': 'helireport-desherbaje',
+                },
+              ),
+              const GasoductosMapLayer(),
+              SegmentosMapLayer(currentZoom: controller.currentZoom),
+              const PksMapLayer(),
+              const HitosMapLayer(),
+              const PosicionesFijasMapLayer(),
+              ValueListenableBuilder<bool>(
+                valueListenable: controller.followHeading,
+                builder: (_, follow, __) => MyCurrentLocationLayer(
+                  alignDirectionOnUpdate:
+                      follow ? AlignOnUpdate.always : AlignOnUpdate.never,
+                  // once: centra en el primer fix GPS al abrir el mapa;
+                  // después el usuario puede panear libre (always lo
+                  // bloquearía).
+                  alignPositionOnUpdate: AlignOnUpdate.once,
+                  alignPositionStream: controller.alignPositionStream,
+                ),
+              ),
+              ...buildLinesCutMapLayers(controller.linesCut),
+              ValueListenableBuilder<bool>(
+                valueListenable: controller.followHeading,
+                builder: (_, follow, __) => MapCompass(
+                  // -45: el icono cupertino ya viene rotado en el asset.
+                  rotationOffset: -45,
+                  icon: _CompassIcon(followHeading: follow),
+                  rotationDuration: const Duration(milliseconds: 300),
+                  hideIfRotatedNorth: false,
+                  alignment: Alignment.bottomRight,
+                  // Caja del IconButton interno = 50 (el icono supera el
+                  // mínimo táctil de 48). bottom 43 alinea su centro con el
+                  // del botón "mi ubicación" (48 + 40/2 = 68); right 5 deja
+                  // ~8px entre ambos círculos visibles.
+                  padding: const EdgeInsets.only(bottom: 43, right: 5),
+                  onPressed: controller.toggleFollowHeading,
+                ),
+              ),
+              const _ZoomDisplay(),
+            ],
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: _FiltrosBar(),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 10,
+            child: LinesCutModeButton(
+              controller: controller.linesCut,
+              onApplyCut: controller.applyLinesCut,
+            ),
+          ),
+          Positioned(
+            top: 56,
+            left: 8,
+            right: 8,
+            child: LinesCutControlPanel(controller: controller.linesCut),
+          ),
+          const Positioned(
+            bottom: 96,
+            right: 10,
+            child: _PksLoadStatus(),
+          ),
+          Positioned(
+            bottom: 48,
+            right: 58,
+            child: Material(
+              color: Colors.white,
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: controller.centerOnMyLocation,
+                child: const Padding(
+                  padding: EdgeInsets.all(9),
+                  child: Icon(Icons.my_location,
+                      size: 22, color: AppColors.moduleGreen),
+                ),
+              ),
+            ),
+          ),
+          const Positioned(
+            top: 64,
+            left: 16,
+            right: 16,
+            child: _ErrorBanner(),
+          ),
+          const Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: _MapLoadBanner(),
           ),
         ],
       ),
     );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // NF-8: PopScope ensures the final GPS flush completes (awaited) before
-    // the route is popped. onClose() keeps unawaited(stop()) as safety net.
-    return PopScope(
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) await controller.stopTracking();
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppColors.moduleGreenLight,
-          elevation: 0,
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(1),
-            child: Container(height: 2, color: const Color(0xFFA5D6A7)),
-          ),
-          leading: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.eco, color: AppColors.moduleGreen),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
-              tooltip: 'Ver listado',
-              onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
-            ),
-            IconButton(
-              icon: const Icon(Icons.cloud_upload_outlined,
-                  color: AppColors.moduleGreen),
-              tooltip: 'Forzar envío',
-              onPressed: () => Get.toNamed(AppRoutes.forzarEnvio),
-            ),
-            Obx(() {
-              if (controller.isLoading) {
-                return const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.moduleGreen,
-                    ),
-                  ),
-                );
-              }
-              return IconButton(
-                icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
-                onPressed: controller.reloadAll,
-              );
-            }),
-            _LeyendaButton(),
-            IconButton(
-              icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-              tooltip: 'Salir',
-              onPressed: _logout,
-            ),
-          ],
-        ),
-        body: Stack(
-          children: [
-            FlutterMap(
-              mapController: controller.mapController,
-              options: MapOptions(
-                initialCenter: const LatLng(40.4168, -3.7038),
-                initialZoom: 7,
-                minZoom: 5,
-                maxZoom: 20,
-                onMapReady: controller.onMapReady,
-                onMapEvent: controller.onMapEvent,
-                onTap: controller.onMapTap,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all,
-                ),
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: ApiEndpoints.pnoaWmts,
-                  tileProvider: CancellableNetworkTileProvider(),
-                  userAgentPackageName:
-                      'com.leulit.enagas.helireport_desherbaje',
-                  additionalOptions: const {
-                    'User-Agent': 'helireport-desherbaje',
-                  },
-                ),
-                const GasoductosMapLayer(),
-                SegmentosMapLayer(currentZoom: controller.currentZoom),
-                const PksMapLayer(),
-                const HitosMapLayer(),
-                const PosicionesFijasMapLayer(),
-                ValueListenableBuilder<bool>(
-                  valueListenable: controller.followHeading,
-                  builder: (_, follow, __) => MyCurrentLocationLayer(
-                    alignDirectionOnUpdate:
-                        follow ? AlignOnUpdate.always : AlignOnUpdate.never,
-                    // once: centra en el primer fix GPS al abrir el mapa;
-                    // después el usuario puede panear libre (always lo
-                    // bloquearía).
-                    alignPositionOnUpdate: AlignOnUpdate.once,
-                    alignPositionStream: controller.alignPositionStream,
-                  ),
-                ),
-                ...buildLinesCutMapLayers(controller.linesCut),
-                ValueListenableBuilder<bool>(
-                  valueListenable: controller.followHeading,
-                  builder: (_, follow, __) => MapCompass(
-                    // -45: el icono cupertino ya viene rotado en el asset.
-                    rotationOffset: -45,
-                    icon: _CompassIcon(followHeading: follow),
-                    rotationDuration: const Duration(milliseconds: 300),
-                    hideIfRotatedNorth: false,
-                    alignment: Alignment.bottomRight,
-                    // Caja del IconButton interno = 50 (el icono supera el
-                    // mínimo táctil de 48). bottom 43 alinea su centro con el
-                    // del botón "mi ubicación" (48 + 40/2 = 68); right 5 deja
-                    // ~8px entre ambos círculos visibles.
-                    padding: const EdgeInsets.only(bottom: 43, right: 5),
-                    onPressed: controller.toggleFollowHeading,
-                  ),
-                ),
-                const _ZoomDisplay(),
-              ],
-            ),
-            Positioned(
-              top: 8,
-              left: 8,
-              right: 8,
-              child: _FiltrosBar(),
-            ),
-            Positioned(
-              bottom: 40,
-              left: 10,
-              child: LinesCutModeButton(
-                controller: controller.linesCut,
-                onApplyCut: controller.applyLinesCut,
-              ),
-            ),
-            Positioned(
-              top: 56,
-              left: 8,
-              right: 8,
-              child: LinesCutControlPanel(controller: controller.linesCut),
-            ),
-            const Positioned(
-              bottom: 96,
-              right: 10,
-              child: _PksLoadStatus(),
-            ),
-            Positioned(
-              bottom: 48,
-              right: 58,
-              child: Material(
-                color: Colors.white,
-                shape: const CircleBorder(),
-                elevation: 3,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: controller.centerOnMyLocation,
-                  child: const Padding(
-                    padding: EdgeInsets.all(9),
-                    child: Icon(Icons.my_location,
-                        size: 22, color: AppColors.moduleGreen),
-                  ),
-                ),
-              ),
-            ),
-            const Positioned(
-              top: 64,
-              left: 16,
-              right: 16,
-              child: _ErrorBanner(),
-            ),
-            const Positioned(
-              bottom: 16,
-              left: 16,
-              right: 16,
-              child: _MapLoadBanner(),
-            ),
-          ],
-        ),
-      ), // end Scaffold
-    ); // end PopScope
   }
 }
 

@@ -6,6 +6,8 @@ import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
 import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../domain/entities/segmento_entity.dart';
+import '../widgets/logout_button.dart';
+import '../widgets/track_record_button.dart';
 import 'segmentos_list_controller.dart';
 
 class SegmentosListPage extends GetView<SegmentosListController> {
@@ -41,10 +43,8 @@ class SegmentosListPage extends GetView<SegmentosListController> {
             icon: const Icon(Icons.refresh, color: AppColors.moduleGreen),
             onPressed: controller.loadSegmentos,
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-            onPressed: _logout,
-          ),
+          const TrackRecordButton(),
+          const LogoutButton(),
         ],
       ),
       body: Column(
@@ -75,25 +75,6 @@ class SegmentosListPage extends GetView<SegmentosListController> {
                 child: _GroupedByCt(controller: controller),
               );
             }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _logout() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Seguro que quieres cerrar sesión?'),
-        actions: [
-          TextButton(onPressed: Get.back, child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () async {
-              Get.back();
-              Get.offAllNamed(AppRoutes.login);
-            },
-            child: const Text('Salir', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

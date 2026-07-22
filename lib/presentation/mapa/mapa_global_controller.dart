@@ -6,7 +6,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_di.dart';
@@ -14,7 +13,6 @@ import '../../core/app_log.dart';
 import '../../core/app_theme.dart';
 import '../../core/screen_state.dart';
 import '../../core/services/gasoductos_service.dart';
-import '../../core/services/gps_background_service.dart';
 import '../../core/services/hitos_service.dart';
 import '../../core/services/pks_service.dart';
 import '../../data/repository/segmento_repository_impl.dart';
@@ -24,8 +22,6 @@ import 'layers/posiciones_fijas_map_controller.dart';
 import 'layers/segmentos_map_controller.dart';
 import 'lines_cut/lines_cut_controller.dart';
 import 'lines_cut/lines_cut_dialog.dart';
-
-
 
 class MapaGlobalController extends MyGetxController {
   final mapController = MapController();
@@ -111,14 +107,7 @@ class MapaGlobalController extends MyGetxController {
     _loadUserCts();
     _loadSavedView();
     loadAll();
-    unawaited(DI.get<GpsBackgroundService>().start());
   }
-
-  /// NF-8: awaitable stop — call from PopScope/route exit handler so the
-  /// final GPS flush completes before the page is disposed.
-  /// [onClose] also calls stop() unawaited as a safety net.
-  Future<void> stopTracking() =>
-      DI.get<GpsBackgroundService>().stop();
 
   @override
   void onClose() {
@@ -128,9 +117,6 @@ class MapaGlobalController extends MyGetxController {
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
-    // Safety net: if stopTracking() was not awaited by the PopScope handler,
-    // this ensures the service is stopped (non-awaited, best-effort).
-    unawaited(DI.get<GpsBackgroundService>().stop());
     super.onClose();
   }
 
@@ -410,7 +396,7 @@ class MapaGlobalController extends MyGetxController {
       );
     } catch (_) {}
   }
-  
+
   @override
   void myOnInit() {
     // TODO: implement myOnInit

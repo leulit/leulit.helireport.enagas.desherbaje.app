@@ -6,29 +6,12 @@ import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
 import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../domain/entities/segmento_entity.dart';
+import '../widgets/logout_button.dart';
+import '../widgets/track_record_button.dart';
 import 'forzar_envio_controller.dart';
 
 class ForzarEnvioPage extends GetView<ForzarEnvioController> {
   const ForzarEnvioPage({super.key});
-
-  void _logout() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Seguro que quieres cerrar sesión?'),
-        actions: [
-          TextButton(onPressed: Get.back, child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () {
-              Get.back();
-              Get.offAllNamed(AppRoutes.login);
-            },
-            child: const Text('Salir', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,11 +39,8 @@ class ForzarEnvioPage extends GetView<ForzarEnvioController> {
             tooltip: 'Mapa global',
             onPressed: () => Get.offAllNamed(AppRoutes.mapa),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.moduleGreen),
-            tooltip: 'Salir',
-            onPressed: _logout,
-          ),
+          const TrackRecordButton(),
+          const LogoutButton(),
         ],
       ),
       body: Column(
@@ -260,8 +240,8 @@ class _ResultadoEnvioBanner extends GetView<ForzarEnvioController> {
                   icon: Icon(Icons.close, size: 16, color: color),
                   tooltip: 'Cerrar aviso',
                   visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(
-                      minWidth: 48, minHeight: 48),
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
                   onPressed: controller.descartarResultado,
                 ),
               ],

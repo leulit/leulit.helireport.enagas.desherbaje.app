@@ -207,7 +207,6 @@ App no está en producción → sin backfill; DBs de dev se migran limpio.
 
 - Contrato backend pendiente: añadir `gis_json` (GeoJSON) a foto y vídeo; anotar
   que `latitud/longitud/fixed_*` se eliminan del payload de ambas.
-- `docs/DEVLOG.md`: entrada de la feature.
 - `docs/ARCHITECTURE_REFERENCE.md`: entidades (campos), nuevos ficheros
   `lib/core/gis/*`, deps nuevas en `pubspec.yaml`.
 
@@ -230,7 +229,7 @@ App no está en producción → sin backfill; DBs de dev se migran limpio.
 - `lib/data/sync/imagen_local_store.dart`
 - `lib/data/sync/video_local_store.dart`
 - tests de store/entidad existentes
-- `docs/DEVLOG.md`, `docs/ARCHITECTURE_REFERENCE.md`, contrato backend
+- `docs/ARCHITECTURE_REFERENCE.md`, contrato backend
 
 ---
 

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 
 import '../../core/app_di.dart';
 import '../../core/app_log.dart';
+import '../../core/app_typed_actions.dart';
 import '../../core/result/data_result.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/contracts/sync_job.dart';
@@ -15,6 +18,7 @@ import '../../data/sync/mensaje_local_store.dart';
 import '../../data/sync/propagate_segmento_remote_id_usecase.dart';
 import '../../data/sync/purge_synced_segmento_usecase.dart';
 import '../../data/sync/segmento_local_store.dart';
+import '../../data/sync/traza_local_store.dart';
 import '../../data/sync/video_local_store.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
@@ -35,13 +39,15 @@ class ForzarEnvioController extends MyGetxController {
     PropagateSegmentoRemoteIdUseCase? propagate,
     SegmentoLocalStore? segmentoStore,
     OutboxQueue? outbox,
+    TrazaLocalStore? trazaStore,
   })  : _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase(),
         _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
         _videoStore = videoStore ?? DI.get<VideoLocalStore>(),
         _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>(),
         _propagate = propagate ?? PropagateSegmentoRemoteIdUseCase(),
         _segmentoStore = segmentoStore ?? DI.get<SegmentoLocalStore>(),
-        _outbox = outbox ?? AppDI.outboxQueue;
+        _outbox = outbox ?? AppDI.outboxQueue,
+        _trazaStore = trazaStore ?? DI.get<TrazaLocalStore>();
 
   final GetSegmentosUseCase _useCase;
   final SyncEngine _engine;
@@ -53,6 +59,7 @@ class ForzarEnvioController extends MyGetxController {
   final PropagateSegmentoRemoteIdUseCase _propagate;
   final SegmentoLocalStore _segmentoStore;
   final OutboxQueue _outbox;
+  final TrazaLocalStore _trazaStore;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -130,7 +137,10 @@ class ForzarEnvioController extends MyGetxController {
     switch (result) {
       case DataSuccess(:final data):
         segmentos.assignAll(
-          data.where((s) => [EstadoActividad.finalizada, EstadoActividad.contratista].contains(s.estado)),
+          data.where((s) => [
+                EstadoActividad.finalizada,
+                EstadoActividad.contratista
+              ].contains(s.estado)),
         );
         _applyFilter();
       case DataFailure(:final message):
@@ -234,7 +244,8 @@ class ForzarEnvioController extends MyGetxController {
     // salió de ahí), se contabiliza para reportarlo al usuario. Se hace aquí y
     // no dentro de `_drenarSobre` porque ese método tiene salidas tempranas.
     final bloqueos = await _contarRechazadosDelSobre(s, scopes);
-    bloqueos.forEach((tipo, n) => _bloqueados[tipo] = (_bloqueados[tipo] ?? 0) + n);
+    bloqueos
+        .forEach((tipo, n) => _bloqueados[tipo] = (_bloqueados[tipo] ?? 0) + n);
 
     return summary;
   }
@@ -310,8 +321,8 @@ class ForzarEnvioController extends MyGetxController {
     List<(String, Set<String>)> scopes,
   ) async {
     AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "segmento"...');
-    final segSummary =
-        await _engine.drain(entityType: 'segmento', onlyClientIds: {s.clientId});
+    final segSummary = await _engine
+        .drain(entityType: 'segmento', onlyClientIds: {s.clientId});
 
     if (segSummary.authExpired ||
         segSummary.rejected > 0 ||
@@ -359,9 +370,7 @@ class ForzarEnvioController extends MyGetxController {
           );
         }
       }
-      final resumen = scopes
-          .map((e) => '${e.$2.length} ${e.$1}')
-          .join(', ');
+      final resumen = scopes.map((e) => '${e.$2.length} ${e.$1}').join(', ');
       AppLog.i('ForzarEnvioController._sendOne(${s.id}): upsert entregado → '
           'reencolado el sobre completo ($resumen).');
     }
@@ -369,7 +378,8 @@ class ForzarEnvioController extends MyGetxController {
     var combined = segSummary;
     for (final (entityType, ids) in scopes) {
       if (ids.isEmpty) continue; // nada de este tipo para este segmento
-      AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "$entityType"...');
+      AppLog.i(
+          'ForzarEnvioController._sendOne(${s.id}): drenando "$entityType"...');
       final summary =
           await _engine.drain(entityType: entityType, onlyClientIds: ids);
       combined = _accumulate(combined, summary);
@@ -450,12 +460,29 @@ class ForzarEnvioController extends MyGetxController {
         : 'No había nada pendiente de enviar: ya estaba todo sincronizado.';
   }
 
+  /// Mensaje mostrado cuando un envío se aborta por haber una traza GPS en
+  /// grabación en curso (ver [_trazaEnGrabacion]).
+  static const _mensajeTrazaEnGrabacion =
+      'Hay una traza en grabación: finalízala antes de enviar.';
+
+  /// Envío bloqueado mientras hay una traza en grabación: sus puntos siguen
+  /// acumulándose en memoria y no forman parte de ningún job del outbox
+  /// todavía, así que enviar "ahora" nunca los incluiría — mejor esperar a
+  /// que el usuario finalice para no dar una falsa sensación de "todo subido".
+  Future<bool> _trazaEnGrabacion() => AppTypedActions.isTrazaRecording();
+
   /// Envío de UN segmento (botón "enviar").
   Future<void> enviarCloud(SegmentoEntity segmento) async {
     _resetResultado();
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
       AppLog.w('ForzarEnvioController.enviarCloud: sin red, abortando.');
+      return;
+    }
+    if (await _trazaEnGrabacion()) {
+      lastError.value = _mensajeTrazaEnGrabacion;
+      AppLog.w(
+          'ForzarEnvioController.enviarCloud: traza en grabación, abortando.');
       return;
     }
 
@@ -492,6 +519,12 @@ class ForzarEnvioController extends MyGetxController {
     if (!_connectivity.isConnected) {
       lastError.value = 'No hay conexión a internet.';
       AppLog.w('ForzarEnvioController.enviarAllCloud: sin red, abortando.');
+      return;
+    }
+    if (await _trazaEnGrabacion()) {
+      lastError.value = _mensajeTrazaEnGrabacion;
+      AppLog.w(
+          'ForzarEnvioController.enviarAllCloud: traza en grabación, abortando.');
       return;
     }
     if (isEnviandoTodos.value) return;
@@ -533,10 +566,16 @@ class ForzarEnvioController extends MyGetxController {
         }
       }
 
-      // GPS es global (no per-segmento): drenar una vez al final.
+      // GPS es global (no per-segmento): drenar una vez al final. El tipo
+      // registrado es 'traza' (antes 'position', que nunca existió como
+      // entidad — el GPS jamás se enviaba desde esta pantalla).
       if (!combined.authExpired) {
-        combined =
-            _accumulate(combined, await _engine.drain(entityType: 'position'));
+        final trazaSummary = await _engine.drain(entityType: 'traza');
+        combined = _accumulate(combined, trazaSummary);
+        // Se purgan las trazas ya subidas incluso si hubo rechazos en esta
+        // pasada: `deleteSynced` solo toca filas con `synced_at` puesto por un
+        // envío anterior (o por este mismo), nunca las que siguen pendientes.
+        await _trazaStore.deleteSynced();
       }
 
       lastDrainSummary.value = combined;
@@ -549,7 +588,8 @@ class ForzarEnvioController extends MyGetxController {
       }
     } catch (e, st) {
       lastError.value = e.toString();
-      AppLog.e('ForzarEnvioController.enviarAllCloud', error: e, stackTrace: st);
+      AppLog.e('ForzarEnvioController.enviarAllCloud',
+          error: e, stackTrace: st);
     } finally {
       isEnviandoTodos.value = false;
       await loadSegmentos();

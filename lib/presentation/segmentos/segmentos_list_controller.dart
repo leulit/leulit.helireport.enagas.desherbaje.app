@@ -3,17 +3,28 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/my_getx_controller.dart';
+import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
 import '../../core/app_log.dart';
 import '../../core/app_router.dart';
 import '../../core/result/data_result.dart';
 import '../../core/screen_state.dart';
+import '../../core/services/gps_background_service.dart';
+import '../../data/repository/auth_repository_impl.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
+import '../widgets/finalize_traza_dialog.dart';
 
 class SegmentosListController extends MyGetxController {
-  SegmentosListController(this._useCase);
+  SegmentosListController(
+    this._useCase, {
+    AuthRepositoryImpl? authRepo,
+    GpsBackgroundService? gpsService,
+  })  : _authRepo = authRepo ?? AuthRepositoryImpl(),
+        _gpsService = gpsService ?? DI.get<GpsBackgroundService>();
 
   final GetSegmentosUseCase _useCase;
+  final AuthRepositoryImpl _authRepo;
+  final GpsBackgroundService _gpsService;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -46,6 +57,27 @@ class SegmentosListController extends MyGetxController {
     // expandido, así que si la restauración llegara después pisaría lo leído
     // o sería pisada por el valor por defecto.
     unawaited(_restoreState().then((_) => loadSegmentos()));
+    unawaited(_recoverOrphanedTraza());
+  }
+
+  /// Recuperación tras crash: si el operador logueado dejó una traza abierta
+  /// (la app murió sin pasar por [GpsBackgroundService.finish]), se le pide su
+  /// nombre final con el mismo diálogo no descartable de "finalizar registro"
+  /// y se cierra. Si la traza abierta pertenece a OTRO operador, no se toca —
+  /// sigue en SQLite hasta que ese operador vuelva a entrar.
+  ///
+  /// Esta es la primera pantalla con sesión activa tras el login, así que es
+  /// el punto natural para esta comprobación; se repite cada vez que se entra
+  /// aquí, pero es idempotente: tras el primer `finalizeOpen` no queda ninguna
+  /// traza abierta que recuperar.
+  Future<void> _recoverOrphanedTraza() async {
+    final user = await _authRepo.getCurrentUser();
+    if (user == null) return;
+    final open = await _gpsService.openTrazaFor(user.id);
+    if (open == null) return;
+
+    final name = await showFinalizeTrazaDialog(initialName: open.name);
+    await _gpsService.finalizeOpen(trazaClientId: open.clientId, name: name);
   }
 
   @override

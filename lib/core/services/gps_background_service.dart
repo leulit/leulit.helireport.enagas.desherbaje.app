@@ -5,27 +5,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
+import 'package:leulit_flutter_actionmanager/leulit_flutter_actionmanager.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_log.dart';
 import '../../core/sync/sync.dart';
-import '../../domain/entities/position_batch_entity.dart';
+import '../../data/sync/traza_local_store.dart';
+import '../../domain/entities/traza_entity.dart';
+import '../app_typed_actions.dart';
 
 /// State of the GPS tracker exposed to the UI.
-enum GpsTrackingState { stopped, running, paused }
+enum GpsTrackingState { stopped, running }
 
-/// Background-aware GPS tracker. Buffers points in memory and flushes a
-/// batch to SQLite + outbox every 500 points or 30 seconds.
+/// Manual GPS track ("traza") recorder. Buffers points in memory and
+/// append-only flushes them straight into `trazas_puntos` every 500 points
+/// or 30 seconds — the outbox is untouched until [finish], which enqueues
+/// exactly one push job for the whole traza.
 ///
-/// Lifecycle is driven by the controller of the Mapa screen
-/// (`MapaGlobalController.onInit/onClose`); the service must be `stop`-ed
-/// when the operator leaves the map (decision P15).
+/// Lifecycle is driven by the operator explicitly starting/stopping a
+/// recording (there is no pause: a traza is either being recorded or it
+/// is finished).
 ///
 /// Platform behaviour:
 /// - **Android:** runs a foreground service of type `location` so the
 ///   stream survives the activity going to background. Notification is
-///   shown while tracking.
+///   shown while tracking; `stopWithTask="false"` so it survives the app
+///   being swiped from recents.
 /// - **iOS:** sets `AppleSettings(allowBackgroundLocationUpdates: true)`;
 ///   the OS keeps delivering updates to the main isolate. The "blue pill"
 ///   appears in the status bar while tracking.
@@ -34,46 +41,74 @@ class GpsBackgroundService extends GetxService {
   static const Duration _bufferFlushInterval = Duration(seconds: 30);
   static const String _prefsUserIdKey = 'user_id';
 
-  final state = GpsTrackingState.stopped.obs;
-  final lastFlushAt = Rxn<DateTime>();
-  final lastError = Rxn<String>();
+  final ValueNotifier<GpsTrackingState> state =
+      ValueNotifier(GpsTrackingState.stopped);
+  final ValueNotifier<DateTime?> lastFlushAt = ValueNotifier(null);
+  final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   StreamSubscription<Position>? _positionSub;
   Timer? _flushTimer;
-  final List<PositionPoint> _buffer = [];
+  final List<TrazaPunto> _buffer = [];
+  // Identity of the traza currently being recorded; null when stopped.
+  TrazaEntity? _current;
   // NF-9: nullable — null means "no session yet"; abort start() if null or <= 0.
   int? _operadorId;
   // NF-7: mutex — Dart is single-threaded per isolate; no await between check and set.
   bool _flushing = false;
 
-  OfflineRepository<PositionBatchEntity> get _offline => DI.get<OfflineRepository<PositionBatchEntity>>();
+  late final String _actionHandlerId;
+
+  TrazaLocalStore get _store => DI.get<TrazaLocalStore>();
+  OutboxQueue get _outbox => DI.get<OutboxQueue>();
+
+  GpsBackgroundService() {
+    // Registered in the constructor (not onInit): get_it does not invoke the
+    // GetxService lifecycle, so onInit would silently never run for a
+    // service resolved via DI.get instead of GetX's container.
+    _actionHandlerId = ActionManager.on<void>(
+      AppTypedActions.isTrazaRecordingQuery,
+      (event) => isRecording,
+    );
+  }
 
   // ─────────────────────────────── Public API ──────────────────────────
 
-  /// Starts (or resumes from `stopped`) the GPS stream and the periodic
-  /// flush timer. Idempotent: a second call while already running is a
-  /// no-op.
+  bool get isRecording => state.value == GpsTrackingState.running;
+
+  /// Starts a new traza recording: checks permissions, persists a new open
+  /// [TrazaEntity] (name defaulted from now), and starts the GPS stream +
+  /// flush timer + Android foreground service.
   ///
-  /// NF-9: aborts (state stays stopped) if no valid operador in session.
-  /// Callers should check [lastError] after start() returns.
-  Future<void> start() async {
-    if (state.value == GpsTrackingState.running) return;
+  /// Returns `false` (state stays [GpsTrackingState.stopped]) if there is no
+  /// valid operador in session or location permissions are missing/denied.
+  /// Callers should check [lastError] when this returns `false`.
+  Future<bool> start() async {
+    if (state.value == GpsTrackingState.running) return true;
     lastError.value = null;
 
     // NF-9: read operadorId BEFORE starting the foreground service.
     _operadorId = await _readOperadorId();
     if (_operadorId == null || _operadorId! <= 0) {
       lastError.value =
-          'No hay operador en sesión; no se inicia el tracking GPS.';
+          'No hay operador en sesión; no se inicia el registro de traza.';
       AppLog.w('GpsBackgroundService: start aborted — no valid operadorId');
-      return;
+      return false;
     }
 
     final granted = await _ensurePermissions();
     if (!granted) {
       lastError.value = 'Permisos de ubicación denegados.';
-      return;
+      return false;
     }
+
+    await _ensureNotificationPermission();
+
+    final traza = TrazaEntity(
+      operadorId: _operadorId!,
+      startedAt: DateTime.now().toUtc(),
+    );
+    await _store.upsert(traza);
+    _current = traza;
 
     if (Platform.isAndroid) {
       await _startAndroidForegroundService();
@@ -84,50 +119,85 @@ class GpsBackgroundService extends GetxService {
         .listen(_onPosition, onError: _onPositionError);
 
     _flushTimer = Timer.periodic(_bufferFlushInterval, (_) {
-      unawaited(_flushIfNotEmpty(forceClose: false));
+      unawaited(_flushIfNotEmpty());
     });
 
     state.value = GpsTrackingState.running;
+    return true;
   }
 
-  /// Drops incoming points without tearing down the stream / service.
-  /// Buffer stays open; resuming continues building the same batch.
-  void pause() {
-    if (state.value != GpsTrackingState.running) return;
-    state.value = GpsTrackingState.paused;
-  }
+  /// Closes the current recording: cancels the stream, tears down the
+  /// foreground service (Android), flushes whatever points remain in the
+  /// buffer (even <500), finalizes the traza with [name] and the current
+  /// timestamp, and enqueues exactly one outbox job for it.
+  Future<void> finish({required String name}) async {
+    if (state.value == GpsTrackingState.stopped || _current == null) return;
+    final trazaClientId = _current!.clientId;
 
-  void resume() {
-    if (state.value != GpsTrackingState.paused) return;
-    state.value = GpsTrackingState.running;
-  }
-
-  /// Closes the tracker: cancels the stream, tears down the foreground
-  /// service (Android), flushes whatever points remain in the buffer
-  /// (even <500), and enqueues the final batch in the outbox.
-  Future<void> stop() async {
-    if (state.value == GpsTrackingState.stopped) return;
     _flushTimer?.cancel();
     _flushTimer = null;
     await _positionSub?.cancel();
     _positionSub = null;
 
-    await _flushIfNotEmpty(forceClose: true);
+    await _flushIfNotEmpty();
+
+    final endedAt = DateTime.now().toUtc();
+    await _store.finalize(
+      trazaClientId: trazaClientId,
+      name: name,
+      endedAt: endedAt,
+    );
 
     if (Platform.isAndroid) {
       await _stopAndroidForegroundService();
     }
+
+    // Enqueue directly on the OutboxQueue — NOT OfflineRepository.create,
+    // which would re-`upsert` (wholesale-replace) the points already
+    // persisted via appendPoints. LoadEntityTask reloads the full entity
+    // (header + points) from the store at drain time.
+    await _outbox.enqueue(
+      entityType: _store.entityType,
+      clientId: trazaClientId,
+      operation: SyncOperation.create,
+    );
+
+    _current = null;
     state.value = GpsTrackingState.stopped;
+  }
+
+  /// The open traza (`endedAt == null`) for [operadorId], if any. Used by the
+  /// recovery flow to detect a traza left open by a crash.
+  Future<TrazaEntity?> openTrazaFor(int operadorId) =>
+      _store.findOpen(operadorId);
+
+  /// Closes a traza left open by a crash: finalizes it with [name] and the
+  /// current timestamp and enqueues its outbox job, without touching this
+  /// service's in-memory recording state (there is none — the traza was
+  /// opened by a previous app instance).
+  Future<void> finalizeOpen({
+    required String trazaClientId,
+    required String name,
+  }) async {
+    await _store.finalize(
+      trazaClientId: trazaClientId,
+      name: name,
+      endedAt: DateTime.now().toUtc(),
+    );
+    await _outbox.enqueue(
+      entityType: _store.entityType,
+      clientId: trazaClientId,
+      operation: SyncOperation.create,
+    );
   }
 
   // ─────────────────────────────── Internals ───────────────────────────
 
   void _onPosition(Position p) {
     if (state.value != GpsTrackingState.running) return;
-    // A6: normalize capturedAt to UTC for coherence across store/JSON/derivation.
     // Invariant: _buffer grows by appending at the tail (_buffer.add).
     // removeRange(0, n) relies on this — never insert in the middle.
-    _buffer.add(PositionPoint(
+    _buffer.add(TrazaPunto(
       capturedAt: p.timestamp.toUtc(),
       lat: p.latitude,
       lng: p.longitude,
@@ -136,7 +206,7 @@ class GpsBackgroundService extends GetxService {
       speedMps: p.speed,
     ));
     if (_buffer.length >= _bufferFlushSize) {
-      unawaited(_flushIfNotEmpty(forceClose: false));
+      unawaited(_flushIfNotEmpty());
     }
   }
 
@@ -148,68 +218,53 @@ class GpsBackgroundService extends GetxService {
   }
 
   // NF-7: write-then-clear with mutex.
-  // NF-9: _operadorId is guaranteed non-null and > 0 here (abort guard in start()).
-  Future<void> _flushIfNotEmpty({required bool forceClose}) async {
-    // [REVIEW G4] Mutex: no await between check and set — Dart single-isolate guarantee.
+  Future<void> _flushIfNotEmpty() async {
+    // Mutex: no await between check and set — Dart single-isolate guarantee.
     if (_flushing) return;
     if (_buffer.isEmpty) return;
+    final current = _current;
+    if (current == null) return;
     _flushing = true;
     try {
       // Snapshot the current buffer length. New points arriving during the
       // await are appended at the tail and are NOT included in this snapshot.
-      final points = List<PositionPoint>.unmodifiable(_buffer);
-      final (startedAt, endedAt) = _deriveInterval(points); // A6
-      final batch = PositionBatchEntity(
-        operadorId: _operadorId!, // guaranteed by NF-9 guard in start()
-        points: points,
-        startedAt: startedAt,
-        endedAt: endedAt,
-      );
-      await _offline.create(batch); // 1) persist FIRST
-      // 2) Only remove the confirmed points. removeRange(0, n) preserves points
-      //    that arrived during the await (appended after index n).
+      final points = List<TrazaPunto>.unmodifiable(_buffer);
+      await _store.appendPoints(current.clientId, points); // 1) write FIRST
+      // 2) Only remove the confirmed points. removeRange(0, n) preserves
+      //    points that arrived during the await (appended after index n).
       _buffer.removeRange(0, points.length);
       lastFlushAt.value = DateTime.now();
       lastError.value = null;
     } catch (e, s) {
-      // Buffer stays intact = re-enqueue on next flush (create tx is atomic).
-      lastError.value = 'Error guardando lote GPS: $e';
+      // Buffer stays intact = re-appended on next flush.
+      lastError.value = 'Error guardando puntos de traza: $e';
       AppLog.e('GpsBackgroundService flush error', error: e, stackTrace: s);
     } finally {
       _flushing = false;
     }
   }
 
-  /// A6: derives [startedAt, endedAt] from the min/max capturedAt (UTC).
-  /// Guarantees end >= start even if points arrive out-of-order.
-  (DateTime, DateTime) _deriveInterval(List<PositionPoint> pts) {
-    var start = pts.first.capturedAt.toUtc();
-    var end = pts.first.capturedAt.toUtc();
-    for (final p in pts) {
-      final c = p.capturedAt.toUtc();
-      if (c.isBefore(start)) start = c;
-      if (c.isAfter(end)) end = c;
-    }
-    if (end.isBefore(start)) end = start;
-    return (start, end);
-  }
-
   /// Exposes [_flushIfNotEmpty] for testing (flush-then-clear contract).
   @visibleForTesting
-  Future<void> flushNow() => _flushIfNotEmpty(forceClose: false);
+  Future<void> flushNow() => _flushIfNotEmpty();
 
   /// Directly sets the in-memory buffer for test scenarios that need to
   /// pre-populate points without a real GPS stream.
   @visibleForTesting
-  void setBufferForTest(List<PositionPoint> points) {
+  void setBufferForTest(List<TrazaPunto> points) {
     _buffer
       ..clear()
       ..addAll(points);
   }
 
-  /// Sets [_operadorId] for tests that bypass [start()].
+  /// Sets [_operadorId] and the in-flight [_current] traza for tests that
+  /// bypass [start()].
   @visibleForTesting
-  void setOperadorIdForTest(int? id) => _operadorId = id;
+  void setCurrentForTest(TrazaEntity traza) {
+    _operadorId = traza.operadorId;
+    _current = traza;
+    state.value = GpsTrackingState.running;
+  }
 
   Future<bool> _ensurePermissions() async {
     final perm = await Geolocator.checkPermission();
@@ -222,14 +277,33 @@ class GpsBackgroundService extends GetxService {
         perm == LocationPermission.whileInUse;
   }
 
+  /// Android 13+ requires runtime consent to show the foreground-service
+  /// notification. Denial does not block recording — the service still runs,
+  /// just without a visible notification.
+  Future<void> _ensureNotificationPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await Permission.notification.status;
+      if (status.isDenied) {
+        await Permission.notification.request();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          'GpsBackgroundService: notification permission request failed: $e',
+        );
+      }
+    }
+  }
+
   LocationSettings _platformLocationSettings() {
     if (Platform.isAndroid) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
+        distanceFilter: 5,
         intervalDuration: const Duration(seconds: 1),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'Registrando posición',
+          notificationTitle: 'Registrando traza',
           notificationText: 'Helireport mantiene la ubicación activa.',
           enableWakeLock: true,
         ),
@@ -238,7 +312,7 @@ class GpsBackgroundService extends GetxService {
     if (Platform.isIOS) {
       return AppleSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
+        distanceFilter: 5,
         activityType: ActivityType.otherNavigation,
         allowBackgroundLocationUpdates: true,
         showBackgroundLocationIndicator: true,
@@ -247,7 +321,7 @@ class GpsBackgroundService extends GetxService {
     }
     return const LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 0,
+      distanceFilter: 5,
     );
   }
 
@@ -263,7 +337,7 @@ class GpsBackgroundService extends GetxService {
         channelId: 'leulit_gps_channel',
         channelName: 'Tracking GPS',
         channelDescription:
-            'Mantiene la app activa para registrar la posición durante la jornada.',
+            'Mantiene la app activa para registrar la traza durante la jornada.',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
       ),
@@ -282,7 +356,7 @@ class GpsBackgroundService extends GetxService {
     try {
       await FlutterForegroundTask.startService(
         serviceTypes: const [ForegroundServiceTypes.location],
-        notificationTitle: 'Registrando posición',
+        notificationTitle: 'Registrando traza',
         notificationText: 'Helireport mantiene la ubicación activa.',
       );
     } catch (e) {
@@ -308,7 +382,9 @@ class GpsBackgroundService extends GetxService {
 
   @override
   void onClose() {
-    unawaited(stop());
+    ActionManager.off(AppTypedActions.isTrazaRecordingQuery, _actionHandlerId);
+    unawaited(_positionSub?.cancel());
+    _flushTimer?.cancel();
     super.onClose();
   }
 }

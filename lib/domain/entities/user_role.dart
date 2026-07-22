@@ -5,6 +5,7 @@ enum UserRole {
   operador,
   supervisor,
   readonly,
+  superadmin,
 }
 
 UserRole? userRoleFromString(String? value) {

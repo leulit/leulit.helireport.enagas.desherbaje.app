@@ -14,6 +14,7 @@ import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/propagate_segmento_remote_id_usecase.dart';
 import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
 import 'package:helireport_desherbaje/data/sync/segmento_local_store.dart';
+import 'package:helireport_desherbaje/data/sync/traza_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/video_local_store.dart';
 import 'package:helireport_desherbaje/domain/entities/imagen_segmento_entity.dart';
 import 'package:helireport_desherbaje/domain/entities/segmento_entity.dart';
@@ -38,6 +39,8 @@ class MockVideoLocalStore extends Mock implements VideoLocalStore {}
 class MockMensajeLocalStore extends Mock implements MensajeLocalStore {}
 
 class MockSegmentoLocalStore extends Mock implements SegmentoLocalStore {}
+
+class MockTrazaLocalStore extends Mock implements TrazaLocalStore {}
 
 class MockPropagateSegmentoRemoteIdUseCase extends Mock
     implements PropagateSegmentoRemoteIdUseCase {}
@@ -112,6 +115,7 @@ void main() {
   late MockSegmentoLocalStore mockSegmentoStore;
   late MockPropagateSegmentoRemoteIdUseCase mockPropagate;
   late MockOutboxQueue mockOutbox;
+  late MockTrazaLocalStore mockTrazaStore;
   late ForzarEnvioController controller;
 
   setUpAll(() {
@@ -133,6 +137,9 @@ void main() {
     mockSegmentoStore = MockSegmentoLocalStore();
     mockPropagate = MockPropagateSegmentoRemoteIdUseCase();
     mockOutbox = MockOutboxQueue();
+    mockTrazaStore = MockTrazaLocalStore();
+
+    when(() => mockTrazaStore.deleteSynced()).thenAnswer((_) async => 0);
 
     when(() => mockOutbox.enqueue(
           entityType: any(named: 'entityType'),
@@ -175,8 +182,7 @@ void main() {
     // y continuar con los hijos.
     when(() => mockSegmentoStore.findByClientId(any()))
         .thenAnswer((_) async => _seg(id: 42, clientId: 'seg-1'));
-    when(() => mockPropagate.propagate(any(), any()))
-        .thenAnswer((_) async {});
+    when(() => mockPropagate.propagate(any(), any())).thenAnswer((_) async {});
 
     controller = ForzarEnvioController(
       mockUseCase,
@@ -189,6 +195,7 @@ void main() {
       segmentoStore: mockSegmentoStore,
       propagate: mockPropagate,
       outbox: mockOutbox,
+      trazaStore: mockTrazaStore,
     );
     Get.put(controller);
   });
@@ -196,7 +203,8 @@ void main() {
   tearDown(Get.reset);
 
   group('enviarCloud (un segmento)', () {
-    test('(a) drena SOLO los tipos de ese segmento en orden segmento→vídeo→foto→mensaje',
+    test(
+        '(a) drena SOLO los tipos de ese segmento en orden segmento→vídeo→foto→mensaje',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
@@ -311,7 +319,8 @@ void main() {
       verify(() => mockVideoStore.clearUploadSessions('seg-1')).called(1);
     });
 
-    test('(a5b) las sesiones se descartan ANTES de drenar los vídeos', () async {
+    test('(a5b) las sesiones se descartan ANTES de drenar los vídeos',
+        () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
@@ -331,7 +340,8 @@ void main() {
       ]);
     });
 
-    test('(a6) upsert NO entregado → NO descarta sesiones (no resubir en balde)',
+    test(
+        '(a6) upsert NO entregado → NO descarta sesiones (no resubir en balde)',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
@@ -361,8 +371,8 @@ void main() {
 
     test('(i2) purgado limpio no ensucia lastError', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      when(() => mockPurge.purgeIfFullySynced(any()))
-          .thenAnswer((_) async => const PurgeOutcome(status: PurgeStatus.purged));
+      when(() => mockPurge.purgeIfFullySynced(any())).thenAnswer(
+          (_) async => const PurgeOutcome(status: PurgeStatus.purged));
 
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
@@ -385,7 +395,8 @@ void main() {
       when(() => mockEngine.drain(
               entityType: 'segmento',
               onlyClientIds: any(named: 'onlyClientIds')))
-          .thenAnswer((_) async => const DrainSummary(rejected: 1, conflicts: 2));
+          .thenAnswer(
+              (_) async => const DrainSummary(rejected: 1, conflicts: 2));
 
       await controller.enviarCloud(_seg(id: 10, clientId: 'seg-1'));
 
@@ -393,7 +404,8 @@ void main() {
       expect(controller.lastDrainSummary.value?.conflicts, 2);
     });
 
-    test('(e) authExpired corta el envío del segmento (no drena tipos posteriores)',
+    test(
+        '(e) authExpired corta el envío del segmento (no drena tipos posteriores)',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
@@ -429,7 +441,8 @@ void main() {
       verify(() => mockPurge.purgeIfFullySynced(any())).called(1);
     });
 
-    test('(g) si el segmento no sincroniza limpio (rejected>0) no toca hijos ni propaga',
+    test(
+        '(g) si el segmento no sincroniza limpio (rejected>0) no toca hijos ni propaga',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
@@ -449,7 +462,8 @@ void main() {
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
 
-    test('(h) sin id de backend tras el upsert (defensivo) no propaga ni continúa',
+    test(
+        '(h) sin id de backend tras el upsert (defensivo) no propaga ni continúa',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockSegmentoStore.findByClientId(any()))
@@ -539,8 +553,8 @@ void main() {
     test('(r4) se respeta la operación original del job, no siempre create',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      when(() => mockOutbox.rejectedJobs(entityType: 'segmento')).thenAnswer(
-          (_) async => [
+      when(() => mockOutbox.rejectedJobs(entityType: 'segmento'))
+          .thenAnswer((_) async => [
                 _rejected(
                   id: 1,
                   entityType: 'segmento',
@@ -602,11 +616,12 @@ void main() {
       verifyInOrder([
         () => mockEngine.drain(
             entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
-        () => mockEngine.drain(entityType: 'position'),
+        () => mockEngine.drain(entityType: 'traza'),
       ]);
     });
 
-    test('segmento sin id de backend y sin nada pendiente no se envía', () async {
+    test('segmento sin id de backend y sin nada pendiente no se envía',
+        () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       controller.segmentos.assignAll([_seg(id: null, clientId: 'seg-1')]);
       // readUnsyncedSets vacío (default) → nada que subir; sin id remoto tampoco
@@ -617,7 +632,7 @@ void main() {
       verifyNever(() => mockEngine.drain(
           entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')));
       // position sí se drena siempre al final.
-      verify(() => mockEngine.drain(entityType: 'position')).called(1);
+      verify(() => mockEngine.drain(entityType: 'traza')).called(1);
     });
 
     // MAJOR — un segmento en `finalizeFailed` (todo subido, solo cayó el POST de
@@ -688,7 +703,7 @@ void main() {
 
       await controller.enviarAllCloud();
 
-      verifyNever(() => mockEngine.drain(entityType: 'position'));
+      verifyNever(() => mockEngine.drain(entityType: 'traza'));
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
 
@@ -703,7 +718,7 @@ void main() {
               entityType: 'segmento',
               onlyClientIds: any(named: 'onlyClientIds')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 2));
-      when(() => mockEngine.drain(entityType: 'position'))
+      when(() => mockEngine.drain(entityType: 'traza'))
           .thenAnswer((_) async => const DrainSummary(conflicts: 1));
 
       await controller.enviarAllCloud();

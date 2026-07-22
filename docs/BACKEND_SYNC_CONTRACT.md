@@ -23,7 +23,7 @@ Para que esa sincronización sea **idempotente, robusta y reanudable**, el backe
 3. Endpoint de pull "full" para entidades descargables.
 4. Mensajes de error 4xx legibles en español.
 5. Códigos HTTP semánticos consistentes.
-6. Endpoint específico `POST /positions/batch` para puntos GPS.
+6. Endpoint específico `POST /api/enagas/v1/positions/batch` para trazas GPS (GeoJSON).
 7. Campo `updated_at` ISO8601 UTC en todas las entidades sincronizables.
 
 ---
@@ -280,62 +280,116 @@ El `server_version` debe ser el recurso completo, listo para que el cliente lo p
 
 ---
 
-## 8. Endpoint específico: subida de posiciones GPS
+## 8. Endpoint específico: subida de trazas GPS
 
-**Caso especial.** Las posiciones GPS se acumulan en lotes de hasta 500 puntos. Cada lote es UN job del cliente y produce UN POST.
+**Sustituye la versión anterior de este apartado (lotes de puntos sueltos).** El cliente ahora sube una traza completa por POST, como GeoJSON.
 
 ```http
-POST /api/positions/batch
+POST /api/enagas/v1/positions/batch
 Content-Type: application/json
+X-HMAC-Signature: <hex>
+X-Timestamp: <epoch_ms>
+```
 
+Autenticación: HMAC-SHA256, igual que el resto de `/api/enagas/v1` (ver §10). `401`/`403` en esta ruta significa firma rechazada, **no** expiración de sesión — el cliente no cierra sesión.
+
+### 8.1 Body
+
+`FeatureCollection` con **exactamente una** `Feature`.
+
+```json
 {
-  "batch_client_id": "f1e2d3c4-b5a6-9788-0192-3456789abcde",
-  "operador_id": 12,
-  "device_id": "android-pixel7-abc123",
-  "started_at": "2026-04-25T08:30:00.000Z",
-  "ended_at":   "2026-04-25T09:00:00.000Z",
-  "points": [
+  "type": "FeatureCollection",
+  "features": [
     {
-      "captured_at": "2026-04-25T08:30:00.000Z",
-      "lat": 40.412345,
-      "lng": -3.701234,
-      "accuracy_m": 5.2,
-      "altitude_m": 678.4,
-      "speed_mps": 1.2
-    },
-    {
-      "captured_at": "2026-04-25T08:30:01.000Z",
-      "lat": 40.412350,
-      "lng": -3.701231,
-      "accuracy_m": 5.0,
-      ...
+      "type": "Feature",
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [-3.701234, 40.412345, 678.4, 1782458400000],
+            [-3.701231, 40.412350, 678.6, 1782458401000],
+            [-3.701200, 40.412410, 679.1, 1782458403000]
+          ],
+          [
+            [-3.699800, 40.413900, 681.0, 1782458470000],
+            [-3.699750, 40.413950, 681.2, 1782458471000]
+          ]
+        ]
+      },
+      "properties": {
+        "kind": "track",
+        "traza_client_id": "f1e2d3c4-b5a6-9788-0192-3456789abcde",
+        "name": "Traza operador 12 - mañana",
+        "user_id": 12,
+        "started_at": "2026-04-25T08:30:00.000Z",
+        "ended_at": "2026-04-25T09:00:00.000Z",
+        "coord_format": ["lon", "lat", "alt", "t_epoch_ms"],
+        "os": "android",
+        "os_version": "14",
+        "device_model": "Pixel 7",
+        "app_version": "1.0.0+1"
+      }
     }
-    // ... hasta 500 puntos
   ]
 }
 ```
 
-**Reglas del backend:**
+**`geometry`:**
 
-- Idempotencia por `batch_client_id`. Reenviar el mismo batch no duplica puntos.
-- Persistencia ordenada por `captured_at` ascendente.
-- Validación: timestamps coherentes, lat/lng en rango válido. Devolver 422 si no.
-- Volumen previsto: una jornada de 8h × 1Hz = ~28.800 puntos = ~58 batches. Multiplicar por número de operadores activos para dimensionar.
+- `MultiLineString`, o `null` si la traza no produjo ningún segmento utilizable.
+- Cada vértice: `[lon, lat, alt, t_epoch_ms]`.
+  - `alt`: metros, nullable.
+  - `t_epoch_ms`: epoch UTC en milisegundos, absoluto (no relativo al inicio).
+- Cada `LineString` del `MultiLineString` es un tramo continuo: el cliente corta un tramo nuevo cuando el hueco entre dos fixes consecutivos supera 60 s. Tramos de menos de 2 puntos se descartan antes de enviar — nunca llegan al backend.
 
-**Respuesta esperada:**
+**`properties`:**
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `kind` | string | Siempre `"track"`. |
+| `traza_client_id` | string (UUID v4) | Generado por el cliente. Inmutable. Clave de idempotencia. |
+| `name` | string | Máx. 100 caracteres. Editable por el usuario. |
+| `user_id` | int | — |
+| `started_at` / `ended_at` | string ISO8601 UTC | — |
+| `coord_format` | array de string | Siempre `["lon","lat","alt","t_epoch_ms"]`, documenta el orden de cada vértice. |
+| `os` | string | `"android"` \| `"ios"`. |
+| `os_version` | string | — |
+| `device_model` | string | — |
+| `app_version` | string | — |
+
+### 8.2 Idempotencia
+
+Clave: `traza_client_id`. Un POST repetido con el mismo `traza_client_id` devuelve `200` con el registro ya existente — nunca crea un duplicado.
+
+### 8.3 Respuesta
 
 ```http
 HTTP/1.1 201 Created
 
 {
-  "batch_client_id": "f1e2d3c4-b5a6-9788-0192-3456789abcde",
-  "remote_id": 1234,
-  "points_accepted": 500,
-  "points_rejected": 0
+  "remote_id": 1234
 }
 ```
 
-Si algunos puntos individuales se rechazan por validación, devolver 207 (Multi-Status) o un campo `points_rejected` con detalle. El cliente acepta éxito parcial.
+Reenvío idempotente → `200 OK` con el mismo cuerpo y el `remote_id` ya asignado.
+
+### 8.4 Límite de tamaño
+
+Una traza puede alcanzar ~1 MB de JSON. El backend debe aceptar como mínimo **4 MB** en esta ruta — el límite por defecto de Fastify (1 MB) es insuficiente y debe ampliarse específicamente para este endpoint.
+
+### 8.5 Códigos de error
+
+| Código | Tipo (cliente) | Comportamiento del cliente |
+|---|---|---|
+| `400` | Terminal | Job → `rejected`, muestra `error_message`. |
+| `401` / `403` | Terminal, **no es expiración de sesión** | Job → `rejected`. El cliente NO cierra sesión (HMAC-only, ver §10). |
+| `408` | Retryable | Reintenta más tarde (manual). |
+| `409` | Terminal | Job → `rejected` (ver §7 si aplica conflicto de versión). |
+| `422` | Terminal | Job → `rejected`, muestra `error_message`. |
+| `429` | Retryable | Reintenta más tarde (manual). |
+| `5xx` | Retryable | Reintenta más tarde (manual). |
+| Error de red / timeout de cliente | Retryable | Reintenta más tarde (manual). |
 
 ---
 
@@ -380,7 +434,7 @@ Para que la app cliente sea funcional con la nueva arquitectura, el backend debe
 - [ ] Devolver `error_message` legible en español en todas las respuestas 4xx.
 - [ ] Aplicar códigos HTTP semánticos según §5.1.
 - [ ] Devolver `server_version` completa en 409.
-- [ ] Implementar `POST /api/positions/batch` con idempotencia por `batch_client_id`.
+- [ ] Implementar `POST /api/enagas/v1/positions/batch` con idempotencia por `traza_client_id` (§8).
 
 ---
 
@@ -424,7 +478,7 @@ devuelven todos los registros aplicables al operador en un único array JSON, co
 Estas decisiones se cerrarán cuando el equipo de backend revise este documento:
 
 1. **Filtros exactos de los GET de pull**: ¿`?operador=`, `?ct_id=`, ambos, otros?
-2. **Tamaño máximo de payload aceptado** en POST (especialmente para `/positions/batch` y subida de imágenes).
+2. **Tamaño máximo de payload aceptado** en POST (especialmente para subida de imágenes; `/positions/batch` ya fija mínimo 4 MB, ver §8.4).
 3. **Política de retención** de posiciones GPS en backend (¿cuánto tiempo se guardan los puntos?).
 4. **Endpoint de revocación** de token (logout server-side) — opcional.
 5. **Lista cerrada de entidades pulleables** (gasoductos, pks, segmentos, mensajes... — depende del producto).
@@ -438,7 +492,7 @@ Estas decisiones se cerrarán cuando el equipo de backend revise este documento:
 |---|---|
 | `client_id` | UUID v4 generado por el cliente. PK lógica del dominio. Inmutable. |
 | `remote_id` | Identificador interno del backend. Asignado al primer sync. |
-| `batch_client_id` | UUID v4 que identifica un lote de puntos GPS. Usado para idempotencia del endpoint `/positions/batch`. |
+| `traza_client_id` | UUID v4 que identifica una traza GPS completa. Usado para idempotencia del endpoint `/positions/batch` (§8). |
 | Push | Envío del cliente al backend (creación/actualización/borrado). |
 | Pull | Descarga del backend al cliente. Manual y explícita. |
 | Drain | Proceso de vaciar el outbox del cliente enviando todos los jobs pendientes al backend. |

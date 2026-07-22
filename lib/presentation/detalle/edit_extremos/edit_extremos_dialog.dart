@@ -80,9 +80,14 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                     children: [
                       TileLayer(
                         urlTemplate: ApiEndpoints.pnoaWmts,
+                        fallbackUrl: ApiEndpoints.arcgisImagery,
+                        maxNativeZoom: 20,
                         tileProvider: CancellableNetworkTileProvider(),
-                        userAgentPackageName:'com.leulit.enagas.helireport_desherbaje',
-                        additionalOptions: const {'User-Agent': 'helireport-desherbaje'},
+                        userAgentPackageName:
+                            'com.leulit.enagas.helireport_desherbaje',
+                        additionalOptions: const {
+                          'User-Agent': 'helireport-desherbaje'
+                        },
                       ),
                       PolylineLayer(
                         polylines: AppDI.gasoductosService.polylines.toList(),
@@ -107,15 +112,13 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                             child: _DragEndpointMarker(
                               kind: EndpointKind.inicio,
                               point: controller.inicio.value,
-                              color:
-                                  controller.colorFor(EndpointKind.inicio),
+                              color: controller.colorFor(EndpointKind.inicio),
                               revertTick: controller.revertTick.value,
                               onDragStart: () =>
                                   controller.isDraggingMarker.value = true,
                               onDragEnd: (p) {
                                 controller.isDraggingMarker.value = false;
-                                controller.onDragEnd(
-                                    EndpointKind.inicio, p);
+                                controller.onDragEnd(EndpointKind.inicio, p);
                               },
                               onDragCancel: () =>
                                   controller.isDraggingMarker.value = false,
@@ -129,8 +132,7 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                             child: _DragEndpointMarker(
                               kind: EndpointKind.fin,
                               point: controller.fin.value,
-                              color:
-                                  controller.colorFor(EndpointKind.fin),
+                              color: controller.colorFor(EndpointKind.fin),
                               revertTick: controller.revertTick.value,
                               onDragStart: () =>
                                   controller.isDraggingMarker.value = true,
@@ -292,12 +294,14 @@ class _ActionBar extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Obx(() => ElevatedButton.icon(
-                  onPressed: controller.isSaving.value ? null : controller.guardar,
+                  onPressed:
+                      controller.isSaving.value ? null : controller.guardar,
                   icon: controller.isSaving.value
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.check, size: 18),
                   label: const Text('Guardar'),
@@ -379,8 +383,7 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
       },
       onPointerMove: (event) {
         if (event.pointer != _activePointer || _startLocal == null) return;
-        setState(() =>
-            _accumulated = event.localPosition - _startLocal!);
+        setState(() => _accumulated = event.localPosition - _startLocal!);
       },
       onPointerUp: (event) {
         if (event.pointer != _activePointer) return;
@@ -496,16 +499,21 @@ class _CrosshairPainter extends CustomPainter {
   final Color color;
 
   static const double _ring = 22;
-  static const double _gap = 24; // hueco > anillo: brazos solo por fuera, interior limpio
+  static const double _gap =
+      24; // hueco > anillo: brazos solo por fuera, interior limpio
   static const double _arm = 40;
 
   void _reticle(Canvas canvas, Offset c, Paint paint) {
     canvas.drawCircle(c, _ring, paint);
     // Cuatro brazos con hueco central.
-    canvas.drawLine(Offset(c.dx - _arm, c.dy), Offset(c.dx - _gap, c.dy), paint);
-    canvas.drawLine(Offset(c.dx + _gap, c.dy), Offset(c.dx + _arm, c.dy), paint);
-    canvas.drawLine(Offset(c.dx, c.dy - _arm), Offset(c.dx, c.dy - _gap), paint);
-    canvas.drawLine(Offset(c.dx, c.dy + _gap), Offset(c.dx, c.dy + _arm), paint);
+    canvas.drawLine(
+        Offset(c.dx - _arm, c.dy), Offset(c.dx - _gap, c.dy), paint);
+    canvas.drawLine(
+        Offset(c.dx + _gap, c.dy), Offset(c.dx + _arm, c.dy), paint);
+    canvas.drawLine(
+        Offset(c.dx, c.dy - _arm), Offset(c.dx, c.dy - _gap), paint);
+    canvas.drawLine(
+        Offset(c.dx, c.dy + _gap), Offset(c.dx, c.dy + _arm), paint);
   }
 
   @override

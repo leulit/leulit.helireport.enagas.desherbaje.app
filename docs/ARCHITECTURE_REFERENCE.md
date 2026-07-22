@@ -31,7 +31,7 @@ lib/
 │   │   ├── auth_expiration_handler.dart           # Listener global de SyncActions.authExpired
 │   │   ├── connectivity_service.dart              # GetxService: monitoriza red
 │   │   ├── gasoductos_service.dart                # Master data legacy (no integrado al motor)
-│   │   ├── gps_background_service.dart            # GPS background con buffer 500/30s + permisos de ubicación
+│   │   ├── gps_background_service.dart            # Grabación manual de "traza" (GpsTrackingState vía ValueNotifier); buffer 500/30s; start()/finish(name)/openTrazaFor()/finalizeOpen()
 │   │   ├── pks_service.dart                       # Master data PK legacy
 │   │   └── hitos_service.dart                     # Master data hitos legacy (réplica de PksService)
 │   └── sync/                                      # Motor offline-first (extraíble a paquete)
@@ -78,7 +78,7 @@ lib/
 │   │   ├── segmento_entity.dart                   # Implementa Syncable
 │   │   ├── imagen_segmento_entity.dart            # Implementa Syncable
 │   │   ├── video_segmento_entity.dart             # Implementa Syncable — TipoVideo, uploadOffset, uploadId; remoteId = uploadId ?? id
-│   │   ├── position_batch_entity.dart             # Lote GPS — implementa Syncable
+│   │   ├── traza_entity.dart                      # TrazaEntity (implementa Syncable) + TrazaPunto — traza GPS manual, push only
 │   │   ├── posicion_fija_entity.dart              # Implementa Syncable — pull-only; displayLatitude/Longitude (fixed_* > latitud/longitud)
 │   │   ├── ct_info_entity.dart
 │   │   ├── gasoducto_entity.dart
@@ -119,8 +119,8 @@ lib/
 │       ├── video_remote_adapter.dart              # TUS-like adapter: Init→Chunk(PATCH)→Status(GET)→Complete; retry por chunk; 401/403=SyncUnrecoverable(no logout)
 │       ├── mensaje_local_store.dart
 │       ├── mensaje_remote_adapter.dart
-│       ├── position_local_store.dart
-│       ├── position_batch_remote_adapter.dart
+│       ├── traza_local_store.dart                 # tablas trazas + trazas_puntos; appendPoints/findOpen/findAnyOpen/finalize/deleteSynced además del contrato LocalStore
+│       ├── traza_remote_adapter.dart              # POST /positions/batch — body = buildTrackGeoJson (FeatureCollection/MultiLineString), push-only (create), idempotente por traza_client_id
 │       ├── posicion_fija_local_store.dart         # tabla posiciones_fijas — pull-only, sin outbox
 │       └── posicion_fija_remote_fetcher.dart      # GET /incidencias/posicionesfijasbycts/{cts}
 └── presentation/
@@ -143,7 +143,7 @@ lib/
     │   ├── camera_capture_page.dart               # Selector Foto|Vídeo (vídeo sin audio)
     │   └── video_player_page.dart                 # Reproductor pantalla completa (local)
     ├── forzar_envio/                              # Atajo "subir todo lo de esta entidad"
-    │   ├── forzar_envio_page.dart
+    │   ├── forzar_envio_page.dart                 # + _ResetButton (solo superadmin): OfflineDatabase.wipeAll + logout
     │   ├── forzar_envio_binding.dart
     │   └── forzar_envio_controller.dart
     ├── sincronizacion/                            # Sync page con 3 secciones + Preparar campo
@@ -152,10 +152,14 @@ lib/
     │   ├── sincronizacion_controller.dart
     │   ├── sync_models.dart                       # DTOs UI: PendingByEntity, ConflictRow, ...
     │   └── field_work_tasks.dart                  # PipelineTasks de "Preparar trabajo de campo"
+    ├── widgets/                                   # Compartidos entre pantallas (AppBar actions, diálogos)
+    │   ├── track_record_button.dart               # AppBar action: inicia/finaliza la traza vía GpsBackgroundService; ValueListenableBuilder<GpsTrackingState>
+    │   ├── logout_button.dart                     # AppBar action "cerrar sesión" compartida; bloquea logout si AppTypedActions.isTrazaRecording()
+    │   └── finalize_traza_dialog.dart              # showFinalizeTrazaDialog(): diálogo no descartable para nombrar la traza al finalizar (manual o recuperación de crash)
     └── mapa/
         ├── mapa_global_page.dart
         ├── mapa_global_binding.dart
-        ├── mapa_global_controller.dart            # Arranca/para GpsBackgroundService
+        ├── mapa_global_controller.dart            # Ya NO arranca/para GpsBackgroundService — la grabación es independiente de esta pantalla (ver TrackRecordButton)
         ├── layers/
         │   ├── segmentos_map_controller.dart
         │   ├── segmentos_map_layer.dart
@@ -252,15 +256,19 @@ Subida TUS-like via `NetworkService` (Init→PATCH chunks→Complete; 5 MB/chunk
 | `enviadoPor` | `int?` |
 | `createdAt`, `updatedAt` | `DateTime` |
 
-### `PositionBatchEntity` — `Syncable`, push only (GPS)
-Lote de hasta ~500 puntos GPS. La unidad de sincronización del tracking.
-| Campo | Tipo |
-|---|---|
-| `clientId` (= `batch_client_id`) | `String` UUID |
-| `id` | `int?` (remote_id) |
-| `operadorId` | `int` |
-| `points` | `List<PositionPoint>` |
-| `startedAt`, `endedAt` | `DateTime` |
+### `TrazaEntity` — `Syncable`, push only (GPS, `create` únicamente)
+Traza GPS manual (nombre "traza" en toda la app y el backend). La unidad de sincronización es la traza completa (cabecera + puntos), no un lote parcial: el drain enqueda un único job por traza al finalizar la grabación. `endedAt == null` = traza abierta (grabando, o dejada abierta por un crash); el local store impone como máximo una traza abierta por operador.
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `clientId` (= `traza_client_id`) | `String` | UUID v4, generado al crear |
+| `id` | `int?` | `remote_id` asignado por el backend; `remoteId` getter = `id?.toString()` |
+| `operadorId` | `int` | |
+| `startedAt` | `DateTime` | UTC |
+| `endedAt` | `DateTime?` | `null` mientras está abierta |
+| `name` | `String` | Default `'Traza yyyy-MM-dd HH:mm'` (hora local de `startedAt`); editable al finalizar vía `showFinalizeTrazaDialog`; clamp a 100 caracteres |
+| `points` | `List<TrazaPunto>` | `capturedAt`, `lat`, `lng`, `accuracyMeters?`, `altitudeMeters?`, `speedMps?` — no son `Syncable`, nunca se sincronizan sueltos |
+
+Tablas SQLite: `trazas` (cabecera) + `trazas_puntos` (uno por punto, FK `traza_client_id`). Reemplazan `posiciones_gps_batches`/`posiciones_gps`, borradas en la migración `schemaVersion 1` de `TrazaLocalStore` (app aún no en producción, sin backwards-compat). Payload de subida: `POST /positions/batch` con un `FeatureCollection`/`MultiLineString` (`buildTrackGeoJson` en `core/gis/media_gis_geojson.dart`), partido en segmentos cuando el hueco entre dos puntos consecutivos supera 60 s; segmentos de 1 solo punto se descartan; sin ningún segmento superviviente el adapter devuelve éxito sin llamar a la red.
 
 ### `PosicionFijaEntity` — `Syncable`, **pull only**
 Posición fija (instalación/vigilancia) asociada a un CT. Se descarga y se muestra en el mapa; nunca se sube (sin outbox).
@@ -299,11 +307,12 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado, edita descripción, gestiona mensajes |
 | `EditExtremosController` | `presentation/detalle/edit_extremos/` | Edición de extremos del segmento sobre el mapa |
 | `CameraCaptureController` | `presentation/camera/` | Captura cámara → enqueue al outbox vía `OfflineRepository` |
-| `MapaGlobalController` | `presentation/mapa/` | Mapa global; arranca/para `GpsBackgroundService` en su ciclo |
+| `MapaGlobalController` | `presentation/mapa/` | Mapa global; ya NO controla el ciclo de vida de `GpsBackgroundService` (ver `TrackRecordButton`) |
 | `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
 | `PosicionesFijasMapController` | `presentation/mapa/layers/` | Lee `PosicionFijaLocalStore` (DI get_it) y expone marcadores válidos; solo lectura local, sin red |
-| `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo" |
-| `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/video/mensaje) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
+| `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo"; expone `isSuperadmin` + `resetAppData()` (wipe total, solo `UserRole.superadmin`) |
+| `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/video/mensaje/traza) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
+| `SegmentosListController` | `presentation/segmentos/` | Además del listado: recuperación de traza huérfana tras crash (`_recoverOrphanedTraza`, primera pantalla con sesión activa tras login) |
 | `SplashController` | `presentation/splash/` | Ruta inicial; `await AppDI.init()` con spinner/reintentar antes de navegar a login |
 
 ### GetxServices (globales, permanent: true)
@@ -312,7 +321,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 |---|---|
 | `ConnectivityService` | Monitoriza red; dispatcha `SyncActions.connectionRestored/Lost` (informativo, NO dispara drain) |
 | `NetworkService` | Cliente Dio singleton con interceptor HMAC + retry de transporte |
-| `GpsBackgroundService` | Tracking GPS con buffer 500/30s + permisos de ubicación; lifecycle atado al mapa |
+| `GpsBackgroundService` | Grabación manual de traza GPS (`start()`/`finish(name)`); buffer 500 puntos/30s flush append-only; `ValueNotifier<GpsTrackingState>`; foreground service Android (`stopWithTask=false`, sobrevive swipe de recientes) / `allowBackgroundLocationUpdates` iOS; lifecycle independiente de cualquier pantalla — activado por `TrackRecordButton` |
 | `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
 | `GasoductosService` | Master data legacy de trazas (no integrado al motor — ver §12.2 doc backend) |
 | `PksService` | Master data legacy de puntos kilométricos; expone `pks` como `ValueNotifier<List<PkEntity>>` |
@@ -360,11 +369,11 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `logger` | `^2.7.0` | Logging con niveles |
 | `permission_handler` | `^12.0.1` | Permisos runtime |
 | `intl` | `^0.20.2` | Fechas/i18n |
-| `geolocator` | `^14.0.2` | GPS stream (foreground + iOS background) |
+| `geolocator` | `^14.0.3` | GPS stream (foreground + iOS background) |
 | `flutter_rotation_sensor` | `^0.3.0` | Rumbo (azimuth) para GIS de captura; funciona parado |
 | `device_info_plus` | `^13.2.0` | `os`/`os_version`/`device_model` en `gis_json` (CaptureMeta) |
 | `package_info_plus` | `^10.2.0` | `app_version` en `gis_json` (CaptureMeta) |
-| `flutter_foreground_task` | `^9.2.2` | Foreground service Android para GPS |
+| `flutter_foreground_task` | `^10.0.0` | Foreground service Android para grabación de traza (`stopWithTask=false`) |
 | `leulit_flutter_actionmanager` | `^5.6.0` | TypedAction bus entre capas |
 | `leulit_pipeline_pattern` | path | TaskPipeline para flujos secuenciales async |
 | `mocktail` | `^1.0.5` (dev) | Tests |

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_di.dart';
+import '../../core/app_log.dart';
 import '../../core/app_router.dart';
 import '../../core/my_getx_controller.dart';
 import '../../core/services/connectivity_service.dart';
@@ -12,6 +15,7 @@ import '../../core/services/hitos_service.dart';
 
 import '../../core/sync/sync.dart';
 import '../../data/repository/auth_repository_impl.dart';
+import '../../domain/entities/user_role.dart';
 import '../../domain/repository/auth_repository.dart';
 import 'sync_models.dart';
 
@@ -49,6 +53,11 @@ class SincronizacionController extends MyGetxController {
   /// Fila por cada [MasterDataKind] — orden estable.
   final rows = <MasterDataRow>[].obs;
 
+  /// Rol del usuario logueado, para gatear el botón "Reset" (solo
+  /// [UserRole.superadmin]). `null` mientras se resuelve o si no hay sesión.
+  final userRole = Rx<UserRole?>(null);
+  bool get isSuperadmin => userRole.value == UserRole.superadmin;
+
   CancelToken? _activeToken;
 
   // ─────────────────────────────── Lifecycle ───────────────────────────
@@ -67,6 +76,35 @@ class SincronizacionController extends MyGetxController {
       debugLabel: 'Sync.connLost',
     );
     _initRows();
+    unawaited(_loadUserRole());
+  }
+
+  /// Resuelve el rol en segundo plano. Si la lectura de sesión falla, el rol
+  /// queda `null` y el botón destructivo NO se pinta: ante duda sobre quién
+  /// está delante, se oculta. El fallo se loguea, no se traga.
+  Future<void> _loadUserRole() async {
+    try {
+      final user = await _auth.getCurrentUser();
+      userRole.value = user?.role;
+    } catch (e, st) {
+      userRole.value = null;
+      AppLog.w('SincronizacionController._loadUserRole: $e', stackTrace: st);
+    }
+  }
+
+  /// Solo [UserRole.superadmin]: borra el contenido de TODAS las tablas
+  /// locales (entidades + `sync_queue`/`sync_conflicts`/`pull_state`/versión
+  /// de esquema), dejando la base de datos como recién instalada, y cierra
+  /// sesión. No toca ficheros de fotos/vídeos en disco — viven en la galería
+  /// del dispositivo, que es su copia de seguridad.
+  ///
+  /// Destructivo e irreversible: el trabajo de campo aún no enviado (fotos,
+  /// vídeos, segmentos, trazas) se pierde para siempre. La confirmación vive
+  /// en la vista; este método asume que ya se confirmó.
+  Future<void> resetAppData() async {
+    await OfflineDatabase.wipeAll(AppDI.database);
+    AppDI.sessionState.set(false);
+    Get.offAllNamed(AppRoutes.login);
   }
 
   Future<void> _initRows() async {
@@ -145,7 +183,8 @@ class SincronizacionController extends MyGetxController {
 
   // NF-15: orElse guard prevents StateError when rows haven't been initialised.
   MasterDataRow _rowFor(MasterDataKind kind) =>
-      rows.firstWhere((r) => r.kind == kind, orElse: () => MasterDataRow(kind: kind));
+      rows.firstWhere((r) => r.kind == kind,
+          orElse: () => MasterDataRow(kind: kind));
 
   void _updateRow(MasterDataKind kind, MasterDataRow updated) {
     final idx = rows.indexWhere((r) => r.kind == kind);

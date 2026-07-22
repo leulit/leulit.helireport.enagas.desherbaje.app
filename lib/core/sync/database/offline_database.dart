@@ -132,7 +132,8 @@ abstract class OfflineDatabase {
     );
   }
 
-  static Future<int> _readVersion(DatabaseExecutor db, String entityType) async {
+  static Future<int> _readVersion(
+      DatabaseExecutor db, String entityType) async {
     final rows = await db.query(
       entitySchemaVersionTable,
       where: 'entity_type = ?',
@@ -153,5 +154,28 @@ abstract class OfflineDatabase {
       {'entity_type': entityType, 'version': version},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Deletes every row of every user table (entity tables, `sync_queue`,
+  /// `sync_conflicts`, `pull_state`, `_entity_schema_version`), leaving the
+  /// database as freshly installed — schema intact, rows gone.
+  ///
+  /// Enumerates tables from `sqlite_master` instead of a hardcoded list so it
+  /// never rots as new entities are registered; skips SQLite's own
+  /// `sqlite_%` tables and Android's `android_metadata`. Runs inside a single
+  /// transaction: a failure midway rolls back rather than leaving a half-wiped
+  /// database. Does not touch files on disk (photos/videos stay in the
+  /// device gallery, which is their backup).
+  static Future<void> wipeAll(Database db) async {
+    final rows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name NOT LIKE 'sqlite_%' AND name != 'android_metadata'",
+    );
+    final tables = rows.map((r) => r['name']! as String).toList();
+    await db.transaction((txn) async {
+      for (final table in tables) {
+        await txn.delete(table);
+      }
+    });
   }
 }

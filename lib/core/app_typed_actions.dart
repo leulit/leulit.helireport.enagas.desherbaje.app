@@ -89,4 +89,24 @@ class AppTypedActions {
   /// `SegmentoDetalleController` para ajustar la cámara del mapa con margen.
   static const mediaGisBoundsRequested =
       TypedAction<LatLngBounds>('SegDetalle.mediaGisBoundsRequested');
+
+  // ──────────────────── GpsBackgroundService (traza GPS) ────────────────────
+
+  /// Consulta si hay una traza en grabación. Sin payload; usar
+  /// `ActionManager.dispatchAsync` y leer el `bool` en
+  /// `ActionDispatchResult.results` (`onTypedActionWithResult` en el
+  /// handler de [GpsBackgroundService]).
+  static const isTrazaRecordingQuery =
+      TypedAction<void>('Traza.isTrazaRecordingQuery');
+
+  /// Envoltorio sobre `ActionManager.dispatchAsync` + [isTrazaRecordingQuery]:
+  /// centraliza la lectura de `results` para que ningún llamador necesite
+  /// conocer el contrato interno del handler de [GpsBackgroundService].
+  /// `false` si no hay ningún handler registrado (servicio no inicializado).
+  static Future<bool> isTrazaRecording() async {
+    final result = await ActionManager.dispatchAsync<void>(
+      isTrazaRecordingQuery,
+    );
+    return result.results.whereType<bool>().any((v) => v);
+  }
 }

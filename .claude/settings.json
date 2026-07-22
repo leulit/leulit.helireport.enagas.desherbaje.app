@@ -1,4 +1,52 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+
+      "Bash(flutter --version)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter test *)",
+      "Bash(flutter build *)",
+      "Bash(flutter devices *)",
+      "Bash(dart analyze *)",
+      "Bash(dart format *)",
+      "Bash(dart compile *)",
+
+      "Bash(git diff *)",
+      "Bash(git mv *)",
+      "Bash(git rm *)",
+      "Bash(git stash *)",
+
+      "Bash(adb devices *)",
+      "Bash(adb logcat *)",
+      "Bash(adb shell *)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xcodebuild -version)",
+
+      "mcp__dart__pub",
+      "mcp__dart__analyze_files",
+      "mcp__dart__dart_format",
+      "mcp__dart__run_tests",
+      "mcp__dart__list_devices",
+      "mcp__dart__dtd",
+      "mcp__dart__get_runtime_errors",
+      "mcp__dart__hot_reload",
+
+      "mcp__codebase-memory-mcp__list_projects",
+      "mcp__codebase-memory-mcp__index_repository",
+      "mcp__codebase-memory-mcp__search_graph",
+      "mcp__codebase-memory-mcp__search_code",
+      "mcp__codebase-memory-mcp__get_code_snippet",
+      "mcp__codebase-memory-mcp__get_architecture",
+      "mcp__codebase-memory-mcp__trace_path",
+      "mcp__codebase-memory-mcp__detect_changes",
+      "mcp__codebase-memory-mcp__manage_adr",
+
+      "WebFetch(domain:github.com)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

@@ -44,6 +44,7 @@ class SincronizacionPage extends GetView<SincronizacionController> {
             color: AppColors.moduleGreenText,
           ),
         ),
+        actions: const [_ResetButton()],
       ),
       body: SafeArea(
         child: ListView(
@@ -148,9 +149,8 @@ class _HeroCard extends GetView<SincronizacionController> {
                 SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: (online && !loading)
-                        ? controller.descargarTodo
-                        : null,
+                    onPressed:
+                        (online && !loading) ? controller.descargarTodo : null,
                     icon: const Icon(Icons.download, size: 20),
                     label: Text(
                       allDone ? 'Actualizar todo' : 'Descargar todo',
@@ -226,9 +226,8 @@ class _SegmentedProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final available = rows
-        .where((r) => r.status != MasterDataStatus.unavailable)
-        .toList();
+    final available =
+        rows.where((r) => r.status != MasterDataStatus.unavailable).toList();
     if (available.isEmpty) {
       return const SizedBox(height: 8);
     }
@@ -417,7 +416,8 @@ class _ItemsSurface extends GetView<SincronizacionController> {
           children: [
             for (var i = 0; i < rows.length; i++) ...[
               if (i > 0)
-                const Divider(height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg),
+                const Divider(
+                    height: 1, indent: AppSpacing.lg, endIndent: AppSpacing.lg),
               _ItemTile(row: rows[i]),
             ],
           ],
@@ -461,7 +461,8 @@ class _ItemTile extends GetView<SincronizacionController> {
                     const SizedBox(height: 2),
                     Text(
                       _metaLine(),
-                      style: AppTextStyles.caption.copyWith(color: _metaColor()),
+                      style:
+                          AppTextStyles.caption.copyWith(color: _metaColor()),
                     ),
                     const SizedBox(height: 1),
                     Text(
@@ -582,15 +583,14 @@ class _TrailingAction extends GetView<SincronizacionController> {
       return const SizedBox(width: 48);
     }
 
-    final hasData = row.status == MasterDataStatus.success ||
-        row.lastDownloadAt != null;
+    final hasData =
+        row.status == MasterDataStatus.success || row.lastDownloadAt != null;
     final isError = row.status == MasterDataStatus.error;
     final icon = (hasData && !isError) ? Icons.refresh : Icons.download;
     final tooltip = (hasData && !isError) ? 'Re-descargar' : 'Descargar';
 
     return Obx(() {
-      final enabled =
-          !controller.isWorking.value && controller.isOnline.value;
+      final enabled = !controller.isWorking.value && controller.isOnline.value;
       return IconButton(
         icon: Icon(icon),
         tooltip: tooltip,
@@ -601,13 +601,66 @@ class _TrailingAction extends GetView<SincronizacionController> {
   }
 }
 
+// ─── Reset de datos locales (solo superadmin) ───────────────────────────────
+
+/// Botón visible únicamente para [UserRole.superadmin]. Borra TODO el
+/// contenido local (segmentos, fotos, vídeos, trazas, cola de sync) y cierra
+/// sesión — un mecanismo de soporte para dejar un dispositivo como recién
+/// instalado, nunca una acción del flujo normal de campo.
+class _ResetButton extends GetView<SincronizacionController> {
+  const _ResetButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      if (!controller.isSuperadmin) return const SizedBox.shrink();
+      return IconButton(
+        icon: const Icon(Icons.delete_forever, color: Color(0xFFC62828)),
+        tooltip: 'Reset de datos locales',
+        // Un wipe a mitad de una descarga deja la BD en un estado que el
+        // trabajo en curso seguiría escribiendo: se bloquea mientras trabaja.
+        onPressed:
+            controller.isWorking.value ? null : () => _confirmar(context),
+      );
+    });
+  }
+
+  Future<void> _confirmar(BuildContext context) async {
+    final ok = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('Reset de datos locales'),
+        content: const Text(
+          'Esto borra TODOS los datos guardados en este dispositivo: '
+          'segmentos, fotos, vídeos, trazas y la cola de envío. '
+          'Todo lo que aún no se haya enviado a la nube se PIERDE '
+          'PARA SIEMPRE — no hay copia: fotos, vídeos, segmentos y '
+          'trazas solo viajan de este dispositivo al servidor, nunca '
+          'al revés.\n\n¿Seguro que quieres continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<bool>(result: false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Get.back<bool>(result: true),
+            child:
+                const Text('Borrar todo', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    if (ok ?? false) await controller.resetAppData();
+  }
+}
+
 // ─────────────────────────────── Helpers ────────────────────────────────────
 
 typedef _Readiness = ({int done, int total});
 
 _Readiness _readiness(List<MasterDataRow> rows) {
-  final available =
-      rows.where((r) => r.status != MasterDataStatus.unavailable);
+  final available = rows.where((r) => r.status != MasterDataStatus.unavailable);
   final total = available.length;
   final done = available
       .where((r) =>

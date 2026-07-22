@@ -1,10 +1,11 @@
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/sync/contracts/syncable.dart';
 
-/// One GPS sample. Plain data — no `Syncable` because points are never
-/// synced individually; they're aggregated into a [PositionBatchEntity].
-class PositionPoint {
+/// One GPS sample within a [TrazaEntity]. Plain data — no `Syncable` because
+/// points are never synced individually, only as part of their traza.
+class TrazaPunto {
   final DateTime capturedAt;
   final double lat;
   final double lng;
@@ -12,7 +13,7 @@ class PositionPoint {
   final double? altitudeMeters;
   final double? speedMps;
 
-  const PositionPoint({
+  const TrazaPunto({
     required this.capturedAt,
     required this.lat,
     required this.lng,
@@ -30,7 +31,7 @@ class PositionPoint {
         if (speedMps != null) 'speed_mps': speedMps,
       };
 
-  factory PositionPoint.fromJson(Map<String, dynamic> json) => PositionPoint(
+  factory TrazaPunto.fromJson(Map<String, dynamic> json) => TrazaPunto(
         capturedAt: DateTime.parse(json['captured_at'] as String),
         lat: (json['lat'] as num).toDouble(),
         lng: (json['lng'] as num).toDouble(),
@@ -40,29 +41,42 @@ class PositionPoint {
       );
 }
 
-/// A batch of up to ~500 GPS points. The unit of synchronisation: one
-/// outbox job pushes one batch with all its points in a single HTTP request
-/// to `POST /positions/batch`.
-class PositionBatchEntity implements Syncable {
-  PositionBatchEntity({
+/// A manually-recorded GPS track ("traza"). The unit of synchronisation: one
+/// outbox job pushes the whole track (header + points) in a single HTTP
+/// request to `POST /positions/batch`.
+///
+/// `endedAt == null` means the traza is still open (recording in progress or
+/// left open by a crash); the local store enforces at most one open traza
+/// per operator.
+class TrazaEntity implements Syncable {
+  TrazaEntity({
     required this.operadorId,
-    required this.points,
     required this.startedAt,
-    required this.endedAt,
+    this.endedAt,
+    List<TrazaPunto>? points,
+    String? name,
     String? clientId,
     this.id,
     DateTime? updatedAt,
   })  : _clientId = clientId ?? const Uuid().v4(),
-        _updatedAt = updatedAt ?? DateTime.now();
+        _updatedAt = updatedAt ?? DateTime.now(),
+        points = points ?? <TrazaPunto>[],
+        _name = _clampName(name ?? _defaultName(startedAt));
 
   final String _clientId;
   final DateTime _updatedAt;
+  String _name;
 
   int? id;
   int operadorId;
-  List<PositionPoint> points;
   DateTime startedAt;
-  DateTime endedAt;
+  DateTime? endedAt;
+  List<TrazaPunto> points;
+
+  /// Human-readable label, defaulted at creation to `'Traza yyyy-MM-dd HH:mm'`
+  /// (local time of [startedAt]). Truncated to 100 chars on assignment.
+  String get name => _name;
+  set name(String value) => _name = _clampName(value);
 
   @override
   String get clientId => _clientId;
@@ -73,33 +87,42 @@ class PositionBatchEntity implements Syncable {
   @override
   DateTime get updatedAt => _updatedAt;
 
+  static String _clampName(String value) =>
+      value.length > 100 ? value.substring(0, 100) : value;
+
+  static String _defaultName(DateTime startedAt) =>
+      'Traza ${DateFormat('yyyy-MM-dd HH:mm').format(startedAt.toLocal())}';
+
   @override
   Map<String, dynamic> toJson() => {
-        'batch_client_id': clientId,
+        'traza_client_id': clientId,
         if (id != null) 'remote_id': id,
         'operador_id': operadorId,
+        'name': name,
         'started_at': startedAt.toIso8601String(),
-        'ended_at': endedAt.toIso8601String(),
+        if (endedAt != null) 'ended_at': endedAt!.toIso8601String(),
         'points': points.map((p) => p.toJson()).toList(),
       };
 
-  factory PositionBatchEntity.fromJson(Map<String, dynamic> json) =>
-      PositionBatchEntity(
-        clientId: json['batch_client_id'] as String?,
+  factory TrazaEntity.fromJson(Map<String, dynamic> json) => TrazaEntity(
+        clientId: json['traza_client_id'] as String?,
         id: json['remote_id'] as int?,
         operadorId: (json['operador_id'] as num?)?.toInt() ?? 0,
+        name: json['name'] as String?,
         startedAt: DateTime.parse(json['started_at'] as String),
-        endedAt: DateTime.parse(json['ended_at'] as String),
+        endedAt: json['ended_at'] == null
+            ? null
+            : DateTime.parse(json['ended_at'] as String),
         points: ((json['points'] as List?) ?? const [])
             .whereType<Map>()
-            .map((m) => PositionPoint.fromJson(m.cast<String, dynamic>()))
+            .map((m) => TrazaPunto.fromJson(m.cast<String, dynamic>()))
             .toList(),
       );
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is PositionBatchEntity && other._clientId == _clientId;
+      other is TrazaEntity && other._clientId == _clientId;
 
   @override
   int get hashCode => _clientId.hashCode;

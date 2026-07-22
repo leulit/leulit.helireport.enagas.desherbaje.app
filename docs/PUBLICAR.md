@@ -156,7 +156,6 @@ Para saltar a una versión concreta: editar a mano `version:` en `pubspec.yaml` 
    git add pubspec.yaml ios/Runner.xcodeproj/project.pbxproj
    git commit -m "chore: release 1.0.6+106"
    ```
-2. Anotar la entrega en `docs/DEVLOG.md`.
 
 ---
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../domain/entities/traza_entity.dart';
 import 'capture_meta.dart';
 import 'media_gis_recorder.dart';
 
@@ -128,10 +129,93 @@ List<dynamic> _videoCoord(MediaGisSample s) => <dynamic>[
       s.tsUtc.toUtc().millisecondsSinceEpoch,
     ];
 
-Map<String, dynamic> _metaProps(int? userId, CaptureMeta meta) => <String, dynamic>{
+Map<String, dynamic> _metaProps(int? userId, CaptureMeta meta) =>
+    <String, dynamic>{
       'user_id': userId,
       'os': meta.os,
       'os_version': meta.osVersion,
       'device_model': meta.deviceModel,
       'app_version': meta.appVersion,
     };
+
+/// Gap, in seconds, above which two consecutive [TrazaPunto]s are split into
+/// separate `MultiLineString` segments.
+const int _trackSegmentGapSeconds = 60;
+
+/// Construye el GeoJSON de una **traza** (track GPS manual). Devuelve el
+/// `FeatureCollection` ya decodificado como `Map` (no `String`) porque el
+/// adaptador lo envía tal cual como body de la petición.
+///
+/// [points] se asume ordenada ascendentemente por `capturedAt` (así los
+/// devuelve `TrazaLocalStore`); se re-ordena defensivamente por si acaso.
+/// Se corta en un segmento nuevo cuando el hueco entre dos puntos
+/// consecutivos supera [_trackSegmentGapSeconds]; los segmentos resultantes
+/// de un único punto se descartan. Sin ningún segmento superviviente →
+/// `geometry: null`.
+Map<String, dynamic> buildTrackGeoJson(
+  List<TrazaPunto> points, {
+  required int? userId,
+  required CaptureMeta meta,
+  required String trazaClientId,
+  required String name,
+  required DateTime startedAt,
+  DateTime? endedAt,
+}) {
+  final sorted = List<TrazaPunto>.of(points)
+    ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+  final segments = <List<TrazaPunto>>[];
+  var current = <TrazaPunto>[];
+  for (final p in sorted) {
+    if (current.isNotEmpty &&
+        p.capturedAt.difference(current.last.capturedAt).inSeconds.abs() >
+            _trackSegmentGapSeconds) {
+      segments.add(current);
+      current = <TrazaPunto>[];
+    }
+    current.add(p);
+  }
+  if (current.isNotEmpty) segments.add(current);
+
+  final survivingSegments =
+      segments.where((s) => s.length >= 2).toList(growable: false);
+
+  final properties = <String, dynamic>{
+    'kind': 'track',
+    'traza_client_id': trazaClientId,
+    'name': name,
+    'started_at': startedAt.toUtc().toIso8601String(),
+    if (endedAt != null) 'ended_at': endedAt.toUtc().toIso8601String(),
+    'coord_format': const ['lon', 'lat', 'alt', 't_epoch_ms'],
+    ..._metaProps(userId, meta),
+  };
+
+  final Map<String, dynamic>? geometry = survivingSegments.isEmpty
+      ? null
+      : <String, dynamic>{
+          'type': 'MultiLineString',
+          'coordinates': survivingSegments
+              .map((segment) => segment.map(_trackCoord).toList())
+              .toList(),
+        };
+
+  return <String, dynamic>{
+    'type': 'FeatureCollection',
+    'features': [
+      <String, dynamic>{
+        'type': 'Feature',
+        'geometry': geometry,
+        'properties': properties,
+      },
+    ],
+  };
+}
+
+/// Coordenada de traza: `[lon, lat, alt, t_epoch_ms]`. `alt` puede ir null;
+/// `t_epoch_ms` es epoch ms UTC absoluto.
+List<dynamic> _trackCoord(TrazaPunto p) => <dynamic>[
+      p.lng,
+      p.lat,
+      p.altitudeMeters,
+      p.capturedAt.toUtc().millisecondsSinceEpoch,
+    ];

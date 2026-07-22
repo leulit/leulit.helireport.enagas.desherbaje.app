@@ -8,46 +8,49 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:helireport_desherbaje/core/services/gps_background_service.dart';
 import 'package:helireport_desherbaje/core/sync/sync.dart';
-import 'package:helireport_desherbaje/domain/entities/position_batch_entity.dart';
+import 'package:helireport_desherbaje/data/sync/traza_local_store.dart';
+import 'package:helireport_desherbaje/domain/entities/traza_entity.dart';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-class _MockOffline extends Mock
-    implements OfflineRepository<PositionBatchEntity> {}
+class _MockStore extends Mock implements TrazaLocalStore {}
+
+class _MockOutbox extends Mock implements OutboxQueue {}
+
+/// Sólo se pasa a `any()`; nunca se interactúa con él.
+class _FakeTraza extends Fake implements TrazaEntity {}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Returns a service with a registered mock offline repo in DI.
-/// Does NOT call start() — bypasses Geolocator/foreground service plugins.
-GpsBackgroundService _buildService(_MockOffline offline) {
-  DI.registerSingleton<OfflineRepository<PositionBatchEntity>>(offline);
+/// Returns a service with mocks registered in DI. Does NOT call start() —
+/// bypasses Geolocator/foreground service plugins.
+GpsBackgroundService _buildService(_MockStore store, _MockOutbox outbox) {
+  DI.registerSingleton<TrazaLocalStore>(store);
+  DI.registerSingleton<OutboxQueue>(outbox);
+  when(() => store.entityType).thenReturn('traza');
   return GpsBackgroundService();
 }
 
-PositionPoint _point(DateTime capturedAt) => PositionPoint(
-      capturedAt: capturedAt,
-      lat: 40.0,
-      lng: -3.0,
-    );
+TrazaPunto _point(DateTime capturedAt) =>
+    TrazaPunto(capturedAt: capturedAt, lat: 40.0, lng: -3.0);
 
 void main() {
-  late _MockOffline offline;
+  late _MockStore store;
+  late _MockOutbox outbox;
   late GpsBackgroundService svc;
+
+  setUpAll(() {
+    registerFallbackValue(SyncOperation.create);
+    registerFallbackValue(_FakeTraza());
+    registerFallbackValue(<TrazaPunto>[]);
+  });
 
   setUp(() async {
     Get.reset();
     await DI.reset();
-    offline = _MockOffline();
-    svc = _buildService(offline);
-
-    registerFallbackValue(
-      PositionBatchEntity(
-        operadorId: 1,
-        points: const [],
-        startedAt: DateTime.utc(2025),
-        endedAt: DateTime.utc(2025),
-      ),
-    );
+    store = _MockStore();
+    outbox = _MockOutbox();
+    svc = _buildService(store, outbox);
   });
 
   tearDown(() async {
@@ -55,211 +58,181 @@ void main() {
     await DI.reset();
   });
 
+  TrazaEntity currentTraza(int operadorId) => TrazaEntity(
+        clientId: 'traza-test',
+        operadorId: operadorId,
+        startedAt: DateTime.utc(2025, 6, 1, 10, 0),
+      );
+
   // ─── NF-7: write-then-clear ───────────────────────────────────────────────
 
   group('NF-7 write-then-clear (buffer survives failed flush)', () {
-    test('create() throws → lastError set, buffer remains intact for retry',
-        () async {
-      svc.setOperadorIdForTest(1);
+    test(
+        'appendPoints() throws → lastError set, buffer remains intact for '
+        'retry', () async {
+      svc.setCurrentForTest(currentTraza(1));
       final t = DateTime.utc(2025, 6, 1, 10, 0);
       final pts = [_point(t), _point(t.add(const Duration(seconds: 1)))];
       svc.setBufferForTest(pts);
 
-      when(() => offline.create(any())).thenThrow(Exception('DB error'));
+      when(() => store.appendPoints(any(), any()))
+          .thenThrow(Exception('DB error'));
 
       await svc.flushNow();
 
       expect(svc.lastError.value, isNotNull);
-      expect(svc.lastError.value, contains('Error guardando lote GPS'));
+      expect(svc.lastError.value, contains('Error guardando puntos de traza'));
 
       // Buffer is intact — all original points still available for retry.
-      // Second flush with successful create should succeed.
-      when(() => offline.create(any())).thenAnswer((_) async {});
+      when(() => store.appendPoints(any(), any())).thenAnswer((_) async {});
       await svc.flushNow();
 
       expect(svc.lastError.value, isNull);
-      // verify create was called with a batch containing the original 2 points
-      final captured = verify(() => offline.create(captureAny())).captured;
+      final captured =
+          verify(() => store.appendPoints(any(), captureAny())).captured;
       // First call (failed) + second call (succeeded)
       expect(captured.length, equals(2));
-      final secondBatch = captured.last as PositionBatchEntity;
-      expect(secondBatch.points.length, equals(2));
+      final secondPoints = captured.last as List<TrazaPunto>;
+      expect(secondPoints.length, equals(2));
     });
 
-    test('point added during awaited create() is preserved', () async {
-      svc.setOperadorIdForTest(1);
+    test('point added during awaited appendPoints() is preserved', () async {
+      svc.setCurrentForTest(currentTraza(1));
       final t = DateTime.utc(2025, 6, 1, 10, 0);
       svc.setBufferForTest([_point(t)]);
 
       final completer = Completer<void>();
-      // The create() awaits the completer; we inject a new point mid-flight.
-      when(() => offline.create(any()))
+      when(() => store.appendPoints(any(), any()))
           .thenAnswer((_) => completer.future);
 
       final flushFuture = svc.flushNow();
 
-      // Simulate a new position arriving while create() is in flight.
-      // In production _onPosition does _buffer.add; we replicate that here.
-      svc.setBufferForTest([
-        _point(t), // original (will be removed by removeRange)
-        _point(t.add(const Duration(seconds: 5))), // new arrival
-      ]);
-      // But only the first was snapshotted → after removeRange(0,1) one remains.
-      // Re-set so the real buffer reflects the state AFTER snapshot but BEFORE clear:
-      // removeRange(0, points.length) where points.length == 1 removes index 0
-      // and the new point at index 1 survives.
-      // We model this by having the buffer contain [original, new] at the time
-      // removeRange runs (after await).
-      // Reset buffer to [original, newPoint] to simulate the concurrent add:
-      svc.setBufferForTest([_point(t), _point(t.add(const Duration(seconds: 5)))]);
+      // Simulate a new position arriving while appendPoints() is in flight:
+      // the real buffer would contain [original, new] at the time
+      // removeRange runs (after await), since _onPosition appends at the tail.
+      svc.setBufferForTest(
+          [_point(t), _point(t.add(const Duration(seconds: 5)))]);
 
       completer.complete();
       await flushFuture;
 
       // After successful flush, removeRange(0, 1) removed the first point.
       // The "new" point (index 1) survives and will be sent in the next flush.
-      when(() => offline.create(any())).thenAnswer((_) async {});
+      when(() => store.appendPoints(any(), any())).thenAnswer((_) async {});
       await svc.flushNow();
 
-      final captured = verify(() => offline.create(captureAny())).captured;
-      // Second flush should carry the surviving point.
-      final secondBatch = captured.last as PositionBatchEntity;
-      expect(secondBatch.points.length, greaterThan(0));
+      final captured =
+          verify(() => store.appendPoints(any(), captureAny())).captured;
+      final secondPoints = captured.last as List<TrazaPunto>;
+      expect(secondPoints.length, greaterThan(0));
     });
   });
 
   // ─── NF-7: mutex (no double-send) ────────────────────────────────────────
 
   group('NF-7 mutex — two concurrent flushNow() calls', () {
-    test('second flushNow() returns immediately (_flushing guard), '
+    test(
+        'second flushNow() returns immediately (_flushing guard), '
         'no double-send', () async {
-      svc.setOperadorIdForTest(1);
+      svc.setCurrentForTest(currentTraza(1));
       final t = DateTime.utc(2025, 6, 1, 11, 0);
       svc.setBufferForTest([_point(t)]);
 
       final completer = Completer<void>();
-      when(() => offline.create(any()))
+      when(() => store.appendPoints(any(), any()))
           .thenAnswer((_) => completer.future);
 
-      // Start first flush (awaiting completer)
       final first = svc.flushNow();
-      // Start second flush immediately — should hit the _flushing guard
       final second = svc.flushNow();
 
-      // Second must resolve without waiting for the first
       await second; // should not block
 
       completer.complete();
       await first;
 
-      // create() was only called once (by the first flush)
-      verify(() => offline.create(any())).called(1);
+      verify(() => store.appendPoints(any(), any())).called(1);
     });
   });
 
   // ─── NF-9: abort without valid operadorId ────────────────────────────────
 
   group('NF-9 start() aborts without valid operador', () {
-    test('no user_id key in prefs → state stays stopped, lastError set, '
-        'verifyNever(create)', () async {
+    test(
+        'no user_id key in prefs → state stays stopped, lastError set, '
+        'verifyNever(upsert)', () async {
       SharedPreferences.setMockInitialValues({});
 
-      await svc.start();
+      final started = await svc.start();
 
+      expect(started, isFalse);
       expect(svc.state.value, equals(GpsTrackingState.stopped));
       expect(svc.lastError.value, isNotNull);
       expect(svc.lastError.value, contains('operador'));
-      verifyNever(() => offline.create(any()));
+      verifyNever(() => store.upsert(any()));
     });
 
     test('user_id = 0 → abort (treated as no session)', () async {
       SharedPreferences.setMockInitialValues({'user_id': 0});
 
-      await svc.start();
+      final started = await svc.start();
 
+      expect(started, isFalse);
       expect(svc.state.value, equals(GpsTrackingState.stopped));
       expect(svc.lastError.value, isNotNull);
-      verifyNever(() => offline.create(any()));
+      verifyNever(() => store.upsert(any()));
     });
   });
 
-  // ─── A6: UTC timestamps + startedAt <= endedAt ───────────────────────────
+  // ─── finish() ─────────────────────────────────────────────────────────────
 
-  group('A6 interval derivation from capturedAt (UTC, ordered)', () {
-    test('points with out-of-order local timestamps → '
-        'startedAt <= endedAt, both UTC', () async {
-      svc.setOperadorIdForTest(1);
-
-      // Out-of-order: 3rd point has earliest time, 1st has latest
-      final t1 = DateTime.utc(2025, 6, 1, 12, 30); // latest
-      final t2 = DateTime.utc(2025, 6, 1, 12, 10);
-      final t3 = DateTime.utc(2025, 6, 1, 12, 0); // earliest
-
-      svc.setBufferForTest([_point(t1), _point(t2), _point(t3)]);
-
-      PositionBatchEntity? captured;
-      when(() => offline.create(any())).thenAnswer((inv) async {
-        captured = inv.positionalArguments.first as PositionBatchEntity;
-      });
-
-      await svc.flushNow();
-
-      expect(captured, isNotNull);
-      expect(
-        captured!.startedAt.isBefore(captured!.endedAt) ||
-            captured!.startedAt.isAtSameMomentAs(captured!.endedAt),
-        isTrue,
-        reason: 'startedAt must be <= endedAt',
-      );
-      expect(captured!.startedAt.isUtc, isTrue);
-      expect(captured!.endedAt.isUtc, isTrue);
-
-      // startedAt = min(capturedAt) = t3, endedAt = max = t1
-      expect(
-        captured!.startedAt.isAtSameMomentAs(t3),
-        isTrue,
-        reason: 'startedAt must be the minimum capturedAt',
-      );
-      expect(
-        captured!.endedAt.isAtSameMomentAs(t1),
-        isTrue,
-        reason: 'endedAt must be the maximum capturedAt',
-      );
-    });
-
-    test('single point → startedAt == endedAt', () async {
-      svc.setOperadorIdForTest(1);
-      final t = DateTime.utc(2025, 6, 1, 9, 0);
+  group('finish()', () {
+    test('flushes remaining buffer, finalizes and enqueues exactly one job',
+        () async {
+      final traza = currentTraza(1);
+      svc.setCurrentForTest(traza);
+      final t = DateTime.utc(2025, 6, 1, 10, 5);
       svc.setBufferForTest([_point(t)]);
 
-      PositionBatchEntity? captured;
-      when(() => offline.create(any())).thenAnswer((inv) async {
-        captured = inv.positionalArguments.first as PositionBatchEntity;
-      });
+      when(() => store.appendPoints(any(), any())).thenAnswer((_) async {});
+      when(() => store.finalize(
+            trazaClientId: any(named: 'trazaClientId'),
+            name: any(named: 'name'),
+            endedAt: any(named: 'endedAt'),
+          )).thenAnswer((_) async {});
+      when(() => outbox.enqueue(
+            entityType: any(named: 'entityType'),
+            clientId: any(named: 'clientId'),
+            operation: any(named: 'operation'),
+          )).thenAnswer((_) async => 1);
 
-      await svc.flushNow();
+      await svc.finish(name: 'Mi traza');
 
-      expect(captured!.startedAt.isAtSameMomentAs(captured!.endedAt), isTrue);
-      expect(captured!.startedAt.isUtc, isTrue);
+      verify(() => store.appendPoints(traza.clientId, any())).called(1);
+      verify(() => store.finalize(
+            trazaClientId: traza.clientId,
+            name: 'Mi traza',
+            endedAt: any(named: 'endedAt'),
+          )).called(1);
+      verify(() => outbox.enqueue(
+            entityType: 'traza',
+            clientId: traza.clientId,
+            operation: SyncOperation.create,
+          )).called(1);
+      expect(svc.state.value, equals(GpsTrackingState.stopped));
     });
 
-    test('local-timezone points are normalized to UTC', () async {
-      svc.setOperadorIdForTest(1);
-      // Use a local DateTime (not UTC) — should be converted to UTC by _onPosition
-      // In tests we inject directly: the service normalizes via p.timestamp.toUtc()
-      // Here we pre-inject UTC points (as _onPosition would produce) and verify.
-      final localLike = DateTime(2025, 6, 1, 10, 0, 0); // local
-      svc.setBufferForTest([_point(localLike.toUtc())]);
-
-      PositionBatchEntity? captured;
-      when(() => offline.create(any())).thenAnswer((inv) async {
-        captured = inv.positionalArguments.first as PositionBatchEntity;
-      });
-
-      await svc.flushNow();
-
-      expect(captured!.startedAt.isUtc, isTrue);
-      expect(captured!.endedAt.isUtc, isTrue);
+    test('is a no-op when nothing is currently recording', () async {
+      await svc.finish(name: 'ignored');
+      verifyNever(() => store.finalize(
+            trazaClientId: any(named: 'trazaClientId'),
+            name: any(named: 'name'),
+            endedAt: any(named: 'endedAt'),
+          ));
+      verifyNever(() => outbox.enqueue(
+            entityType: any(named: 'entityType'),
+            clientId: any(named: 'clientId'),
+            operation: any(named: 'operation'),
+          ));
     });
   });
 }
