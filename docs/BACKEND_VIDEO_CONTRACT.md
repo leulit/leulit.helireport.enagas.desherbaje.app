@@ -75,27 +75,32 @@ Content-Type: application/json
 
 ```json
 {
-  "clientId": "550e8400-e29b-41d4-a716-446655440000",
   "segmentoId": 42,
-  "originalFilename": "video.mp4",
-  "mimeType": "video/mp4",
-  "totalBytes": 20971520,
+  "originalFilename": "IMG_0042.MOV",
+  "mimeType": "video/quicktime",
+  "totalBytes": 18432000,
+  "tipoFoto": "despues",
   "usuariologged": "operario01",
-  "idusuariologged": 7
+  "idusuariologged": 7,
+  "gis_json": "{\"type\":\"FeatureCollection\",…}",
+  "capturada_at": "2025-03-15T10:30:00.000"
 }
 ```
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `clientId` | `string` UUID | ID del cliente. Clave de idempotencia: re-init con mismo `clientId` reutiliza sesión existente si incompleta |
 | `segmentoId` | `int` | ID remoto del segmento |
 | `originalFilename` | `string` | Nombre del fichero original |
 | `mimeType` | `string` | `"video/mp4"` o `"video/quicktime"` |
 | `totalBytes` | `int` | Tamaño total del fichero en bytes |
+| `tipoFoto` | `string` | `"antes"` o `"despues"` |
 | `usuariologged` | `string` | Usuario en sesión (de `SharedPreferences`, `""` si ausente) |
 | `idusuariologged` | `int` | ID de usuario en sesión (`0` si ausente) |
+| `gis_json` | `string` | GeoJSON de la traza. **Opcional**: sin GPS la clave se omite (nunca `""` ni `"null"`) |
+| `capturada_at` | `string` ISO8601 | Fecha de grabación. Hora **local sin sufijo de zona**, idéntico tratamiento que el `capturada_at` del multipart de foto |
 
-> El cliente **no** envía `tipo_video` ni `actividad_id` en el Init.
+> El cliente **no** envía `clientId`, `id`, `tipo_video` ni `actividad_id` en el Init:
+> no están declarados en el esquema y `ajv` los borra en silencio.
 
 #### Respuesta 201
 

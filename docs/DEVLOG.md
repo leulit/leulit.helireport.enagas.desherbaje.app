@@ -1,5 +1,99 @@
 # DEVLOG
 
+## 2026-07-22 — Audit log: la app no decía quién hacía cada cambio
+
+**Contexto:** el backend registra un `audit_log` (quién / cuándo / qué campos cambiaron). El HMAC
+identifica a la **app**, no a la **persona**, así que la identidad la declara el cliente por
+cabeceras. Auditado hoy: `segmento` (crear/actualizar/borrar) e `incidencia`.
+
+**Síntoma:** cero cabeceras `X-User-*` en toda la app → todas las escrituras quedaban como
+`user_login: "anonymous"`, `user_id: null`, `user_name: null`.
+
+**Fix** (`network_service.dart`):
+- `buildAuditUserHeaders()`: lee `user_id` (int) y `user_usuario` (String) de `SharedPreferences`
+  —los que ya escribe `AuthRepositoryImpl.login` y borra `logout`— y emite `X-User-Id` +
+  `X-User-Login`. Sin sesión, no emite nada (no manda cabeceras vacías).
+- `AuditUserInterceptor` en el `_dio` principal → cubre segmento, imagen, mensaje y positions sin
+  tocar ningún adaptador.
+- `_videoDio` no tiene interceptores (firma HMAC manual), así que las cuatro rutas de vídeo
+  (init / chunk / status / complete) añaden `...auditHeaders` a mano.
+
+Decisiones:
+- **No se envía `X-User-Name`.** El backend resuelve el nombre a mostrar con un JOIN contra
+  `usuarios` por `user_id`, así que enviarlo sería ruido que además envejece.
+- **El login se filtra a ASCII** (`_asciiOnly`): una cabecera con acentos hace fallar la petición
+  entera en Dio. Se filtra en vez de omitir la cabecera — mejor `jos uez` que `anonymous`.
+- **No entra en la firma HMAC**: el payload sigue siendo `"{ts}:{METHOD}:{path}"`. Se pueden añadir
+  o quitar sin recalcular nada.
+- Se leen las prefs en cada request en vez de cachear la sesión en memoria: `SharedPreferences`
+  ya es un singleton en memoria tras la primera llamada, y así no hay estado que invalidar en
+  `logout()`.
+
+**Ojo con la excepción del contrato:** en `/incidencias/saveissue`, `/updateissue` y
+`/savefrommobile` la identidad NO se toma de las cabeceras sino de los campos multipart
+`idusuariologged` / `usuariologged`. Esta app no llama a esas tres rutas (usa
+`/segmentos/{id}/imagenes` para foto), pero si alguna vez lo hace, las cabeceras no bastan.
+Los `usuariologged`/`idusuariologged` que ya manda el init de vídeo son campos del esquema de
+`/videos/upload`, no identidad de auditoría.
+
+Test: `test/data/network/audit_user_headers_test.dart` (5 casos, incluido uno que captura las
+cabeceras de una petición real con un `HttpClientAdapter` que no llega a la red).
+
+## 2026-07-22 — Play rechaza el bundle 106: READ_MEDIA_IMAGES
+
+**Síntoma:** Play Console, "Use alternative system pickers for photos / videos". Apps con
+targetSdk 33+ no pueden pedir `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO` salvo que el Photo Picker
+del sistema sea técnicamente insuficiente. No es nuestro caso: la app solo elige media puntual.
+
+**Causa:** dos cosas a la vez. (1) El manifest declaraba `READ_MEDIA_IMAGES` a mano.
+(2) `image_picker_android` 0.8.12 trae `useAndroidPhotoPicker = false` por defecto, así que
+`pickMedia` usaba el intent legacy `ACTION_GET_CONTENT`, que sí necesita el permiso.
+
+**Fix:**
+- `main.dart`: `ImagePickerPlatform.instance` → si es `ImagePickerAndroid`,
+  `useAndroidPhotoPicker = true`. Requiere declarar `image_picker_android` e
+  `image_picker_platform_interface` como deps directas (ya eran transitivas).
+- Manifest: fuera `READ_MEDIA_IMAGES`. Fuera también `READ_EXTERNAL_STORAGE` y
+  `WRITE_EXTERNAL_STORAGE`, con `tools:node="remove"`: `camera_android_camerax` pide WRITE y el
+  merger deriva de ahí un READ implícito **sin** `maxSdkVersion`. Con minSdk 34 ninguna se
+  concede nunca, así que solo eran ruido en la ficha de Play.
+
+**Verificación** (no basta con leer el manifest de la app — el que cuenta es el fusionado):
+`./gradlew :app:processReleaseManifest` y luego los `uses-permission` de
+`build/app/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml`.
+Quedan: INTERNET, ACCESS_NETWORK_STATE, CAMERA, RECORD_AUDIO, ACCESS_FINE/COARSE_LOCATION,
+FOREGROUND_SERVICE(+_LOCATION), WAKE_LOCK, POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED. Cero
+permisos de almacenamiento/media. `build/app/outputs/logs/manifest-merger-release-report.txt` dice
+quién aporta cada permiso (`ADDED from [:plugin]` / `IMPLIED from ... reason:`).
+
+Al republicar hay que subir versionCode: el 106 es el rechazado.
+
+## 2026-07-22 — Vídeo: el init no enviaba la fecha de grabación
+
+**Síntoma:** el backend recibía el vídeo sin fecha de captura. En foto sí viajaba
+(`capturada_at` en el multipart de `imagen_remote_adapter`), en vídeo no.
+
+**Causa:** `VideoRemoteAdapter._doInit` monta el body del init campo a campo y nunca llamó a
+`toJson()`, así que `capturadaAt` —persistida en local desde siempre (`capturada_at TEXT NOT NULL`
+en `video_local_store` v3, fijada en `_saveVideoFromPath`)— no salía del móvil. Mismo patrón que el
+fallo de `gis_json` del 2026-07-21: el wire lo define el adaptador, no la entidad.
+
+**Fix:** una clave más en el body del init, `'capturada_at': entity.capturadaAt.toIso8601String()`.
+
+Decisiones cerradas con el responsable antes de tocar código:
+- El nombre en el wire es `capturada_at`, no `created_at`.
+- Se emite `toIso8601String()` sobre el `DateTime` **local**, sin sufijo de zona — el mismo formato
+  que ya usa foto. Nada de `toUtc()`: desplazaría los registros existentes y rompería la simetría
+  entre los dos endpoints.
+- `capturadaAt` se sigue fijando con `DateTime.now()` al guardar, o sea al **terminar** la grabación.
+  Fecharlo al inicio (primer sample de `gis`) sería más exacto pero depende del GPS y es un cambio
+  de funcionalidad; se descarta.
+
+Test que captura el payload REAL del adaptador (no `toJson`): `init body carries capturada_at`.
+`flutter test test/data/sync/video_remote_adapter_test.dart` → 44 passed.
+`docs/BACKEND_VIDEO_CONTRACT.md` §1 actualizado: el body documentado estaba obsoleto (declaraba un
+`clientId` que no se envía y omitía `tipoFoto`/`gis_json`).
+
 ## 2026-07-22 — Fix: los artefactos de tienda salían sin `HMAC_SECRET` (401 en toda la API)
 
 **Síntoma:** los `.aab`/`.ipa` de `dist/` (1.0.1 … 1.0.3) llevaban el placeholder

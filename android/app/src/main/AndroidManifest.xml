@@ -4,9 +4,17 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <!--
+      Sin READ_MEDIA_IMAGES/READ_MEDIA_VIDEO ni READ_EXTERNAL_STORAGE: la
+      selección de galería usa el Photo Picker del sistema (main.dart activa
+      useAndroidPhotoPicker) y con minSdk 34 no hace falta permiso de lectura.
+      Política Play: "Use alternative system pickers for photos/videos".
+      WRITE_EXTERNAL_STORAGE la aporta camera_android_camerax y el merger
+      deriva de ella un READ_EXTERNAL_STORAGE implícito sin maxSdkVersion; con
+      minSdk 34 ninguna de las dos se concede nunca, así que se eliminan.
+    -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
 
     <!-- GPS / Location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>

@@ -219,7 +219,9 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
         final chunkBytes = await raf.read(end - offset);
 
         bool chunkDone = false;
-        for (int attempt = 0; attempt < _maxChunkRetries && !chunkDone; attempt++) {
+        for (int attempt = 0;
+            attempt < _maxChunkRetries && !chunkDone;
+            attempt++) {
           if (attempt > 0) {
             // Back-off: 200ms, 400ms.
             await Future<void>.delayed(
@@ -316,6 +318,9 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
       'usuariologged': usuario,
       'idusuariologged': userId,
       if (entity.gisJson != null) 'gis_json': entity.gisJson,
+      // Fecha de grabación. Local sin sufijo de zona, igual que el multipart de
+      // foto (imagen_remote_adapter): mismo tratamiento en ambos endpoints.
+      'capturada_at': entity.capturadaAt.toIso8601String(),
     });
 
     final body = _asMap(resp.data);
@@ -329,8 +334,7 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
     if (uploadId == null || uploadId.isEmpty) {
       throw NetworkError(
         category: NetworkErrorCategory.unrecoverable,
-        message:
-            'Server did not return uploadId on init (response: $body)',
+        message: 'Server did not return uploadId on init (response: $body)',
       );
     }
 
@@ -406,12 +410,12 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
   String _mimeForExtension(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     return switch (ext) {
-      'mp4'  => 'video/mp4',
-      'mov'  => 'video/quicktime',
-      'm4v'  => 'video/x-m4v',
-      'avi'  => 'video/x-msvideo',
+      'mp4' => 'video/mp4',
+      'mov' => 'video/quicktime',
+      'm4v' => 'video/x-m4v',
+      'avi' => 'video/x-msvideo',
       'webm' => 'video/webm',
-      _      => 'video/mp4',
+      _ => 'video/mp4',
     };
   }
 }

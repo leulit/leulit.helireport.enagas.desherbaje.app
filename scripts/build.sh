@@ -11,6 +11,8 @@
 #   --bump             Sube la versión de pubspec.yaml (regla odómetro) antes de construir
 #   --no-clean         Omite `flutter clean` (más rápido, builds incrementales)
 #   --apk              (android/both) Genera además APK universal
+#   --upload           (ios/both) Sube el IPA a App Store Connect (TestFlight) al terminar.
+#                      Necesita ASC_KEY_ID + ASC_ISSUER_ID (ver .asc.env / docs/PUBLICAR.md)
 #
 # Artefactos:
 #   dist/android/helireport_desherbaje-<version>+<build>.aab [y .apk]
@@ -31,7 +33,7 @@ warn()  { echo -e "${C_YELLOW}⚠${C_RESET} $*"; }
 error() { echo -e "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 
 usage() {
-  sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -49,16 +51,31 @@ esac
 SKIP_CLEAN=false
 BUILD_APK=false
 BUMP=false
+UPLOAD=false
 
 for arg in "$@"; do
   case "$arg" in
     --bump)      BUMP=true ;;
     --no-clean)  SKIP_CLEAN=true ;;
     --apk)       BUILD_APK=true ;;
+    --upload)    UPLOAD=true ;;
     -h|--help)   usage 0 ;;
     *)           error "Flag desconocida: $arg" ;;
   esac
 done
+
+[[ "$UPLOAD" == true && "$TARGET" == "android" ]] && error "--upload solo aplica a iOS (Google Play no acepta subida sin API key de servicio)"
+
+# Credenciales de App Store Connect: fichero .asc.env (gitignored) o variables ya exportadas.
+if $UPLOAD; then
+  # Variables ya exportadas mandan; el fichero solo rellena lo que falte.
+  [[ -z "${ASC_KEY_ID:-}" && -f .asc.env ]] && source .asc.env
+  ASC_KEY_ID="${ASC_KEY_ID:-}"; ASC_ISSUER_ID="${ASC_ISSUER_ID:-}"
+  [[ -n "$ASC_KEY_ID" && -n "$ASC_ISSUER_ID" ]] || \
+    error "--upload necesita ASC_KEY_ID y ASC_ISSUER_ID (créalos en .asc.env, ver docs/PUBLICAR.md)"
+  [[ -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" ]] || \
+    error "Falta ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+fi
 
 # --- Prerrequisitos comunes ----------------------------------------------------
 command -v flutter >/dev/null || error "flutter no está en PATH"
@@ -147,6 +164,15 @@ build_ios() {
   local ipa_out="$dist_dir/${ARTIFACT_BASE}.ipa"
   cp "$ipa_src" "$ipa_out"
   log "[iOS] IPA: $ipa_out ($(du -h "$ipa_out" | cut -f1))"
+
+  if $UPLOAD; then
+    log "[iOS] subiendo a App Store Connect (altool)…"
+    xcrun altool --upload-app --type ios \
+      --file "$ipa_out" \
+      --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
+      || error "Falló la subida. El IPA sigue en $ipa_out: súbelo con Transporter."
+    log "[iOS] subido. Aparece en TestFlight en ~5-15 min."
+  fi
 }
 
 # --- Ejecución -----------------------------------------------------------------
@@ -175,7 +201,13 @@ $(printf "%b" "${C_BLUE}")Android$(printf "%b" "${C_RESET}") — subir a Google 
 EOF
 fi
 
-if [[ "$TARGET" == "ios" || "$TARGET" == "both" ]]; then
+if [[ ( "$TARGET" == "ios" || "$TARGET" == "both" ) && "$UPLOAD" == true ]]; then
+  cat <<EOF
+$(printf "%b" "${C_BLUE}")iOS$(printf "%b" "${C_RESET}") — IPA ya subido a App Store Connect.
+  Revisa https://appstoreconnect.apple.com → TestFlight (tarda 5-15 min en procesar).
+
+EOF
+elif [[ "$TARGET" == "ios" || "$TARGET" == "both" ]]; then
   cat <<EOF
 $(printf "%b" "${C_BLUE}")iOS$(printf "%b" "${C_RESET}") — subir a App Store Connect:
   Opción A (gráfica): Abre Transporter (Mac App Store) → arrastra dist/ios/${ARTIFACT_BASE}.ipa

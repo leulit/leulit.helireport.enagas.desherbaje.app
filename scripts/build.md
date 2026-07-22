@@ -21,6 +21,7 @@ Script de construcción de artefactos de release para **Helireport Desherbaje** 
 | `--bump` | Sube `version:` de `pubspec.yaml` (regla odómetro, ver `bump-version.sh`) antes de construir. |
 | `--no-clean` | Omite `flutter clean`. Más rápido; útil para builds incrementales. |
 | `--apk` | (solo `android`/`both`) Genera también un APK universal además del AAB. |
+| `--upload` | (solo `ios`/`both`) Sube el IPA a App Store Connect con `xcrun altool` al terminar. Lee `ASC_KEY_ID`/`ASC_ISSUER_ID` del entorno o de `.asc.env` (gitignored), y exige `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8`. |
 
 ---
 
@@ -64,6 +65,7 @@ Script de construcción de artefactos de release para **Helireport Desherbaje** 
 2. Ejecuta `pod install --repo-update` dentro de `ios/`.
 3. Ejecuta `flutter build ipa --release --export-method app-store --dart-define-from-file=.env`.
 4. Copia el IPA a `dist/ios/helireport_desherbaje-<version>+<build>.ipa`.
+5. Si `--upload`: `xcrun altool --upload-app`. Si falla, el IPA queda en `dist/` para subirlo con Transporter.
 
 ---
 

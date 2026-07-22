@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' hide Response, FormData, MultipartFile;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
 import '../../core/app_config.dart';
@@ -40,6 +41,7 @@ class NetworkService extends GetxService {
       ),
     );
     _dio.interceptors.add(_HmacInterceptor());
+    _dio.interceptors.add(AuditUserInterceptor());
     _dio.interceptors.add(_RetryInterceptor(_dio));
 
     // Video Dio: no HMAC interceptor, no retry (adapter handles per-chunk retry).
@@ -149,6 +151,7 @@ class NetworkService extends GetxService {
     final fullUrl = ApiEndpoints.videosUploadInit;
     final path = _videoSigningPath(fullUrl);
     final hmacHeaders = ApiSecurityService.buildHmacHeaders('POST', path);
+    final auditHeaders = await buildAuditUserHeaders();
     try {
       final resp = await _videoDio.post<dynamic>(
         fullUrl,
@@ -156,6 +159,7 @@ class NetworkService extends GetxService {
         options: Options(
           headers: {
             ...hmacHeaders,
+            ...auditHeaders,
             HttpHeaders.contentTypeHeader: 'application/json',
           },
         ),
@@ -180,6 +184,7 @@ class NetworkService extends GetxService {
     final path = _videoSigningPath(fullUrl);
     // Timestamp must be fresh on every request (anti-replay ±5 min).
     final hmacHeaders = ApiSecurityService.buildHmacHeaders('POST', path);
+    final auditHeaders = await buildAuditUserHeaders();
     try {
       final resp = await _videoDio.post<dynamic>(
         fullUrl,
@@ -187,6 +192,7 @@ class NetworkService extends GetxService {
         options: Options(
           headers: {
             ...hmacHeaders,
+            ...auditHeaders,
             HttpHeaders.contentTypeHeader: 'application/octet-stream',
             'Upload-Offset': uploadOffset.toString(),
           },
@@ -208,10 +214,11 @@ class NetworkService extends GetxService {
     final fullUrl = ApiEndpoints.videoUpload(uploadId);
     final path = _videoSigningPath(fullUrl);
     final hmacHeaders = ApiSecurityService.buildHmacHeaders('GET', path);
+    final auditHeaders = await buildAuditUserHeaders();
     try {
       final resp = await _videoDio.get<dynamic>(
         fullUrl,
-        options: Options(headers: hmacHeaders),
+        options: Options(headers: {...hmacHeaders, ...auditHeaders}),
       );
       return _toNetworkResponse(resp);
     } on DioException catch (e, st) {
@@ -226,8 +233,8 @@ class NetworkService extends GetxService {
   Future<NetworkResponse<dynamic>> completeVideoUpload(String uploadId) async {
     final fullUrl = ApiEndpoints.videoUploadComplete(uploadId);
     final path = _videoSigningPath(fullUrl);
-    final hmacHeaders =
-        ApiSecurityService.buildHmacHeaders('POST', path);
+    final hmacHeaders = ApiSecurityService.buildHmacHeaders('POST', path);
+    final auditHeaders = await buildAuditUserHeaders();
     try {
       final resp = await _videoDio.post<dynamic>(
         fullUrl,
@@ -238,6 +245,7 @@ class NetworkService extends GetxService {
         options: Options(
           headers: {
             ...hmacHeaders,
+            ...auditHeaders,
             HttpHeaders.contentTypeHeader: 'application/json',
           },
           validateStatus: _videoResumeValidateStatus,
@@ -384,12 +392,58 @@ class NetworkService extends GetxService {
 
   NetworkErrorCategory _categoryForStatus(int? status) {
     if (status == null) return NetworkErrorCategory.unrecoverable;
-    if (status == 401 || status == 403) return NetworkErrorCategory.unauthorized;
+    if (status == 401 || status == 403) {
+      return NetworkErrorCategory.unauthorized;
+    }
     if (status == 409 || status == 412) return NetworkErrorCategory.conflict;
     if (status == 408 || status == 429) return NetworkErrorCategory.retryable;
     if (status >= 500 && status < 600) return NetworkErrorCategory.retryable;
-    if (status >= 400 && status < 500) return NetworkErrorCategory.unrecoverable;
+    if (status >= 400 && status < 500) {
+      return NetworkErrorCategory.unrecoverable;
+    }
     return NetworkErrorCategory.unrecoverable;
+  }
+}
+
+/// Cabeceras de auditoría: identifican a la **persona**, no a la app (eso lo
+/// hace el HMAC). El backend las vuelca en `audit_log` (`user_id`,
+/// `user_login`); sin ellas el cambio queda como `anonymous`.
+///
+/// NO entran en la firma HMAC (payload = `"{ts}:{METHOD}:{path}"` y nada más),
+/// así que se pueden añadir o quitar sin recalcularla.
+///
+/// `X-User-Name` no se envía a propósito: el backend resuelve el nombre a
+/// mostrar con un JOIN contra `usuarios` por `user_id`.
+@visibleForTesting
+Future<Map<String, String>> buildAuditUserHeaders() async {
+  final prefs = await SharedPreferences.getInstance();
+  final id = prefs.getInt(_prefsUserIdKey);
+  final login = _asciiOnly(prefs.getString(_prefsUsuarioKey) ?? '');
+  return <String, String>{
+    if (id != null) 'X-User-Id': id.toString(),
+    if (login.isNotEmpty) 'X-User-Login': login,
+  };
+}
+
+const String _prefsUserIdKey = 'user_id';
+const String _prefsUsuarioKey = 'user_usuario';
+
+/// Las cabeceras HTTP solo admiten ASCII: un login con acentos haría que Dio
+/// reventase la petición entera. Se filtra en vez de omitir la cabecera para no
+/// perder la trazabilidad por un carácter.
+String _asciiOnly(String value) => String.fromCharCodes(
+      value.runes.where((int r) => r >= 0x20 && r <= 0x7E),
+    );
+
+@visibleForTesting
+class AuditUserInterceptor extends Interceptor {
+  @override
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    options.headers.addAll(await buildAuditUserHeaders());
+    handler.next(options);
   }
 }
 

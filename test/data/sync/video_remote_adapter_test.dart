@@ -87,7 +87,8 @@ class _FakeNetworkService extends NetworkService {
     required int uploadOffset,
     required Uint8List bytes,
   }) async {
-    capturedChunks.add((uploadId: uploadId, offset: uploadOffset, bytes: bytes));
+    capturedChunks
+        .add((uploadId: uploadId, offset: uploadOffset, bytes: bytes));
     final item = _dequeue(_patchQ, 'patch');
     if (item is NetworkError) throw item;
     return item as NetworkResponse<dynamic>;
@@ -256,7 +257,9 @@ void main() {
   group('push(create) — happy path', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('init body contains exactly the fields declared in §6.1', () async {
       network
@@ -278,6 +281,22 @@ void main() {
       expect(
         body.keys,
         containsAll(<String>['usuariologged', 'idusuariologged']),
+      );
+    });
+
+    test('init body carries capturada_at = fecha de captura de la entidad',
+        () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final entity = _entity(ruta: f.path, filename: 'clip.mp4');
+      await adapter.push(entity: entity, operation: SyncOperation.create);
+
+      expect(
+        network.capturedInitBodies.first['capturada_at'],
+        equals(entity.capturadaAt.toIso8601String()),
       );
     });
 
@@ -394,11 +413,11 @@ void main() {
       final entity = _entity(ruta: f.path);
       await adapter.push(entity: entity, operation: SyncOperation.create);
 
-      verify(() => store.saveUploadOffset(any(), any()))
-          .called(greaterThan(0));
+      verify(() => store.saveUploadOffset(any(), any())).called(greaterThan(0));
     });
 
-    test('chunk PATCH is called with Upload-Offset = 0 on first chunk', () async {
+    test('chunk PATCH is called with Upload-Offset = 0 on first chunk',
+        () async {
       network
         ..queueInit(_okInit())
         ..queuePatch(_okPatch(offset: 10))
@@ -417,8 +436,7 @@ void main() {
         ..queuePatch(_okPatch(offset: 10))
         ..queueComplete(_okComplete());
 
-      const gis =
-          '{"type":"FeatureCollection","features":[{"type":"Feature",'
+      const gis = '{"type":"FeatureCollection","features":[{"type":"Feature",'
           '"geometry":{"type":"LineString","coordinates":[[-3.7,40.4]]},'
           '"properties":{}}]}';
       final entity = _entity(ruta: f.path, gisJson: gis);
@@ -461,7 +479,9 @@ void main() {
   group('push(create) — resume', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('GET status is called instead of init when uploadId is set', () async {
       network
@@ -522,7 +542,8 @@ void main() {
     // mandar los bytes, porque el backend borró los del intento anulado.
     // Si esto se rompe, un vídeo de campo puede reportar éxito sin subirse y
     // acabar purgado del móvil: desaparece de los dos lados.
-    test('sin uploadId nunca consulta estado: init + bytes completos', () async {
+    test('sin uploadId nunca consulta estado: init + bytes completos',
+        () async {
       network
         ..queueInit(_okInit(uploadId: 'attempt-2'))
         ..queuePatch(_okPatch(offset: 10))
@@ -547,7 +568,9 @@ void main() {
   group('push(create) — re-init on 404 status', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('404 on GET status triggers re-init', () async {
       network
@@ -594,7 +617,9 @@ void main() {
   group('push(create) — chunk retry', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('timeout on chunk → retried → success', () async {
       network
@@ -636,7 +661,8 @@ void main() {
       expect(outcome, isA<SyncSuccess<VideoSegmentoEntity>>());
     });
 
-    test('unrecoverable 4xx on chunk → NOT retried → SyncUnrecoverable', () async {
+    test('unrecoverable 4xx on chunk → NOT retried → SyncUnrecoverable',
+        () async {
       network
         ..queueInit(_okInit())
         ..queuePatchError(const NetworkError(
@@ -660,7 +686,9 @@ void main() {
   group('push(create) — 409 resume', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('409 on chunk → adopts server offset and resumes (§6.2)', () async {
       network
@@ -776,7 +804,9 @@ void main() {
   group('push(create) — error mapping', () {
     late File f;
     setUp(() async => f = await _tmpFile(bytes: 10));
-    tearDown(() async { if (f.existsSync()) await f.delete(); });
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
 
     test('offline on init → SyncRetryable', () async {
       network.queueInitError(const NetworkError(
@@ -832,8 +862,7 @@ void main() {
       expect(outcome, isA<SyncUnrecoverable<VideoSegmentoEntity>>());
     });
 
-    test(
-        '401 → SyncUnrecoverable with HMAC reason, NOT AuthExpiredException',
+    test('401 → SyncUnrecoverable with HMAC reason, NOT AuthExpiredException',
         () async {
       network.queueInitError(const NetworkError(
         category: NetworkErrorCategory.unauthorized,
@@ -853,7 +882,8 @@ void main() {
       expect(unrecoverable.reason.toLowerCase(), contains('hmac'));
     });
 
-    test('401 resolves normally (does NOT throw AuthExpiredException)', () async {
+    test('401 resolves normally (does NOT throw AuthExpiredException)',
+        () async {
       network.queueInitError(const NetworkError(
         category: NetworkErrorCategory.unauthorized,
         statusCode: 401,

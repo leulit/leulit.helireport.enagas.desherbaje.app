@@ -50,3 +50,6 @@ app.*.map.json
 # Signing — never commit these
 android/key.properties
 android/helireport-desherbaje-release.jks
+
+# Credenciales App Store Connect (por máquina)
+.asc.env

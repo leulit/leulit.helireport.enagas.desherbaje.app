@@ -1,7 +1,7 @@
 name: helireport_desherbaje
 description: App móvil para operadores de campo - Módulo Desherbaje Enagas
 publish_to: 'none'
-version: 1.0.5+105
+version: 1.0.9+109
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -24,6 +24,9 @@ dependencies:
   flutter_secure_storage: ^10.3.1  
   get: ^4.7.3
   image_picker: ^1.2.3
+  # Necesarios para activar el Photo Picker de Android (ver main.dart).
+  image_picker_android: ^0.8.12
+  image_picker_platform_interface: ^2.10.0
   video_player: ^2.13.0
   gal: ^2.3.2
   latlong2: ^0.9.1 # pinned: flutter_map_location_marker 10.3.0 requires ^0.9.1
