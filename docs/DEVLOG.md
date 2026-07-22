@@ -1,5 +1,33 @@
 # DEVLOG
 
+## 2026-07-22 — Fix: los artefactos de tienda salían sin `HMAC_SECRET` (401 en toda la API)
+
+**Síntoma:** los `.aab`/`.ipa` de `dist/` (1.0.1 … 1.0.3) llevaban el placeholder
+`YOUR_HMAC_SECRET_HERE` de `AppConfig.hmacSecret`. Verificado extrayendo el bundle y haciendo grep:
+`1.0.3+103` contiene el placeholder y no el secreto. Cualquier build publicado desde ahí habría
+fallado con 401 en **todos** los endpoints.
+
+**Causa:** coexistían dos sistemas de build. Los de la raíz (`build-android.sh`, `build-ios.sh`)
+inyectaban `--dart-define-from-file=.env`; `scripts/build.sh` —el que produce `dist/`, el que estaba
+documentado y el que se usaba— no lo hacía. El define es invisible en el log del build: el binario
+compila igual de bien con el placeholder. Lección: un secreto inyectado por flag no tiene fallo
+detectable en tiempo de build; el único test que vale es **grep del secreto en el artefacto final**.
+
+**Fix:**
+- `scripts/build.sh`: guard de `.env` (aborta si falta o no define `HMAC_SECRET`) +
+  `DEFINES=(--dart-define-from-file=.env)` aplicado a appbundle, apk e ipa.
+- Sistema de build unificado: **borrados** `build-android.sh` y `build-ios.sh`; su `--bump` pasa a
+  ser flag de `scripts/build.sh`, y `bump-version.sh` se mueve a `scripts/`.
+- Heredoc del resumen: los códigos de color salían literales (`\033[0;34m`) → `printf "%b"`.
+- Manual de publicación paso a paso: `docs/PUBLICAR.md`. `scripts/build.md` actualizado.
+
+**Verificado:** `./scripts/build.sh android --bump --no-clean` → `1.0.4+104` → `1.0.5+105`, y grep
+del secreto dentro del `.aab` resultante da positivo.
+
+**Pendiente (decisión del responsable):** `.env` con el secreto real está **committeado** (`700de85`).
+Hay que `git rm --cached .env`, ignorarlo, y **rotar el `HMAC_SECRET` en el backend** — ya está en el
+historial. `artifacts/` tampoco está en `.gitignore` (ese directorio ya no lo genera nadie).
+
 ## 2026-07-21 — Fix: `gis_json` se generaba y persistía, pero NUNCA se enviaba
 
 **Síntoma:** toda la media subida desde el 2026-07-10 llegó al backend sin georreferencia, aunque

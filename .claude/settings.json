@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.dart) dart format \"$f\" >/dev/null 2>&1;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

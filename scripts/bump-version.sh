@@ -9,7 +9,7 @@ set -euo pipefail
 # ponytail: assumes single-digit minor/patch (0-9), the documented scheme.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PUBSPEC="$SCRIPT_DIR/pubspec.yaml"
+PUBSPEC="$SCRIPT_DIR/../pubspec.yaml"
 
 if [[ ! -f "$PUBSPEC" ]]; then
   echo "Error: pubspec.yaml not found at $PUBSPEC" >&2

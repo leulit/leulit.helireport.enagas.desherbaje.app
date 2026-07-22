@@ -8,6 +8,7 @@
 #   ./scripts/build.sh both                 # AAB + IPA
 #
 # Flags opcionales:
+#   --bump             Sube la versión de pubspec.yaml (regla odómetro) antes de construir
 #   --no-clean         Omite `flutter clean` (más rápido, builds incrementales)
 #   --apk              (android/both) Genera además APK universal
 #
@@ -30,7 +31,7 @@ warn()  { echo -e "${C_YELLOW}⚠${C_RESET} $*"; }
 error() { echo -e "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 
 usage() {
-  sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -47,9 +48,11 @@ esac
 
 SKIP_CLEAN=false
 BUILD_APK=false
+BUMP=false
 
 for arg in "$@"; do
   case "$arg" in
+    --bump)      BUMP=true ;;
     --no-clean)  SKIP_CLEAN=true ;;
     --apk)       BUILD_APK=true ;;
     -h|--help)   usage 0 ;;
@@ -59,6 +62,18 @@ done
 
 # --- Prerrequisitos comunes ----------------------------------------------------
 command -v flutter >/dev/null || error "flutter no está en PATH"
+
+# HMAC_SECRET viaja por --dart-define-from-file=.env. Sin él el binario sale con
+# el placeholder de AppConfig y el backend responde 401 en TODA la API.
+[[ -f .env ]] || error "Falta .env con HMAC_SECRET (el build saldría con placeholder → 401)"
+grep -qE '^HMAC_SECRET=.+' .env || error ".env no define HMAC_SECRET"
+DEFINES=(--dart-define-from-file=.env)
+
+# El bump va ANTES de leer la versión: el artefacto debe llevar la nueva.
+if $BUMP; then
+  log "bump versión"
+  "$SCRIPT_DIR/bump-version.sh"
+fi
 
 VERSION_LINE=$(grep '^version:' pubspec.yaml | awk '{print $2}')
 VERSION_NAME="${VERSION_LINE%%+*}"
@@ -84,7 +99,7 @@ build_android() {
   mkdir -p "$dist_dir"
 
   log "[Android] flutter build appbundle --release"
-  flutter build appbundle --release
+  flutter build appbundle --release "${DEFINES[@]}"
 
   local aab_src="build/app/outputs/bundle/release/app-release.aab"
   [[ -f "$aab_src" ]] || error "No se generó AAB en $aab_src"
@@ -94,7 +109,7 @@ build_android() {
 
   if $BUILD_APK; then
     log "[Android] flutter build apk --release"
-    flutter build apk --release
+    flutter build apk --release "${DEFINES[@]}"
     local apk_src="build/app/outputs/flutter-apk/app-release.apk"
     local apk_out="$dist_dir/${ARTIFACT_BASE}.apk"
     cp "$apk_src" "$apk_out"
@@ -124,7 +139,7 @@ build_ios() {
   (cd ios && pod install --repo-update >/dev/null)
 
   log "[iOS] flutter build ipa --release --export-method app-store"
-  flutter build ipa --release --export-method app-store
+  flutter build ipa --release --export-method app-store "${DEFINES[@]}"
 
   local ipa_src
   ipa_src=$(ls build/ios/ipa/*.ipa 2>/dev/null | head -n1 || true)
@@ -151,7 +166,7 @@ echo
 
 if [[ "$TARGET" == "android" || "$TARGET" == "both" ]]; then
   cat <<EOF
-${C_BLUE}Android${C_RESET} — subir a Google Play Console:
+$(printf "%b" "${C_BLUE}")Android$(printf "%b" "${C_RESET}") — subir a Google Play Console:
   1. https://play.google.com/console → Helireport Desherbaje
   2. Testing → Internal testing (o el track que toque) → Create new release
   3. Sube: dist/android/${ARTIFACT_BASE}.aab
@@ -162,7 +177,7 @@ fi
 
 if [[ "$TARGET" == "ios" || "$TARGET" == "both" ]]; then
   cat <<EOF
-${C_BLUE}iOS${C_RESET} — subir a App Store Connect:
+$(printf "%b" "${C_BLUE}")iOS$(printf "%b" "${C_RESET}") — subir a App Store Connect:
   Opción A (gráfica): Abre Transporter (Mac App Store) → arrastra dist/ios/${ARTIFACT_BASE}.ipa
   Opción B (CLI):
      xcrun altool --upload-app --type ios \\
@@ -173,7 +188,9 @@ ${C_BLUE}iOS${C_RESET} — subir a App Store Connect:
 EOF
 fi
 
-warn "Recuerda subir 'version:' en pubspec.yaml (actual: ${VERSION_NAME}+${BUILD_NUMBER}) antes del próximo build."
+if ! $BUMP; then
+  warn "Versión usada: ${VERSION_NAME}+${BUILD_NUMBER}. El próximo build para tienda necesita otra: usa --bump."
+fi
 
 # Abrir Finder en dist/ (macOS)
 if command -v open >/dev/null; then
