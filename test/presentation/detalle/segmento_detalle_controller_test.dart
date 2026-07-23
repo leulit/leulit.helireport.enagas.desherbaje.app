@@ -302,8 +302,38 @@ void main() {
 
   // ─── (b) estado no editable → _validateEstado devuelve false ──────────────
 
+  // `cerrada` es el ÚNICO estado sin transiciones de salida y, por tanto, el
+  // único no editable desde la app (`transicionesPermitidas` en
+  // segmento_entity.dart). `propuesta` y `validada` dejaron de serlo en
+  // 7a4059e (2026-07-21) — este test las usaba y por eso fallaba.
   testWidgets(
-    '(b) guardar con estado propuesta no llama saveLocal (estado no editable)',
+    '(b) guardar con estado cerrada no llama saveLocal (estado no editable)',
+    (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final segmento = _makeSegmento(id: 5, estado: EstadoActividad.cerrada);
+      final ctrl = _buildController(
+        segmento: segmento,
+        segmentoRepo: segmentoRepo,
+        imagenRepo: imagenRepo,
+        videoRepo: videoRepo,
+        mensajeRepo: mensajeRepo,
+      );
+      ctrl.estado.value = EstadoActividad.cerrada;
+
+      await ctrl.guardar();
+      await tester.pumpAndSettle();
+
+      verifyNever(() => mockOfflineSegmento.create(any()));
+      verifyNever(() => mockOfflineSegmento.update(any()));
+    },
+  );
+
+  // ─── (b2) el otro lado de la matriz: propuesta SÍ es editable ─────────────
+
+  testWidgets(
+    '(b2) guardar con estado propuesta sí llama saveLocal (estado editable)',
     (tester) async {
       await tester.pumpWidget(_appWidget());
       await tester.pump();
@@ -316,13 +346,14 @@ void main() {
         videoRepo: videoRepo,
         mensajeRepo: mensajeRepo,
       );
-      ctrl.estado.value = EstadoActividad.propuesta;
+      ctrl.estado.value = EstadoActividad.ejecucion;
 
       await ctrl.guardar();
+      // Pump past the snackbar 2s timer so the test frame is clean.
+      await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
 
-      verifyNever(() => mockOfflineSegmento.create(any()));
-      verifyNever(() => mockOfflineSegmento.update(any()));
+      verify(() => mockOfflineSegmento.update(any())).called(1);
     },
   );
 
@@ -580,9 +611,10 @@ void main() {
         ]);
 
         final items = ctrl.mediaPorTipo(TipoFoto.antes);
-        expect(items.firstWhere((m) => m.clientId == 'cloudvid').onDelete, isNull);
         expect(
-            items.firstWhere((m) => m.clientId == 'locnew').onDelete, isNotNull);
+            items.firstWhere((m) => m.clientId == 'cloudvid').onDelete, isNull);
+        expect(items.firstWhere((m) => m.clientId == 'locnew').onDelete,
+            isNotNull);
         expect(items.firstWhere((m) => m.clientId == 'locup').onDelete, isNull);
       },
     );

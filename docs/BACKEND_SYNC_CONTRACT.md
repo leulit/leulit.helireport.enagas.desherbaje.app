@@ -307,13 +307,13 @@ Autenticación: HMAC-SHA256, igual que el resto de `/api/enagas/v1` (ver §10). 
         "type": "MultiLineString",
         "coordinates": [
           [
-            [-3.701234, 40.412345, 678.4, 1782458400000],
-            [-3.701231, 40.412350, 678.6, 1782458401000],
-            [-3.701200, 40.412410, 679.1, 1782458403000]
+            [-3.701234, 40.412345, 678.4, 1782458400000, 4.2, 1.35],
+            [-3.701231, 40.412350, 678.6, 1782458401000, 4.0, 1.41],
+            [-3.701200, 40.412410, 679.1, 1782458403000, 8.7, null]
           ],
           [
-            [-3.699800, 40.413900, 681.0, 1782458470000],
-            [-3.699750, 40.413950, 681.2, 1782458471000]
+            [-3.699800, 40.413900, 681.0, 1782458470000, 3.9, 12.4],
+            [-3.699750, 40.413950, 681.2, 1782458471000, null, 12.1]
           ]
         ]
       },
@@ -324,7 +324,7 @@ Autenticación: HMAC-SHA256, igual que el resto de `/api/enagas/v1` (ver §10). 
         "user_id": 12,
         "started_at": "2026-04-25T08:30:00.000Z",
         "ended_at": "2026-04-25T09:00:00.000Z",
-        "coord_format": ["lon", "lat", "alt", "t_epoch_ms"],
+        "coord_format": ["lon", "lat", "alt", "t_epoch_ms", "accuracy_m", "speed_mps"],
         "os": "android",
         "os_version": "14",
         "device_model": "Pixel 7",
@@ -338,21 +338,26 @@ Autenticación: HMAC-SHA256, igual que el resto de `/api/enagas/v1` (ver §10). 
 **`geometry`:**
 
 - `MultiLineString`, o `null` si la traza no produjo ningún segmento utilizable.
-- Cada vértice: `[lon, lat, alt, t_epoch_ms]`.
+- Cada vértice: `[lon, lat, alt, t_epoch_ms, accuracy_m, speed_mps]` — **6 posiciones siempre**, aunque las nullables vayan a `null`.
   - `alt`: metros, nullable.
   - `t_epoch_ms`: epoch UTC en milisegundos, absoluto (no relativo al inicio).
+  - `accuracy_m`: precisión horizontal del fix en metros, nullable. Es lo que permite distinguir un desvío real del operador de un salto de GPS.
+  - `speed_mps`: velocidad instantánea en m/s reportada por el GPS (Doppler), nullable — el fix no siempre la trae.
+- **Los nullables se persisten como `NULL`, nunca como `0`** (confirmado backend, 2026-07-23). En estos tres campos el `0` es un valor válido y además óptimo — `accuracy_m: 0` es un fix perfecto, `speed_mps: 0` es "parado", `alt: 0` es nivel del mar — así que rellenar una ausencia con `0` fabrica el mejor dato posible a partir de un dato inexistente. **Afecta al visor:** si filtra por altitud o precisión, tiene que tratar `NULL` explícitamente.
+- El backend **también acepta vértices de 4 posiciones** (`accuracy_m`/`speed_mps` a `NULL`). El cliente siempre manda 6; la tolerancia existe para que un cambio de formato futuro no bloquee una jornada de campo.
+- Un `accuracy_m` o `speed_mps` inválido **no descarta el vértice** ni cuenta en `received - stored`: se guarda `NULL`. Los contadores miden solo `lon`/`lat`/`t_epoch_ms`.
 - Cada `LineString` del `MultiLineString` es un tramo continuo: el cliente corta un tramo nuevo cuando el hueco entre dos fixes consecutivos supera 60 s. Tramos de menos de 2 puntos se descartan antes de enviar — nunca llegan al backend.
 
 **`properties`:**
 
 | Campo | Tipo | Notas |
 |---|---|---|
-| `kind` | string | Siempre `"track"`. |
+| `kind` | string | Siempre `"track"`. El backend lo ignora (constante del contrato, no dato). |
 | `traza_client_id` | string (UUID v4) | Generado por el cliente. Inmutable. Clave de idempotencia. |
 | `name` | string | Máx. 100 caracteres. Editable por el usuario. |
 | `user_id` | int | — |
 | `started_at` / `ended_at` | string ISO8601 UTC | — |
-| `coord_format` | array de string | Siempre `["lon","lat","alt","t_epoch_ms"]`, documenta el orden de cada vértice. |
+| `coord_format` | array de string | Siempre `["lon","lat","alt","t_epoch_ms","accuracy_m","speed_mps"]`, documenta el orden de cada vértice. El backend lo ignora; se envía porque es la única pista que queda en el propio dato si el número de posiciones cambia. |
 | `os` | string | `"android"` \| `"ios"`. |
 | `os_version` | string | — |
 | `device_model` | string | — |
@@ -360,25 +365,35 @@ Autenticación: HMAC-SHA256, igual que el resto de `/api/enagas/v1` (ver §10). 
 
 ### 8.2 Idempotencia
 
-Clave: `traza_client_id`. Un POST repetido con el mismo `traza_client_id` devuelve `200` con el registro ya existente — nunca crea un duplicado.
+Clave: `traza_client_id`. Un POST repetido con el mismo `traza_client_id` nunca crea un duplicado: actualiza la cabecera (`name`, `ended_at`, metadatos) y **añade los puntos nuevos** a la traza existente.
+
+Esto permitiría enviar una traza abierta y reenviarla cerrada más tarde. El cliente **no lo hace hoy**: solo encola en `finish()`, con la traza ya cerrada. Queda documentado como capacidad del backend, no como flujo del cliente.
 
 ### 8.3 Respuesta
 
 ```http
-HTTP/1.1 201 Created
+HTTP/1.1 200 OK
 
 {
-  "remote_id": 1234
+  "id": 1234,
+  "received": 7200,
+  "stored": 7194
 }
 ```
 
-Reenvío idempotente → `200 OK` con el mismo cuerpo y el `remote_id` ya asignado.
+Cuerpo plano, sin `success` ni `message`. El cliente busca el entero en las claves `id`, `remote_id`, `remoteId`, `itemId` (en ese orden) y lo guarda como `remoteId`; si no encuentra ninguna, da el sync por bueno igualmente pero sin id remoto.
+
+**Vértices descartados.** El backend descarta en silencio los vértices inválidos (lat/lon fuera de rango, timestamp no entero) y responde 2xx igualmente, para no bloquear una jornada de campo entera por un punto malo. `received`/`stored` son la única señal de esa pérdida: `TrazaRemoteAdapter._logDiscardedVertices` los lee y emite un `AppLog.w` cuando `stored < received`. Nunca cambian el desenlace del job — la traza sí se guardó. Si faltaran, el cliente no loguea nada y sigue funcionando.
 
 ### 8.4 Límite de tamaño
 
-Una traza puede alcanzar ~1 MB de JSON. El backend debe aceptar como mínimo **4 MB** en esta ruta — el límite por defecto de Fastify (1 MB) es insuficiente y debe ampliarse específicamente para este endpoint.
+El muestreo del cliente es `distanceFilter: 5 m` con `intervalDuration: 1 s`, así que el techo duro es **1 punto/segundo** vaya el operador a pie o en coche. Con un vértice de 6 posiciones serializado en ~64 bytes y una duración máxima de grabación de **2 h**, el peor caso es ~7.200 vértices ≈ **460 KB**.
+
+Cabe en el límite por defecto de Fastify (1 MB), así que **no hace falta ampliarlo** para esta ruta. Se documenta el cálculo para que un cambio futuro de muestreo (bajar `distanceFilter`, subir la duración máxima) obligue a rehacer la cuenta: el cliente trata cualquier non-2xx como `SyncUnrecoverable` y no reintenta, de modo que un 413 deja la traza bloqueada hasta reenvío manual.
 
 ### 8.5 Códigos de error
+
+En la práctica esta ruta solo devuelve non-2xx por errores de programación: falta `traza_client_id` o falta `user_id` → `400`. Los datos malos (vértices inválidos) **nunca** producen un error: se descartan y el resto se guarda (ver §8.3). La tabla siguiente describe cómo reacciona el cliente a cada código, no lo que el backend emite hoy.
 
 | Código | Tipo (cliente) | Comportamiento del cliente |
 |---|---|---|
@@ -434,7 +449,7 @@ Para que la app cliente sea funcional con la nueva arquitectura, el backend debe
 - [ ] Devolver `error_message` legible en español en todas las respuestas 4xx.
 - [ ] Aplicar códigos HTTP semánticos según §5.1.
 - [ ] Devolver `server_version` completa en 409.
-- [ ] Implementar `POST /api/enagas/v1/trazas` con idempotencia por `traza_client_id` (§8).
+- [x] Implementar `POST /api/enagas/v1/trazas` con idempotencia por `traza_client_id` (§8). **Cerrado (2026-07-23):** vértice de 6 posiciones, nullables persistidos como `NULL`, contadores `received`/`stored` en la respuesta. Sin backfill — la ruta no había llegado a desplegarse, así que no hay ni una fila escrita por ella. Los `0` que quedan en la tabla vienen de `/api/tracks` y del retirado `/positions/batch`, donde el cliente sí mandaba valores reales: ahí un `0` puede ser legítimo y no se toca.
 
 ---
 
@@ -478,7 +493,7 @@ devuelven todos los registros aplicables al operador en un único array JSON, co
 Estas decisiones se cerrarán cuando el equipo de backend revise este documento:
 
 1. **Filtros exactos de los GET de pull**: ¿`?operador=`, `?ct_id=`, ambos, otros?
-2. **Tamaño máximo de payload aceptado** en POST (especialmente para subida de imágenes; `/trazas` ya fija mínimo 4 MB, ver §8.4).
+2. **Tamaño máximo de payload aceptado** en POST, para subida de imágenes. `/trazas` no lo necesita: su peor caso son ~360 KB y cabe en el default de Fastify (ver §8.4).
 3. **Política de retención** de posiciones GPS en backend (¿cuánto tiempo se guardan los puntos?).
 4. **Endpoint de revocación** de token (logout server-side) — opcional.
 5. **Lista cerrada de entidades pulleables** (gasoductos, pks, segmentos, mensajes... — depende del producto).

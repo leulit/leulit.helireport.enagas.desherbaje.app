@@ -10,8 +10,21 @@ const _meta = CaptureMeta(
   appVersion: '1.0.4+104',
 );
 
-TrazaPunto _p(DateTime t, {double lat = 40.0, double lng = -3.0}) =>
-    TrazaPunto(capturedAt: t, lat: lat, lng: lng, altitudeMeters: 100.0);
+TrazaPunto _p(
+  DateTime t, {
+  double lat = 40.0,
+  double lng = -3.0,
+  double? accuracyMeters = 4.5,
+  double? speedMps = 1.2,
+}) =>
+    TrazaPunto(
+      capturedAt: t,
+      lat: lat,
+      lng: lng,
+      altitudeMeters: 100.0,
+      accuracyMeters: accuracyMeters,
+      speedMps: speedMps,
+    );
 
 void main() {
   final base = DateTime.utc(2026, 7, 10, 9, 0, 0);
@@ -94,9 +107,11 @@ void main() {
       expect((coords[1] as List), hasLength(2));
     });
 
-    test('coordinate order is [lon, lat, alt, t_epoch_ms]', () {
+    test(
+        'coordinate order is '
+        '[lon, lat, alt, t_epoch_ms, accuracy_m, speed_mps]', () {
       final points = [
-        _p(base, lat: 40.1, lng: -3.5),
+        _p(base, lat: 40.1, lng: -3.5, accuracyMeters: 7.25, speedMps: 3.5),
         _p(base.add(const Duration(seconds: 1)))
       ];
       final json = buildTrackGeoJson(
@@ -111,10 +126,36 @@ void main() {
       final geometry = feature['geometry'] as Map<String, dynamic>;
       final firstVertex =
           ((geometry['coordinates'] as List).first as List).first as List;
+      expect(firstVertex, hasLength(6));
       expect(firstVertex[0], -3.5); // lon
       expect(firstVertex[1], 40.1); // lat
       expect(firstVertex[2], 100.0); // alt
       expect(firstVertex[3], base.millisecondsSinceEpoch); // t_epoch_ms
+      expect(firstVertex[4], 7.25); // accuracy_m
+      expect(firstVertex[5], 3.5); // speed_mps
+    });
+
+    test('missing accuracy/speed travel as null, keeping the 6 positions', () {
+      final points = [
+        _p(base, accuracyMeters: null, speedMps: null),
+        _p(base.add(const Duration(seconds: 1)),
+            accuracyMeters: null, speedMps: null),
+      ];
+      final json = buildTrackGeoJson(
+        points,
+        userId: 1,
+        meta: _meta,
+        trazaClientId: 'c1',
+        name: 'Traza test',
+        startedAt: base,
+      );
+      final feature = (json['features'] as List).first as Map<String, dynamic>;
+      final geometry = feature['geometry'] as Map<String, dynamic>;
+      final firstVertex =
+          ((geometry['coordinates'] as List).first as List).first as List;
+      expect(firstVertex, hasLength(6));
+      expect(firstVertex[4], isNull);
+      expect(firstVertex[5], isNull);
     });
 
     test('properties carry kind/traza_client_id/name/coord_format/meta', () {
@@ -135,7 +176,8 @@ void main() {
       expect(props['kind'], 'track');
       expect(props['traza_client_id'], 'c1');
       expect(props['name'], 'Traza de la tarde');
-      expect(props['coord_format'], ['lon', 'lat', 'alt', 't_epoch_ms']);
+      expect(props['coord_format'],
+          ['lon', 'lat', 'alt', 't_epoch_ms', 'accuracy_m', 'speed_mps']);
       expect(props['started_at'], base.toUtc().toIso8601String());
       expect(props['ended_at'], endedAt.toUtc().toIso8601String());
       expect(props['user_id'], 7);

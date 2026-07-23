@@ -186,7 +186,14 @@ Map<String, dynamic> buildTrackGeoJson(
     'name': name,
     'started_at': startedAt.toUtc().toIso8601String(),
     if (endedAt != null) 'ended_at': endedAt.toUtc().toIso8601String(),
-    'coord_format': const ['lon', 'lat', 'alt', 't_epoch_ms'],
+    'coord_format': const [
+      'lon',
+      'lat',
+      'alt',
+      't_epoch_ms',
+      'accuracy_m',
+      'speed_mps',
+    ],
     ..._metaProps(userId, meta),
   };
 
@@ -211,11 +218,19 @@ Map<String, dynamic> buildTrackGeoJson(
   };
 }
 
-/// Coordenada de traza: `[lon, lat, alt, t_epoch_ms]`. `alt` puede ir null;
+/// Coordenada de traza: `[lon, lat, alt, t_epoch_ms, accuracy_m, speed_mps]`.
+/// `alt`, `accuracy_m` y `speed_mps` pueden ir null (el GPS no siempre los da);
 /// `t_epoch_ms` es epoch ms UTC absoluto.
+///
+/// `accuracy_m` y `speed_mps` viajan porque el punto local se borra tras
+/// sincronizar (`TrazaLocalStore.deleteSynced`): lo que no salga aquí no se
+/// puede reconstruir después. `accuracy_m` es lo que permite distinguir en el
+/// visor un desvío real del operador de un salto de GPS.
 List<dynamic> _trackCoord(TrazaPunto p) => <dynamic>[
       p.lng,
       p.lat,
       p.altitudeMeters,
       p.capturedAt.toUtc().millisecondsSinceEpoch,
+      p.accuracyMeters,
+      p.speedMps,
     ];

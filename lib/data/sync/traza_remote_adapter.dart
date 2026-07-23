@@ -1,4 +1,5 @@
 import '../../core/api_endpoints.dart';
+import '../../core/app_log.dart';
 import '../../core/gis/capture_meta.dart';
 import '../../core/gis/media_gis_geojson.dart';
 import '../../core/sync/contracts/sync_progress.dart';
@@ -72,10 +73,24 @@ class TrazaRemoteAdapter extends RemoteAdapter<TrazaEntity> {
         final payload =
             data is Map<String, dynamic> ? data : data.cast<String, dynamic>();
         remoteId = extractRemoteIntId(payload)?.toString();
+        _logDiscardedVertices(payload, entity.clientId);
       }
       return SyncSuccess<TrazaEntity>(remoteId: remoteId);
     } on NetworkError catch (e) {
       return syncOutcomeFromNetworkError<TrazaEntity>(e);
     }
+  }
+
+  /// El backend descarta en silencio los vértices inválidos y responde 2xx
+  /// igualmente (para no bloquear una jornada de campo por un punto malo), así
+  /// que la única señal de pérdida de datos es el recuento de la respuesta.
+  /// Si no lo trae, no se puede saber y no se loguea nada. Nunca cambia el
+  /// desenlace del job: la traza sí se guardó.
+  void _logDiscardedVertices(Map<String, dynamic> payload, String clientId) {
+    final received = (payload['received'] as num?)?.toInt();
+    final stored = (payload['stored'] as num?)?.toInt();
+    if (received == null || stored == null || stored >= received) return;
+    AppLog.w('TrazaRemoteAdapter: el backend descartó ${received - stored} de '
+        '$received vértices de la traza $clientId');
   }
 }
