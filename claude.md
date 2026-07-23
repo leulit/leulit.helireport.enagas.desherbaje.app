@@ -271,6 +271,7 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 ## Pendiente / TODO
 
 ### Backend (entregable en `docs/BACKEND_SYNC_CONTRACT.md`)
+- `POST /users/recuperar-password` — la app ya lo llama desde el enlace "¿Contraseña olvidada?" del login; falta implementarlo (spec: `docs/BACKEND_RECUPERAR_PASSWORD.md`).
 - Idempotencia por `client_id` en TODOS los endpoints sincronizables.
 - FKs entre entidades por `client_id` (no `remote_id`).
 - `error_message` legible en español en respuestas 4xx (especialmente 422).

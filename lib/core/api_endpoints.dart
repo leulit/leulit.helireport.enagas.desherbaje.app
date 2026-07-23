@@ -33,6 +33,12 @@ class ApiEndpoints {
 
   static String get userLogin => '$apiBaseUrl/users/login';
 
+  /// Solicitud de recuperación de contraseña. `POST {email}`; el backend
+  /// genera el token y envía el email con el enlace a la webapp. La app móvil
+  /// solo dispara la solicitud — el cambio de contraseña se hace en el enlace.
+  static String get userForgotPassword =>
+      '$apiBaseUrl/users/recuperar-password';
+
   // ──────────────────────────── Segmentos ────────────────────────────
 
   static String segmentosByCt(String cts) => '$apiBaseUrl/segmentos/bycts/$cts';

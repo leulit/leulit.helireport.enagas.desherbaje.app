@@ -1,4 +1,3 @@
-
 import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
 import '../../data/network/network_service.dart';
@@ -27,6 +26,31 @@ class AuthDataProvider {
       user.token = (rowJson['token'] as String?) ?? '';
     }
     return user;
+  }
+
+  /// Solicita el email de recuperación de contraseña. El backend responde
+  /// 200 con `{success, message}` incluso cuando el email no existe, así que
+  /// el desenlace se lee del cuerpo, no del status. Devuelve el mensaje a
+  /// mostrar; lanza `Exception(message)` si `success != true`.
+  Future<String> requestPasswordReset(String email) async {
+    final response = await _network.post(
+      ApiEndpoints.userForgotPassword,
+      body: {'email': email},
+    );
+    final data = response.data;
+    final message = (data is Map ? data['message'] as String? : null)?.trim();
+    final ok = data is Map && data['success'] == true;
+    if (!ok) {
+      throw Exception(
+        message?.isNotEmpty == true
+            ? message
+            : 'No se ha podido procesar la solicitud',
+      );
+    }
+    return message?.isNotEmpty == true
+        ? message!
+        : 'En breve recibirás un email con las instrucciones para recuperar '
+            'tu contraseña.';
   }
 
   /// Carga la lista de CTs del usuario tras el login. El endpoint de login

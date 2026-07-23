@@ -6,6 +6,7 @@ import '../../core/app_router.dart';
 import '../../data/network/network_error.dart';
 import '../../data/repository/auth_repository_impl.dart';
 import '../sincronizacion/sincronizacion_controller.dart';
+import '../widgets/forgot_password_dialog.dart';
 import '../sincronizacion/sync_models.dart';
 
 class LoginPageController extends GetxController {
@@ -17,6 +18,7 @@ class LoginPageController extends GetxController {
 
   final isLoading = false.obs;
   final isSyncing = false.obs;
+  final isSendingReset = false.obs;
   final showPassword = false.obs;
   final rememberPassword = false.obs;
   final error = Rx<String?>(null);
@@ -105,6 +107,52 @@ class LoginPageController extends GetxController {
     } finally {
       isSyncing.value = false;
     }
+  }
+
+  /// Enlace "¿Contraseña olvidada?": pide el email y dispara el envío del
+  /// correo de recuperación. El cambio de contraseña se completa desde el
+  /// enlace del email (webapp), no en la app.
+  Future<void> forgotPassword() async {
+    final email = await showForgotPasswordDialog();
+    if (email == null || email.isEmpty) return;
+
+    isSendingReset.value = true;
+    error.value = null;
+    try {
+      final message = await _repo.requestPasswordReset(email);
+      await Get.dialog<void>(
+        AlertDialog(
+          title: const Text('Solicitud enviada'),
+          content: Text(message),
+          actions: [
+            TextButton(onPressed: Get.back<void>, child: const Text('Aceptar')),
+          ],
+        ),
+      );
+    } catch (e) {
+      error.value = _parseResetError(e);
+    } finally {
+      isSendingReset.value = false;
+    }
+  }
+
+  String _parseResetError(Object e) {
+    if (e is NetworkError) {
+      switch (e.category) {
+        case NetworkErrorCategory.offline:
+          return 'Se requiere conexión a internet para recuperar la contraseña';
+        case NetworkErrorCategory.timeout:
+          return 'La conexión tardó demasiado. Inténtalo de nuevo.';
+        case NetworkErrorCategory.unauthorized:
+        case NetworkErrorCategory.conflict:
+        case NetworkErrorCategory.retryable:
+        case NetworkErrorCategory.unrecoverable:
+          return 'Error del servidor. Inténtalo de nuevo.';
+      }
+    }
+    // El provider lanza Exception(message) con el texto del backend
+    // (email inexistente, envío fallido…): se muestra tal cual.
+    return e.toString().replaceFirst('Exception: ', '');
   }
 
   Future<void> _saveCredentials() async {

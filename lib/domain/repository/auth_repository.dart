@@ -13,4 +13,9 @@ abstract class AuthRepository {
   ///
   /// Lanza si no hay sesión activa o el backend devuelve error.
   Future<UserModel> refreshUserData();
+
+  /// Solicita al backend el email de recuperación de contraseña. Devuelve el
+  /// mensaje de confirmación; lanza `Exception` con el motivo si el backend
+  /// rechaza la solicitud (email inexistente, envío fallido…).
+  Future<String> requestPasswordReset(String email);
 }

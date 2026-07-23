@@ -155,7 +155,8 @@ lib/
     ├── widgets/                                   # Compartidos entre pantallas (AppBar actions, diálogos)
     │   ├── track_record_button.dart               # AppBar action: inicia/finaliza la traza vía GpsBackgroundService; ValueListenableBuilder<GpsTrackingState>
     │   ├── logout_button.dart                     # AppBar action "cerrar sesión" compartida; bloquea logout si AppTypedActions.isTrazaRecording()
-    │   └── finalize_traza_dialog.dart              # showFinalizeTrazaDialog(): diálogo no descartable para nombrar la traza al finalizar (manual o recuperación de crash)
+    │   ├── finalize_traza_dialog.dart              # showFinalizeTrazaDialog(): diálogo no descartable para nombrar la traza al finalizar (manual o recuperación de crash)
+    │   └── forgot_password_dialog.dart             # showForgotPasswordDialog(): pide el email para "¿Contraseña olvidada?" (login); devuelve email o null
     └── mapa/
         ├── mapa_global_page.dart
         ├── mapa_global_binding.dart
