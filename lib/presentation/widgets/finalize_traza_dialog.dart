@@ -17,40 +17,67 @@ import '../../core/app_theme.dart';
 /// - Empty/whitespace-only input keeps [initialName].
 /// - Always resolves to a non-empty name — never `null`.
 Future<String> showFinalizeTrazaDialog({required String initialName}) async {
-  final controller = TextEditingController(text: initialName);
-  try {
-    final result = await Get.dialog<String>(
-      PopScope(
-        canPop: false,
-        child: AlertDialog(
-          title: const Text('Finalizar registro de traza'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLength: 100,
-            decoration: const InputDecoration(
-              labelText: 'Nombre de la traza',
-            ),
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.moduleGreen,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                final raw = controller.text.trim();
-                Get.back<String>(result: raw.isEmpty ? initialName : raw);
-              },
-              child: const Text('Aceptar'),
-            ),
-          ],
+  final result = await Get.dialog<String>(
+    PopScope(
+      canPop: false,
+      child: _FinalizeTrazaDialog(initialName: initialName),
+    ),
+    barrierDismissible: false,
+  );
+  return result ?? initialName;
+}
+
+/// StatefulWidget so the `TextEditingController` is disposed by the framework
+/// when the route is actually gone. Disposing it when `Get.dialog`'s future
+/// resolves is too early: the dialog is still animating out and its
+/// `TextField` keeps rebuilding, which threw "A TextEditingController was
+/// used after being disposed" and left a detached subtree behind.
+class _FinalizeTrazaDialog extends StatefulWidget {
+  const _FinalizeTrazaDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_FinalizeTrazaDialog> createState() => _FinalizeTrazaDialogState();
+}
+
+class _FinalizeTrazaDialogState extends State<_FinalizeTrazaDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _accept() {
+    final raw = _controller.text.trim();
+    Get.back<String>(result: raw.isEmpty ? widget.initialName : raw);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Finalizar registro de traza'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 100,
+        decoration: const InputDecoration(
+          labelText: 'Nombre de la traza',
         ),
       ),
-      barrierDismissible: false,
+      actions: [
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.moduleGreen,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _accept,
+          child: const Text('Aceptar'),
+        ),
+      ],
     );
-    return result ?? initialName;
-  } finally {
-    controller.dispose();
   }
 }

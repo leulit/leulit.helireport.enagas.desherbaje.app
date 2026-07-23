@@ -10,72 +10,114 @@ import '../widgets/logout_button.dart';
 import '../widgets/track_record_button.dart';
 import 'forzar_envio_controller.dart';
 
+/// Color del estado "cancelar" — el mismo rojo que el banner de error, para
+/// que la acción destructiva-en-apariencia se lea igual en toda la pantalla.
+const Color _cancelColor = Color(0xFFC62828);
+
 class ForzarEnvioPage extends GetView<ForzarEnvioController> {
   const ForzarEnvioPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppColors.moduleGreenLight,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 2, color: const Color(0xFFA5D6A7)),
+    // Mientras hay un envío vivo la pantalla se cierra a la navegación: si la
+    // ruta se destruye a mitad de drenado, el controller muere con jobs en
+    // `syncing` y el usuario se queda sin saber qué subió. Ocultar los botones
+    // no basta — el back del sistema y el swipe de iOS los rodean.
+    return Obx(() {
+      final enviando = controller.isEnviando;
+      return PopScope(
+        canPop: !enviando,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          Get.snackbar(
+            'Envío en curso',
+            'Cancela el envío antes de salir de esta pantalla.',
+            snackPosition: SnackPosition.BOTTOM,
+            margin: const EdgeInsets.all(12),
+          );
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            backgroundColor: AppColors.moduleGreenLight,
+            elevation: 0,
+            automaticallyImplyLeading: false,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(height: 2, color: const Color(0xFFA5D6A7)),
+            ),
+            leading: enviando
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back,
+                        color: AppColors.moduleGreen),
+                    tooltip: 'Volver',
+                    onPressed: Get.back,
+                  ),
+            actions: [
+              if (!enviando) ...[
+                IconButton(
+                  icon:
+                      const Icon(Icons.list_alt, color: AppColors.moduleGreen),
+                  tooltip: 'Listado de segmentos',
+                  onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.map_outlined,
+                      color: AppColors.moduleGreen),
+                  tooltip: 'Mapa global',
+                  onPressed: () => Get.offAllNamed(AppRoutes.mapa),
+                ),
+              ],
+              // La traza no navega, así que se deshabilita en vez de ocultarse:
+              // una AppBar que cambia de número de iconos desorienta más.
+              // Iniciar/finalizar una traza a mitad de envío chocaría además con
+              // el guard `_trazaEnGrabacion` del propio controller.
+              IgnorePointer(
+                ignoring: enviando,
+                child: Opacity(
+                  opacity: enviando ? 0.35 : 1,
+                  child: const TrackRecordButton(),
+                ),
+              ),
+              if (!enviando) const LogoutButton(),
+            ],
+          ),
+          body: Column(
+            children: [
+              _FiltrosBar(controller: controller),
+              const _ProgresoEnvioBar(),
+              const _ResultadoEnvioBanner(),
+              Expanded(
+                child: Obx(() {
+                  if (controller.isLoading.value) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                          color: AppColors.moduleGreen),
+                    );
+                  }
+                  if (controller.error.value != null) {
+                    return _ErrorView(
+                      message: controller.error.value!,
+                      onRetry: controller.loadSegmentos,
+                    );
+                  }
+                  if (controller.filtradas.isEmpty) {
+                    return _EmptyView(
+                      isFiltered: controller.segmentos.isNotEmpty,
+                    );
+                  }
+                  return RefreshIndicator(
+                    onRefresh: controller.loadSegmentos,
+                    color: AppColors.moduleGreen,
+                    child: _FlatList(controller: controller),
+                  );
+                }),
+              ),
+            ],
+          ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.moduleGreen),
-          tooltip: 'Volver',
-          onPressed: Get.back,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt, color: AppColors.moduleGreen),
-            tooltip: 'Listado de segmentos',
-            onPressed: () => Get.offAllNamed(AppRoutes.segmentos),
-          ),
-          IconButton(
-            icon: const Icon(Icons.map_outlined, color: AppColors.moduleGreen),
-            tooltip: 'Mapa global',
-            onPressed: () => Get.offAllNamed(AppRoutes.mapa),
-          ),
-          const TrackRecordButton(),
-          const LogoutButton(),
-        ],
-      ),
-      body: Column(
-        children: [
-          _FiltrosBar(controller: controller),
-          const _ResultadoEnvioBanner(),
-          Expanded(
-            child: Obx(() {
-              if (controller.isLoading.value) {
-                return const Center(
-                  child:
-                      CircularProgressIndicator(color: AppColors.moduleGreen),
-                );
-              }
-              if (controller.error.value != null) {
-                return _ErrorView(
-                  message: controller.error.value!,
-                  onRetry: controller.loadSegmentos,
-                );
-              }
-              if (controller.filtradas.isEmpty) {
-                return _EmptyView(
-                  isFiltered: controller.segmentos.isNotEmpty,
-                );
-              }
-              return RefreshIndicator(
-                onRefresh: controller.loadSegmentos,
-                color: AppColors.moduleGreen,
-                child: _FlatList(controller: controller),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -125,11 +167,36 @@ class _FiltrosBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Obx(() {
-                final busy = controller.isEnviandoTodos.value;
+                final enviandoTodos = controller.isEnviandoTodos.value;
+                final cancelando = controller.isCancelando.value;
+                // Tres estados: enviar → cancelar → cancelando. Sin el tercero,
+                // la UI diría "listo" mientras aún salen bytes (la cancelación
+                // es cooperativa) y un segundo toque solaparía envíos.
+                final (label, icon, bg, onPressed) =
+                    switch ((enviandoTodos, cancelando)) {
+                  (true, true) => (
+                      'Cancelando…',
+                      null,
+                      _cancelColor,
+                      null,
+                    ),
+                  (true, false) => (
+                      'Cancelar todo',
+                      Icons.stop_circle_outlined,
+                      _cancelColor,
+                      controller.cancelarEnvio,
+                    ),
+                  _ => (
+                      'Enviar todos',
+                      Icons.cloud_upload_outlined,
+                      AppColors.moduleGreen,
+                      controller.isEnviando ? null : controller.enviarAllCloud,
+                    ),
+                };
                 return ElevatedButton.icon(
-                  onPressed: busy ? null : controller.enviarAllCloud,
+                  onPressed: onPressed,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.moduleGreen,
+                    backgroundColor: bg,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 12),
@@ -137,17 +204,17 @@ class _FiltrosBar extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  icon: busy
+                  icon: icon == null
                       ? const SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: const Text('Enviar todos',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      : Icon(icon, size: 18),
+                  label: Text(label,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700)),
                 );
               }),
             ],
@@ -172,6 +239,71 @@ class _FiltrosBar extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ─── Progreso del envío en curso ────────────────────────────────────────────
+
+/// Barra indeterminada + contador mientras hay un envío vivo.
+///
+/// El spinner vivía antes dentro del botón; ese sitio lo ocupa ahora
+/// "Cancelar", y sin nada en movimiento la pantalla parece congelada durante
+/// una subida larga. La barra da la señal de actividad y el texto contesta la
+/// otra pregunta del operador: por dónde va.
+class _ProgresoEnvioBar extends GetView<ForzarEnvioController> {
+  const _ProgresoEnvioBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      if (!controller.isEnviando) return const SizedBox.shrink();
+      final cancelando = controller.isCancelando.value;
+      // Fracción no nula = hay un vídeo subiendo por trozos: la barra pasa a
+      // determinada. En el resto de jobs (una petición) se queda indeterminada,
+      // que es la verdad: no hay progreso medible que enseñar.
+      final fraccion = controller.progresoFraccion.value;
+      final base = controller.progresoEnvio.value.isEmpty
+          ? 'Enviando…'
+          : controller.progresoEnvio.value;
+      final texto = cancelando
+          ? 'Cancelando envío…'
+          : (fraccion == null
+              ? base
+              : '$base · vídeo ${(fraccion * 100).round()} %');
+      final color = cancelando ? _cancelColor : AppColors.moduleGreen;
+
+      return Container(
+        width: double.infinity,
+        color: AppColors.moduleGreenLight,
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                // null → indeterminada (animación continua).
+                value: cancelando ? null : fraccion,
+                minHeight: 4,
+                backgroundColor: color.withValues(alpha: 0.15),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              texto,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      );
+    });
   }
 }
 
@@ -302,6 +434,7 @@ class _FlatList extends StatelessWidget {
           ctName: controller.ctLabel(s.ctname),
           controller: controller,
           onEnviar: () => controller.enviarCloud(s),
+          onCancelar: controller.cancelarEnvio,
           onTap: () => Get.toNamed(AppRoutes.detalle, arguments: s),
         );
       },
@@ -348,6 +481,7 @@ class _SegmentCard extends StatelessWidget {
   final String ctName;
   final ForzarEnvioController controller;
   final VoidCallback onEnviar;
+  final VoidCallback onCancelar;
   final VoidCallback onTap;
 
   const _SegmentCard({
@@ -355,6 +489,7 @@ class _SegmentCard extends StatelessWidget {
     required this.ctName,
     required this.controller,
     required this.onEnviar,
+    required this.onCancelar,
     required this.onTap,
   });
 
@@ -376,172 +511,202 @@ class _SegmentCard extends StatelessWidget {
       ),
       color: Colors.white,
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: estadoColor.withValues(alpha: 0.7),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    bottomLeft: Radius.circular(10),
-                  ),
-                ),
+      // Navegar al detalle durante el envío permitiría editar un sobre a medio
+      // drenar: una foto añadida entre el upsert y el purge la borraría el
+      // siguiente intento del backend.
+      child: Obx(() => InkWell(
+            onTap: controller.isEnviando ? null : onTap,
+            child: _body(estadoColor, estadoBg, tipoColor),
+          )),
+    );
+  }
+
+  Widget _body(Color estadoColor, Color estadoBg, Color tipoColor) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: 4,
+            decoration: BoxDecoration(
+              color: estadoColor.withValues(alpha: 0.7),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                bottomLeft: Radius.circular(10),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            segmento.id != null ? '#${segmento.id}' : 'Sin ID',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade400,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          _Metric(
-                            icon: Icons.straighten,
-                            label: 'Long.',
-                            value:
-                                '${(segmento.longitud / 1000).toStringWithComma(decimals: 2)} km',
-                          ),
-                          const SizedBox(width: 12),
-                          _Metric(
-                            icon: Icons.square_foot,
-                            label: 'Sup.',
-                            value:
-                                '${segmento.superficie.toStringWithComma(decimals: 0)} m²',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
                       Text(
-                        segmento.descripcion.isEmpty
-                            ? '....'
-                            : segmento.descripcion,
+                        segmento.id != null ? '#${segmento.id}' : 'Sin ID',
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade900,
+                          fontSize: 11,
+                          color: Colors.grey.shade400,
+                          fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.business,
-                              size: 14, color: Colors.blueGrey.shade600),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              ctName,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.blueGrey.shade800,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if ((segmento.traza ?? '').isNotEmpty) ...[
-                            const SizedBox(width: 10),
-                            Icon(Icons.timeline,
-                                size: 14, color: Colors.blueGrey.shade600),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                segmento.traza!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.blueGrey.shade800,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ],
+                      const Spacer(),
+                      _Metric(
+                        icon: Icons.straighten,
+                        label: 'Long.',
+                        value:
+                            '${(segmento.longitud / 1000).toStringWithComma(decimals: 2)} km',
                       ),
-                      const SizedBox(height: 8),
-                      Divider(height: 1, color: Colors.grey.shade200),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                _Badge(
-                                  prefix: 'Estado:',
-                                  label: segmento.estado.etiqueta,
-                                  color: estadoColor,
-                                  bg: estadoBg,
-                                ),
-                                _Badge(
-                                  prefix: 'Tipo:',
-                                  label: segmento.tipoActividad.etiqueta,
-                                  color: tipoColor,
-                                  outlined: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          // Obx propio: el `itemBuilder` del ListView corre en
-                          // layout, fuera del build del Obx de la página, así
-                          // que leer `enviandoIds` allí no registra dependencia
-                          // y el spinner nunca se pintaría.
-                          Obx(() {
-                            final isSending = controller.enviandoIds
-                                .contains(segmento.clientId);
-                            return ElevatedButton.icon(
-                              onPressed: isSending ? null : onEnviar,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.moduleGreen,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
-                                minimumSize: const Size(0, 32),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              icon: isSending
-                                  ? const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Icon(Icons.cloud_upload_outlined,
-                                      size: 14),
-                              label: const Text('Enviar',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700)),
-                            );
-                          }),
-                        ],
+                      const SizedBox(width: 12),
+                      _Metric(
+                        icon: Icons.square_foot,
+                        label: 'Sup.',
+                        value:
+                            '${segmento.superficie.toStringWithComma(decimals: 0)} m²',
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    segmento.descripcion.isEmpty
+                        ? '....'
+                        : segmento.descripcion,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.business,
+                          size: 14, color: Colors.blueGrey.shade600),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          ctName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blueGrey.shade800,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if ((segmento.traza ?? '').isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        Icon(Icons.timeline,
+                            size: 14, color: Colors.blueGrey.shade600),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            segmento.traza!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.blueGrey.shade800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: Colors.grey.shade200),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            _Badge(
+                              prefix: 'Estado:',
+                              label: segmento.estado.etiqueta,
+                              color: estadoColor,
+                              bg: estadoBg,
+                            ),
+                            _Badge(
+                              prefix: 'Tipo:',
+                              label: segmento.tipoActividad.etiqueta,
+                              color: tipoColor,
+                              outlined: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // Obx propio: el `itemBuilder` del ListView corre en
+                      // layout, fuera del build del Obx de la página, así
+                      // que leer `enviandoIds` allí no registra dependencia
+                      // y el spinner nunca se pintaría.
+                      Obx(() {
+                        final isSending =
+                            controller.enviandoIds.contains(segmento.clientId);
+                        final cancelando = controller.isCancelando.value;
+                        // Solo la tarjeta que está subiendo ofrece cancelar; el
+                        // resto queda deshabilitado mientras haya cualquier
+                        // envío vivo (individual o masivo).
+                        final (label, icon, bg, onPressed) =
+                            switch ((isSending, cancelando)) {
+                          (true, true) => (
+                              'Cancelando…',
+                              null,
+                              _cancelColor,
+                              null,
+                            ),
+                          (true, false) => (
+                              'Cancelar',
+                              Icons.stop_circle_outlined,
+                              _cancelColor,
+                              onCancelar,
+                            ),
+                          _ => (
+                              'Enviar',
+                              Icons.cloud_upload_outlined,
+                              AppColors.moduleGreen,
+                              controller.isEnviando ? null : onEnviar,
+                            ),
+                        };
+                        return ElevatedButton.icon(
+                          onPressed: onPressed,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: bg,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            minimumSize: const Size(0, 32),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: icon == null
+                              ? const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white),
+                                )
+                              : Icon(icon, size: 14),
+                          label: Text(label,
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700)),
+                        );
+                      }),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

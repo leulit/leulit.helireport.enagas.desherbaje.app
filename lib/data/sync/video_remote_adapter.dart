@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
 import '../../core/app_log.dart';
+import '../../core/sync/contracts/sync_cancelled_exception.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart' show SyncOperation;
 import '../../domain/entities/video_segmento_entity.dart';
@@ -59,6 +62,8 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
   Future<SyncOutcome<VideoSegmentoEntity>> push({
     required VideoSegmentoEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (operation != SyncOperation.create) {
       return SyncUnrecoverable<VideoSegmentoEntity>(
@@ -140,6 +145,8 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
         uploadId: uploadId,
         startOffset: offset,
         totalBytes: totalBytes,
+        token: token,
+        onProgress: onProgress,
       );
 
       // ── Step 3: Complete (con reanudación por 409, §6.4) ────────────────
@@ -177,6 +184,8 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
           uploadId: uploadId,
           startOffset: serverOffset,
           totalBytes: totalBytes,
+          token: token,
+          onProgress: onProgress,
         );
       }
 
@@ -200,12 +209,20 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
   /// (`200 { offset }`), nunca un contador local. Un `409 { offset }` (§6.2)
   /// significa que el servidor va por delante: se adopta su offset y se sigue.
   /// Propaga [NetworkError] cuando no hay forma de avanzar.
+  ///
+  /// Este es el único bucle largo del motor de push: un fichero de 300 MB son
+  /// ~60 chunks. Por eso comprueba [token] ANTES de cada chunk y lanza
+  /// [SyncCancelledException]: sin ese chequeo, "Cancelar" tardaría minutos en
+  /// reaccionar. Los bytes ya subidos no se pierden — el servidor conserva su
+  /// offset y el siguiente envío reanuda desde ahí.
   Future<void> _uploadChunks({
     required File file,
     required VideoSegmentoEntity entity,
     required String uploadId,
     required int startOffset,
     required int totalBytes,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     int offset = startOffset;
     int resumeRounds = 0;
@@ -213,7 +230,16 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
 
     final raf = await file.open();
     try {
+      // Estado inicial: en una reanudación el offset ya no es 0 y la barra
+      // debe arrancar donde está, no en cero.
+      onProgress?.call(SyncProgress(sent: offset, total: totalBytes));
       while (offset < totalBytes) {
+        if (token?.isCancelled ?? false) {
+          AppLog.i(
+              'VideoRemoteAdapter: cancelado en offset $offset/$totalBytes '
+              '(uploadId $uploadId); se reanudará en el próximo envío.');
+          throw const SyncCancelledException();
+        }
         final end = (offset + _chunkSize).clamp(0, totalBytes);
         await raf.setPosition(offset);
         final chunkBytes = await raf.read(end - offset);
@@ -274,6 +300,7 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
                 '$serverOffset (uploadId $uploadId)',
               );
               unawaited(_store.saveUploadOffset(entity.clientId, offset));
+              onProgress?.call(SyncProgress(sent: offset, total: totalBytes));
               chunkDone = true;
               break;
             }
@@ -281,6 +308,7 @@ class VideoRemoteAdapter extends RemoteAdapter<VideoSegmentoEntity> {
             offset = (body['offset'] as num?)?.toInt() ?? end;
             // fire-and-forget: best-effort persistence of offset for UI
             unawaited(_store.saveUploadOffset(entity.clientId, offset));
+            onProgress?.call(SyncProgress(sent: offset, total: totalBytes));
             chunkDone = true;
           } on NetworkError catch (e) {
             final retryable = e.category == NetworkErrorCategory.offline ||

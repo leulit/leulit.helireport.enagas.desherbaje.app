@@ -29,15 +29,60 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
   String initialDescripcion = '',
   TipoActividad initialTipoActividad = TipoActividad.posicionDesherbajeTraza,
 }) {
-  final descripcionCtrl = TextEditingController(text: initialDescripcion);
-  final tipoRx = initialTipoActividad.obs;
+  return Get.dialog<CutDialogResult>(
+    _LinesCutCaptureDialog(
+      headerTitle: headerTitle,
+      headerSubtitle: headerSubtitle,
+      totalMeters: totalMeters,
+      totalSquareMeters: totalSquareMeters,
+      initialDescripcion: initialDescripcion,
+      initialTipoActividad: initialTipoActividad,
+    ),
+    barrierDismissible: false,
+  );
+}
 
-  final result = Get.dialog<CutDialogResult>(
-    Dialog(
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+/// StatefulWidget so the `TextEditingController` is disposed by the framework
+/// when the route is actually gone. Creating it in [showLinesCutCaptureDialog]
+/// and disposing it when `Get.dialog`'s future resolves is too early: the
+/// dialog is still animating out and its `TextField` keeps rebuilding.
+class _LinesCutCaptureDialog extends StatefulWidget {
+  const _LinesCutCaptureDialog({
+    required this.headerTitle,
+    required this.headerSubtitle,
+    required this.totalMeters,
+    required this.totalSquareMeters,
+    required this.initialDescripcion,
+    required this.initialTipoActividad,
+  });
+
+  final String headerTitle;
+  final String headerSubtitle;
+  final double totalMeters;
+  final double totalSquareMeters;
+  final String initialDescripcion;
+  final TipoActividad initialTipoActividad;
+
+  @override
+  State<_LinesCutCaptureDialog> createState() => _LinesCutCaptureDialogState();
+}
+
+class _LinesCutCaptureDialogState extends State<_LinesCutCaptureDialog> {
+  late final TextEditingController _descripcionCtrl =
+      TextEditingController(text: widget.initialDescripcion);
+  late TipoActividad _tipo = widget.initialTipoActividad;
+
+  @override
+  void dispose() {
+    _descripcionCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
         child: Padding(
@@ -51,32 +96,32 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
                   const CircleAvatar(
                     radius: 22,
                     backgroundColor: AppColors.moduleGreen,
-                    child: Icon(Icons.content_cut,
-                        color: Colors.white, size: 22),
+                    child:
+                        Icon(Icons.content_cut, color: Colors.white, size: 22),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(headerTitle, style: AppTextStyles.title),
-                        if (headerSubtitle.isNotEmpty) ...[
+                        Text(widget.headerTitle, style: AppTextStyles.title),
+                        if (widget.headerSubtitle.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Text(headerSubtitle,
-                              style: AppTextStyles.caption.copyWith(
-                                  color: AppColors.textSecondary)),
+                          Text(widget.headerSubtitle,
+                              style: AppTextStyles.caption
+                                  .copyWith(color: AppColors.textSecondary)),
                         ],
                         const SizedBox(height: 2),
                         Text(
-                          totalMeters >= 1000
-                              ? '${(totalMeters / 1000).toStringAsFixed(2)} km totales'
-                              : '${totalMeters.toStringAsFixed(0)} m totales',
+                          widget.totalMeters >= 1000
+                              ? '${(widget.totalMeters / 1000).toStringAsFixed(2)} km totales'
+                              : '${widget.totalMeters.toStringAsFixed(0)} m totales',
                           style: AppTextStyles.caption.copyWith(
                               color: AppColors.moduleGreenDark,
                               fontWeight: FontWeight.w700),
                         ),
                         Text(
-                          '${totalSquareMeters.toStringAsFixed(0)} m² de superficie',
+                          '${widget.totalSquareMeters.toStringAsFixed(0)} m² de superficie',
                           style: AppTextStyles.caption.copyWith(
                               color: AppColors.moduleGreenDark,
                               fontWeight: FontWeight.w700),
@@ -87,34 +132,43 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              TextField(
-                controller: descripcionCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Descripción',
-                  prefixIcon: Icon(Icons.description_outlined),
-                  alignLabelWithHint: true,
+              // El campo absorbe el alto sobrante en lugar de fijar un número de
+              // líneas: con `minLines: 10` el diálogo desbordaba en móvil y
+              // volvía a desbordar al crecer el texto.
+              Expanded(
+                child: TextField(
+                  controller: _descripcionCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción',
+                    prefixIcon: Icon(Icons.description_outlined),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
                 ),
-                minLines: 10,
-                maxLines: 14,
-                textAlignVertical: TextAlignVertical.top,
               ),
               const SizedBox(height: AppSpacing.md),
-              Obx(() => DropdownButtonFormField<TipoActividad>(
-                    initialValue: tipoRx.value,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de actividad',
-                      prefixIcon: Icon(Icons.construction_outlined),
-                    ),
-                    items: TipoActividad.values
-                        .map((t) => DropdownMenuItem(
-                              value: t,
-                              child: Text(t.etiqueta),
-                            ))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) tipoRx.value = v;
-                    },
-                  )),
+              DropdownButtonFormField<TipoActividad>(
+                initialValue: _tipo,
+                // Sin isExpanded el botón se dimensiona al texto natural y la
+                // etiqueta más larga desborda la fila interna (RenderFlex).
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de actividad',
+                  prefixIcon: Icon(Icons.construction_outlined),
+                ),
+                items: TipoActividad.values
+                    .map((t) => DropdownMenuItem(
+                          value: t,
+                          child:
+                              Text(t.etiqueta, overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _tipo = v);
+                },
+              ),
               const SizedBox(height: AppSpacing.lg),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -129,8 +183,8 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
                     label: const Text('Aplicar'),
                     onPressed: () => Get.back(
                       result: CutDialogResult(
-                        descripcion: descripcionCtrl.text.trim(),
-                        tipoActividad: tipoRx.value,
+                        descripcion: _descripcionCtrl.text.trim(),
+                        tipoActividad: _tipo,
                         estado: EstadoActividad.contratista,
                       ),
                     ),
@@ -141,9 +195,6 @@ Future<CutDialogResult?> showLinesCutCaptureDialog({
           ),
         ),
       ),
-    ),
-    barrierDismissible: false,
-  );
-
-  return result;
+    );
+  }
 }

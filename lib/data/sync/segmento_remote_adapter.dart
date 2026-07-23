@@ -1,4 +1,6 @@
 import '../../core/api_endpoints.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../../domain/entities/segmento_entity.dart';
@@ -29,6 +31,8 @@ class SegmentoRemoteAdapter extends RemoteAdapter<SegmentoEntity> {
   Future<SyncOutcome<SegmentoEntity>> push({
     required SegmentoEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (operation == SyncOperation.delete) {
       return SyncUnrecoverable<SegmentoEntity>(

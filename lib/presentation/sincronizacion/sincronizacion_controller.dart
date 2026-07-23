@@ -103,8 +103,22 @@ class SincronizacionController extends MyGetxController {
   /// en la vista; este método asume que ya se confirmó.
   Future<void> resetAppData() async {
     await OfflineDatabase.wipeAll(AppDI.database);
+    // Las fechas de "última descarga" viven en SharedPreferences, no en la BD:
+    // sin borrarlas, tras el reset cada fila seguiría mostrando una descarga
+    // que ya no existe en local.
+    await _clearLastDownloads();
     AppDI.sessionState.set(false);
     Get.offAllNamed(AppRoutes.login);
+  }
+
+  Future<void> _clearLastDownloads() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final kind in MasterDataKind.values) {
+      await prefs.remove('$lastDownloadPrefix${kind.name}');
+    }
+    rows.assignAll(
+      MasterDataKind.values.map((k) => MasterDataRow(kind: k)),
+    );
   }
 
   Future<void> _initRows() async {

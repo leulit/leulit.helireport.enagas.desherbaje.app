@@ -2,7 +2,6 @@
   "permissions": {
     "allow": [
       "Bash(/Users/emiloalvarez/Work/FLUTTER/flutter/bin/flutter test *)",
-
       "Bash(brew list *)",
       "Bash(brew install *)",
       "Bash(npm ls *)",
@@ -11,21 +10,18 @@
       "Bash(npm install *)",
       "Bash(python3 *)",
       "Bash(pip3 install *)",
-
       "Bash(git push *)",
       "Bash(git branch *)",
-
       "Bash(env)",
       "Bash(claude --version)",
       "Bash(claude update *)",
-
       "Read(//tmp/**)",
       "Read(//private/tmp/**)",
       "Read(//Applications/**)",
       "Read(//Users/emiloalvarez/**)",
-
       "WebFetch(domain:claude.com)",
-      "WebFetch(domain:docs.powersync.com)"
+      "WebFetch(domain:docs.powersync.com)",
+      "Bash(git checkout *)"
     ]
   },
   "enabledPlugins": {}

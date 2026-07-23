@@ -163,8 +163,7 @@ class _GroupedByCt extends StatelessWidget {
         final ct = ctNames[i];
         final list = grouped[ct]!;
         final totalLongitud = list.fold<double>(0, (s, e) => s + e.longitud);
-        final totalSuperficie =
-            list.fold<double>(0, (s, e) => s + e.superficie);
+        final totalSuperficie = list.fold<double>(0, (s, e) => s + e.superficie);
 
         return Obx(() {
           final isExpanded = controller.expandedCt.value == ct;
@@ -243,8 +242,7 @@ class _CtHeader extends StatelessWidget {
     // El color de fondo indica el estado del acordión: más intenso cuando
     // está abierto, claro cuando está cerrado. Sustituye al chevron para
     // que toda la información quepa en una sola línea.
-    final bg =
-        isExpanded ? const Color(0xFFC8E6C9) : AppColors.moduleGreenLight;
+    final bg = isExpanded ? const Color(0xFFC8E6C9) : AppColors.moduleGreenLight;
     return Material(
       color: bg,
       child: InkWell(
@@ -277,18 +275,22 @@ class _CtHeader extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  _HeaderBadge(
-                    value:
-                        '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
-                    bold: false,
-                    width: 90,
+                  Flexible(
+                    child: _HeaderBadge(
+                      value:
+                          '${(totalLongitud / 1000).toStringWithComma(decimals: 2)} km',
+                      bold: false,
+                      minWidth: 90,
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  _HeaderBadge(
-                    value:
-                        '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
-                    bold: false,
-                    width: 90,
+                  Flexible(
+                    child: _HeaderBadge(
+                      value:
+                          '${totalSuperficie.toStringWithComma(decimals: 0)} m²',
+                      bold: false,
+                      minWidth: 90,
+                    ),
                   ),
                 ],
               ),
@@ -304,13 +306,17 @@ class _HeaderBadge extends StatelessWidget {
   final String value;
   final bool strong;
   final bool bold;
-  final double? width;
+
+  /// Ancho MÍNIMO, no fijo: el badge crece con el texto (números largos,
+  /// textScaler del sistema). Con ancho fijo + alignment center el Text se
+  /// recortaba por ambos lados y mostraba solo los dígitos centrales.
+  final double? minWidth;
 
   const _HeaderBadge({
     required this.value,
     this.strong = false,
     this.bold = true,
-    this.width,
+    this.minWidth,
   });
 
   @override
@@ -320,14 +326,15 @@ class _HeaderBadge extends StatelessWidget {
     final border = strong ? AppColors.moduleGreen : const Color(0xFFA5D6A7);
 
     return Container(
-      width: width,
+      constraints:
+          minWidth == null ? null : BoxConstraints(minWidth: minWidth!),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: border),
       ),
-      alignment: width == null ? null : Alignment.center,
+      alignment: minWidth == null ? null : Alignment.center,
       child: Text(
         value,
         style: TextStyle(

@@ -235,4 +235,23 @@ void main() {
           ));
     });
   });
+
+  // ─── openTrazaFor() — crash recovery must not touch a live recording ───────
+
+  group('openTrazaFor()', () {
+    test('returns null while recording (the live traza is not an orphan)',
+        () async {
+      svc.setCurrentForTest(currentTraza(1));
+
+      expect(await svc.openTrazaFor(1), isNull);
+      verifyNever(() => store.findOpen(any()));
+    });
+
+    test('queries the store when not recording', () async {
+      final orphan = currentTraza(1);
+      when(() => store.findOpen(1)).thenAnswer((_) async => orphan);
+
+      expect(await svc.openTrazaFor(1), same(orphan));
+    });
+  });
 }

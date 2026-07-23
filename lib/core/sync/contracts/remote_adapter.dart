@@ -1,4 +1,6 @@
+import '../pull/cancel_token.dart';
 import 'sync_job.dart';
+import 'sync_progress.dart';
 import 'syncable.dart';
 
 /// Outcome of a single push attempt by a [RemoteAdapter].
@@ -61,9 +63,22 @@ final class SyncConflict<T extends Syncable> extends SyncOutcome<T> {
 /// the appropriate [SyncOutcome] subtype. The single exception is
 /// [AuthExpiredException]: the adapter should let it propagate so the
 /// engine can abort the drain.
+///
+/// [token] is the cooperative cancellation flag of the drain in progress.
+/// Adapters whose push is a single request may ignore it — the engine already
+/// checks it between jobs. Adapters with a long internal loop (the chunked
+/// video upload) MUST check it inside that loop and throw
+/// [SyncCancelledException]; otherwise "Cancelar" would take minutes to react.
+///
+/// [onProgress] is the same story for feedback: a one-request push has nothing
+/// to report (the caller's "element N of M" already covers it), but an adapter
+/// that spends minutes inside a single job must emit bytes so the UI can tell
+/// "uploading" from "hung".
 abstract class RemoteAdapter<T extends Syncable> {
   Future<SyncOutcome<T>> push({
     required T entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   });
 }

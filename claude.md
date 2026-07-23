@@ -4,19 +4,28 @@
 ---
 ## Skills
 
-### Core Skills (Activated)
-@.claude/skills/flutter-core/SKILL.md
-@.claude/skills/flutter-efficiency/SKILL.md
-@.claude/skills/flutter-ci-cd/SKILL.md
-@.claude/skills/flutter-imaging/SKILL.md
-@.claude/skills/flutter-gis/SKILL.md
-@.claude/skills/flutter-ci-cd/SKILL.md
-@.claude/skills/flutter-testing/SKILL.md
-@.claude/skills/flutter-pdf-reports/SKILL.md
-@.claude/skills/flutter-offline-sync/SKILL.md
-@.claude/skills/flutter-forms-validation/SKILL.md
-@.claude/skills/flutter-backend-integration/SKILL.md
-@.claude/skills/grill-me/SKILL.md
+Las skills activas son las del plugin **`leulit-ia-tools`** (`/leulit-ia`), cargadas bajo
+demanda: `leulit-ia-tools:flutter-core`, `flutter-testing`, `flutter-gis`, `flutter-offline-sync`,
+`flutter-backend-integration`, `flutter-imaging`, `flutter-pdf-reports`, `flutter-forms-validation`,
+`flutter-ci-cd`, `flutter-efficiency`, `engineering-principles`, más los agentes de review y los
+comandos `/fix`, `/plan`, `/review`, `/logsdart`, `/parallel`.
+
+Ya no hay skills locales en `.claude/skills/` — se eliminaron por duplicadas.
+
+> **GetX es deuda técnica, no el objetivo.** El proyecto arrancó con GetX y todavía queda mucho
+> (`GetxController`, `Get.toNamed`, `.obs`, bindings). No se puede cambiar de golpe: se elimina
+> **poco a poco**, y el destino es exactamente lo que documentan las skills del plugin — MVVM
+> sobre primitivas del SDK (`ChangeNotifier`, `ValueNotifier`/`ValueListenableBuilder`,
+> `go_router`, `Command`/`Result`).
+>
+> Regla práctica:
+> - **Código nuevo** → patrón del plugin. Nada de `.obs`/`Obx` nuevo; reactividad con
+>   `ValueNotifier` + `ValueListenableBuilder`.
+> - **Código que se toca** → migrar si el cambio ya lo abre; si no, dejarlo como está y no
+>   ampliar la superficie GetX.
+> - **Nunca** reescribir a GetX algo que ya salió de GetX.
+> - Los singletons globales van en `DI` (get_it), no en el service-locator de GetX.
+> - Toda migración de GetX que cambie funcionalidad o UX se valida con el responsable antes.
 
 ## Response Behaviour (Claude Code)
 
@@ -34,16 +43,17 @@ These apply to every line of code in this project, no exceptions:
 
 ### Architecture
 - Clean Architecture: presentation → domain → data, no cross-layer leaks
-- One `GetxController` per screen/feature — no shared controllers unless it's a `GetxService`
+- Un ViewModel/controller por pantalla o feature — nunca compartido. En pantallas ya migradas es un `ChangeNotifier`; en las que siguen en GetX, un `GetxController`. Lo global va en `DI`, no en un controller compartido.
 - Repository interfaces in `domain/`, implementations in `data/`
 - Use cases: one public method, one responsibility
 
 ### State Management
-- GetX only — no BLoC, no Riverpod, no Provider
-- **DI de singletons globales: `leulit_flutter_dependency_injection` (`DI`/`di.get`, facade sobre get_it), NO el service-locator de GetX.** GetX se usa para routing (`GetMaterialApp`/`GetPage`/`GetMiddleware`), reactividad (`.obs`/`Obx`) y bindings de controllers de pantalla. Servicios/stores/engine/repos-infra se registran y resuelven con `DI`. Regla: si es global → `DI.get<T>()`; si es controller de pantalla → binding GetX.
-- `StatelessWidget` + `GetView<Controller>` as the default
+- **Destino: MVVM sobre primitivas del SDK** (`ChangeNotifier`/`ValueNotifier`, `go_router`, `Command`/`Result`) — ver skills del plugin. GetX es legacy en retirada (ver §Skills).
+- Prohibido introducir stack nuevo: ni BLoC, ni Riverpod, ni Provider. Solo SDK.
+- **DI de singletons globales: `leulit_flutter_dependency_injection` (`DI`/`di.get`, facade sobre get_it), NO el service-locator de GetX.** Servicios/stores/engine/repos-infra se registran y resuelven con `DI`. Regla: si es global → `DI.get<T>()`; si es controller de pantalla → binding GetX (mientras siga sin migrar). Lo que aún vive en GetX: routing (`GetMaterialApp`/`GetPage`/`GetMiddleware`), reactividad vieja (`.obs`/`Obx`) y bindings de controllers de pantalla.
+- Vistas nuevas: `StatelessWidget` + `ListenableBuilder`/`ValueListenableBuilder`. `GetView<Controller>` solo en pantallas que aún no se han migrado.
 - `StatefulWidget` only for: `AnimationController`, `FocusNode`, `WidgetsBindingObserver`
-- `Obx` scope as narrow as possible — wrap only the rebuilding widget
+- Scope de rebuild lo más estrecho posible — `Obx` en lo viejo, `ValueListenableBuilder` en lo nuevo; envolver solo el widget que cambia
 - Never put business logic inside `build()`
 
 ### Code Quality
@@ -248,6 +258,13 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 - **El wire lo define el adaptador, no la entidad: añadir un campo a `toJson` NO es enviarlo.** Los adaptadores de push de media montan su payload campo a campo (`fields` del multipart en foto, body del init en vídeo) y nunca llaman a `toJson`, así que `gis_json` se generó, persistió y pintó en el mapa durante días sin salir del móvil — con la doc del contrato diciendo que sí viajaba. Al añadir un campo sincronizable, el test que vale es el que captura el payload REAL del adaptador; un test sobre `toJson` deja pasar el bug entero. Y un campo opcional se omite (clave ausente), nunca `''` ni `"null"`: el backend los guardaría como valor válido. (Fix 2026-07-21.)
 - **FKs de entidades hijas locales van por `clientId` (id local), nunca por el id remoto nullable.** Enlazar fotos/vídeos al segmento por `segmento_id` (id de nube) rompe en campo: el id remoto es `null`/`0` hasta que el segmento sube, así que las capturas caen todas bajo `0` (colisión entre segmentos) y no se reencuentran al recrear la vista — la media parece "perderse" aunque está en SQLite. Regla: la FK cliente→cliente viaja por la identidad que SIEMPRE existe (`clientId`); el id remoto es solo para el push. Y ningún reload debe hacer early-return por `id == null` — leer siempre del store local por `clientId`. (Fix 2026-07-09: columna `segmento_client_id` en `imagenes_segmento`/`videos_segmento`.)
 - **Un `TileLayer` sin `fallbackUrl` es un single point of failure, no un límite de zoom.** Si el único proveedor de tiles no tiene cobertura a ese nivel de zoom en esa zona, el mapa sale en blanco AL ENTRAR a la pantalla — y el síntoma ("blanco al abrir, bien al alejar el zoom") se lee como bug de límite de zoom cuando en realidad es que no hay red de respaldo si el proveedor falla o no cubre. Declarar siempre `fallbackUrl` en todo `TileLayer`. Y `maxNativeZoom` en flutter_map 8.x tiene default 19 — si el proveedor sirve hasta 20 (u otro nivel) y no se declara explícitamente, ese último escalón sale reescalado (borroso) en vez de servido nativo. (Fix 2026-07-22: los tres `TileLayer` del módulo, ver ARCHITECTURE_REFERENCE.md.)
+- **El `TextEditingController` de un diálogo lo posee el widget, nunca la función que lo abre.** Crear el controller en la función `showXDialog()` y hacer `dispose()` en su `finally` lo mata en cuanto resuelve el future de `Get.dialog` — pero la ruta sigue animando la salida (~150-250 ms) y su `TextField` se reconstruye durante esos frames: `A TextEditingController was used after being disposed`. El subárbol queda roto y arrastra una cascada que no se parece a la causa: `AnimatedDefaultTextStyle` (el label de `InputDecoration`) marcado dirty y huérfano → `Tried to build dirty widget in the wrong build scope`; `getTransformTo` sobre render objects sueltos → `object.dart: 'attached': is not true`; y al reiniciar, `Duplicate GlobalKeys` de `_OverlayEntryWidgetState` con el `_Theater` DETACHED. Regla: el controller vive en un `StatefulWidget` privado del diálogo y se libera en su `dispose()` — el framework lo hace cuando la ruta ya no existe. (Fix 2026-07-23: `finalize_traza_dialog.dart` y `lines_cut_dialog.dart`.) Un `TextEditingController` propiedad de un `GetxController` y liberado en su `onClose()` —`segmento_detalle_controller.dart`— es correcto y no entra en esta regla: el dueño sobrevive al diálogo.
+- **Un wipe borra FILAS, no ESQUEMA: `_entity_schema_version` queda fuera.** `OfflineDatabase.wipeAll` enumeraba tablas de `sqlite_master` y vaciaba también la de versiones. Las tablas seguían existiendo con sus columnas, pero cada entidad volvía a versión 0, así que en el arranque siguiente `migrate(0, N)` reejecutaba el DDL completo y el primer `ALTER TABLE … ADD COLUMN` moría con `duplicate column name` — app inarrancable tras pulsar "Reset". Regla: todo borrado masivo enumera qué tablas de infraestructura NO toca y por qué. Y ojo con el reflejo de "vaciar todo": el estado que describe el esquema no es dato de usuario. (Fix 2026-07-23.)
+- **Estado de UI persistido fuera de SQLite = estado que el reset olvida.** Las fechas de "última descarga" de la página de sincronización viven en `SharedPreferences` (`sync_master_last_download_*`), no en la BD, así que `wipeAll` las dejaba intactas y tras el reset cada fila seguía anunciando una descarga que ya no existía en local. Al añadir un botón de borrado, la lista de lo que borra se hace por almacén (SQLite + prefs + ficheros), no por tabla. (Fix 2026-07-23.)
+- **Un botón "Cancelar" que tarda minutos en reaccionar es un botón roto.** La cancelación cooperativa hay que llevarla hasta el bucle largo REAL, no solo al bucle exterior. En el push, el bucle largo no es el del outbox (un job por foto/mensaje) sino el de chunks del `VideoRemoteAdapter` (5 MB por vuelta, ~60 vueltas en un vídeo de 300 MB): comprobar el token solo entre jobs deja al operador pulsando un botón que no responde. Por eso `CancelToken` viaja en el contrato `RemoteAdapter.push` y llega al `SyncJobContext`. Corolarios: (a) el job en vuelo vuelve a `pending` (`SyncCancelledException` → `markPendingAgain`), NUNCA se queda en `syncing` — `nextPending` no lo vería hasta reiniciar la app; (b) `cancelled` es un desenlace propio en `DrainSummary`, no un `retryable` más, porque "lo paré yo" y "falló la red" exigen mensajes distintos; (c) hace falta un tercer estado de UI ("Cancelando…"): si el botón vuelve a "Enviar" al instante, la pantalla dice "listo" mientras aún salen bytes y un segundo toque solaparía envíos; (d) ocultar los botones de navegación no basta — sin `PopScope(canPop:false)` el back del sistema destruye la ruta con el envío vivo. (2026-07-23.)
+- **Si el spinner vivía dentro del botón, convertir ese botón en "Cancelar" borra el único indicio de actividad.** Al añadir un estado nuevo a un control hay que mirar qué señal ocupaba ese hueco antes. El feedback se movió a una barra propia (`_ProgresoEnvioBar`): `LinearProgressIndicator` + texto. Y el progreso tiene DOS escalas que no se sustituyen entre sí — "elemento N de M" (lo sabe el llamante, basta un contador) y bytes dentro de un elemento (solo lo sabe el adaptador). El vídeo dura minutos bajo UN job, así que sin la segunda el contador se queda quieto y parece colgado: `SyncProgressCallback` viaja por el mismo camino que `CancelToken` (contrato `RemoteAdapter.push` → `SyncJobContext` → `drain`) y la barra pasa de indeterminada a determinada solo mientras hay bytes. Detalles que se olvidan: emitir el offset INICIAL (en una reanudación la barra debe arrancar donde está, no en 0 %) y poner la fracción a `null` al acabar cada drain (si no, se queda clavada al 100 % del vídeo anterior mientras suben las fotos). (2026-07-23.)
+
+- **Una consulta de "recuperación de crash" que solo mira `ended_at IS NULL` no distingue lo abandonado de lo VIVO.** La traza que se está grabando ahora mismo cumple exactamente el mismo predicado que la que dejó un crash, así que `_recoverOrphanedTraza` (segmentos_list) disparaba el diálogo no descartable de "finalizar registro" al entrar en la pantalla con el GPS en marcha. El diálogo era el síntoma bonito; el daño real es que `finalizeOpen` cierra la fila y encola el job mientras el servicio sigue grabando: los puntos siguientes caen en una traza ya finalizada y el `finish()` posterior encola un SEGUNDO job para el mismo `clientId`. El guard va en el servicio (`openTrazaFor` devuelve `null` si `isRecording`), no en la pantalla: la invariante "lo que estoy grabando no es huérfano" es del dueño del estado, y así cualquier futuro llamador la hereda. Nada se pierde: una huérfana real se recupera al volver a entrar tras pulsar Stop, cuando vuelve a ser la única abierta (importa porque `findOpen` usa `limit 1` sin `orderBy`, y con dos filas abiertas devolvía una arbitraria — alcanzable porque login puede aterrizar en `sincronizacion`, no siempre en `segmentos`). (Fix 2026-07-23.)
 
 ---
 

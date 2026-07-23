@@ -168,8 +168,19 @@ class GpsBackgroundService extends GetxService {
 
   /// The open traza (`endedAt == null`) for [operadorId], if any. Used by the
   /// recovery flow to detect a traza left open by a crash.
-  Future<TrazaEntity?> openTrazaFor(int operadorId) =>
-      _store.findOpen(operadorId);
+  ///
+  /// Returns `null` while a recording is in progress: the traza being recorded
+  /// right now also has `ended_at IS NULL`, so without this guard the recovery
+  /// flow would treat it as orphaned, pop the "finalizar registro" dialog
+  /// unprompted and close + enqueue a live traza (points kept arriving into an
+  /// already finalized row, and `finish` enqueued a second job for the same
+  /// clientId). A genuinely orphaned traza is not lost — it is recovered on the
+  /// next entry to the list screen once the recording has been stopped, when it
+  /// is again the only open one.
+  Future<TrazaEntity?> openTrazaFor(int operadorId) async {
+    if (isRecording) return null;
+    return _store.findOpen(operadorId);
+  }
 
   /// Closes a traza left open by a crash: finalizes it with [name] and the
   /// current timestamp and enqueues its outbox job, without touching this

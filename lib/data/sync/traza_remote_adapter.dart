@@ -1,6 +1,8 @@
 import '../../core/api_endpoints.dart';
 import '../../core/gis/capture_meta.dart';
 import '../../core/gis/media_gis_geojson.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../../domain/entities/traza_entity.dart';
@@ -22,6 +24,8 @@ class TrazaRemoteAdapter extends RemoteAdapter<TrazaEntity> {
   Future<SyncOutcome<TrazaEntity>> push({
     required TrazaEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (operation != SyncOperation.create) {
       return SyncUnrecoverable<TrazaEntity>(

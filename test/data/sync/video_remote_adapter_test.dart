@@ -915,6 +915,54 @@ void main() {
     });
   });
 
+  // ─── push — progreso por bytes ──────────────────────────────────────────
+  //
+  // El vídeo es el ÚNICO job que dura minutos: sin bytes, la barra de la UI no
+  // puede distinguir "subiendo" de "colgado".
+  group('push(create) — onProgress', () {
+    late File f;
+    setUp(() async => f = await _tmpFile(bytes: 10));
+    tearDown(() async {
+      if (f.existsSync()) await f.delete();
+    });
+
+    test('emite offset inicial y el confirmado por el servidor', () async {
+      network
+        ..queueInit(_okInit())
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final vistos = <double?>[];
+      await adapter.push(
+        entity: _entity(ruta: f.path),
+        operation: SyncOperation.create,
+        onProgress: (p) => vistos.add(p.fraction),
+      );
+
+      expect(vistos.first, equals(0.0)); // arranque
+      expect(vistos.last, equals(1.0)); // offset confirmado == total
+    });
+
+    test('en reanudación arranca en el offset del servidor, no en cero',
+        () async {
+      network
+        ..queueStatus(_okStatus(offset: 4, complete: false))
+        ..queuePatch(_okPatch(offset: 10))
+        ..queueComplete(_okComplete());
+
+      final vistos = <double?>[];
+      await adapter.push(
+        entity: _entity(ruta: f.path, uploadId: 'up-1'),
+        operation: SyncOperation.create,
+        onProgress: (p) => vistos.add(p.fraction),
+      );
+
+      // Sin esto la barra saltaría a 0 % en cada reanudación.
+      expect(vistos.first, closeTo(0.4, 0.001));
+      expect(vistos.last, equals(1.0));
+    });
+  });
+
   // ─── push — unsupported operations ──────────────────────────────────────
 
   group('push — unsupported operations', () {

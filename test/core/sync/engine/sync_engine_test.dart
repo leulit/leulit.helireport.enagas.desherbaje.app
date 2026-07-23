@@ -7,11 +7,14 @@ import 'package:helireport_desherbaje/core/sync/contracts/conflict_resolver.dart
 import 'package:helireport_desherbaje/core/sync/contracts/local_store.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/remote_adapter.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/remote_fetcher.dart';
+import 'package:helireport_desherbaje/core/sync/contracts/sync_cancelled_exception.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/sync_job.dart';
+import 'package:helireport_desherbaje/core/sync/contracts/sync_progress.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/syncable.dart';
 import 'package:helireport_desherbaje/core/sync/database/offline_database.dart';
 import 'package:helireport_desherbaje/core/sync/engine/sync_engine.dart';
 import 'package:helireport_desherbaje/core/sync/outbox/outbox_queue.dart';
+import 'package:helireport_desherbaje/core/sync/pull/cancel_token.dart';
 import 'package:helireport_desherbaje/core/sync/sync_actions.dart';
 import 'package:helireport_desherbaje/core/sync/type_registry.dart';
 
@@ -75,8 +78,7 @@ class _FakeStore extends LocalStore<_TestEntity> {
   }
 
   @override
-  Future<_TestEntity?> findByClientId(String clientId) async =>
-      _data[clientId];
+  Future<_TestEntity?> findByClientId(String clientId) async => _data[clientId];
 
   @override
   Future<_TestEntity?> findByRemoteId(String remoteId) async => null;
@@ -134,10 +136,26 @@ class _FakeAdapter extends RemoteAdapter<_TestEntity> {
     });
   }
 
+  /// Cancela [token] y aborta en la Nª llamada (1-indexed), como haría el
+  /// adaptador de vídeo entre chunks; el resto de llamadas van bien.
+  factory _FakeAdapter.cancelOnCall(int n, CancelToken token) {
+    int calls = 0;
+    return _FakeAdapter((_, __) async {
+      calls++;
+      if (calls == n) {
+        token.cancel();
+        throw const SyncCancelledException();
+      }
+      return const SyncSuccess();
+    });
+  }
+
   @override
   Future<SyncOutcome<_TestEntity>> push({
     required _TestEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     callCount++;
     return _fn(entity, operation);
@@ -234,7 +252,8 @@ void main() {
   });
 
   // ── A: retryable terminates, job processed exactly once ───────────────────
-  test('A – retryable adapter: drain terminates, adapter called once, '
+  test(
+      'A – retryable adapter: drain terminates, adapter called once, '
       'isDraining=false', () async {
     final adapter = _FakeAdapter.retryable();
     final f = await _build(adapter: adapter);
@@ -268,7 +287,8 @@ void main() {
   });
 
   // ── C: 150 jobs, limit 100 — all processed, none duplicated ───────────────
-  test('C – 150 jobs succeed; 2-batch walk; adapter called 150 times; '
+  test(
+      'C – 150 jobs succeed; 2-batch walk; adapter called 150 times; '
       'outbox cleared', () async {
     final adapter = _FakeAdapter.success();
     final f = await _build(adapter: adapter);
@@ -287,7 +307,8 @@ void main() {
   });
 
   // ── D: mixed outcomes, each adapter call exactly once ─────────────────────
-  test('D – success/retryable/unrecoverable: summary correct, '
+  test(
+      'D – success/retryable/unrecoverable: summary correct, '
       'each job processed once', () async {
     final outcomes = <String, SyncOutcome<_TestEntity>>{
       'ok': const SyncSuccess(),
@@ -320,7 +341,8 @@ void main() {
   });
 
   // ── E: AuthExpiredException on 2nd of 3 jobs ──────────────────────────────
-  test('E – auth expires on 2nd job: authExpired=true, isDraining=false, '
+  test(
+      'E – auth expires on 2nd job: authExpired=true, isDraining=false, '
       'SyncActions.authExpired dispatched once, c2 back to pending', () async {
     final adapter = _FakeAdapter.authOnCall(2); // c1 succeeds, c2 throws
     final f = await _build(adapter: adapter);
@@ -420,6 +442,65 @@ void main() {
     // The job is retried; call 2 is success.
     expect(s2.succeeded, equals(1));
     expect(f.engine.isDraining, isFalse);
+    await f.db.close();
+  });
+
+  // ── H: token ya cancelado antes de empezar ────────────────────────────────
+  test('H – token cancelado de entrada: no se toca ningún job', () async {
+    final adapter = _FakeAdapter.success();
+    final f = await _build(adapter: adapter);
+    await _seed(f, 'c1');
+
+    final token = CancelToken()..cancel();
+    final summary = await f.engine.drain(token: token);
+
+    expect(summary.cancelled, isTrue);
+    expect(summary.succeeded, equals(0));
+    expect(adapter.callCount, equals(0));
+    expect(await f.outbox.countPending(), equals(1));
+    expect(f.engine.isDraining, isFalse);
+    await f.db.close();
+  });
+
+  // ── I: cancelación a media tanda ──────────────────────────────────────────
+  test(
+      'I – cancelado entre jobs: los posteriores no se procesan y quedan '
+      'pendientes', () async {
+    final token = CancelToken();
+    // El 2º job cancela y aborta como haría el vídeo entre chunks.
+    final adapter = _FakeAdapter.cancelOnCall(2, token);
+    final f = await _build(adapter: adapter);
+    for (var i = 0; i < 5; i++) {
+      await _seed(f, 'c$i');
+    }
+
+    final summary = await f.engine.drain(token: token);
+
+    expect(summary.cancelled, isTrue);
+    expect(summary.succeeded, equals(1)); // solo el primero
+    expect(adapter.callCount, equals(2)); // el 3º ni se intenta
+    expect(f.engine.isDraining, isFalse);
+    await f.db.close();
+  });
+
+  // ── J: el job en vuelo NO se queda en `syncing` ───────────────────────────
+  // Regresión: `nextPending` solo lee `pending`; un job abandonado en `syncing`
+  // es invisible para todo envío posterior hasta reiniciar la app.
+  test('J – el job cancelado a media subida vuelve a pending', () async {
+    final token = CancelToken();
+    final adapter = _FakeAdapter.cancelOnCall(1, token);
+    final f = await _build(adapter: adapter);
+    await _seed(f, 'c1');
+
+    final summary = await f.engine.drain(token: token);
+    expect(summary.cancelled, isTrue);
+    expect(summary.succeeded, equals(0));
+
+    // Sigue pendiente y un envío nuevo lo recoge.
+    expect(await f.outbox.countPending(), equals(1));
+    final s2 = await f.engine.drain();
+    expect(s2.succeeded, equals(1));
+    expect(await f.outbox.countPending(), equals(0));
     await f.db.close();
   });
 }

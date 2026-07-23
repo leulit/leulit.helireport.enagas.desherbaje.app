@@ -2,7 +2,10 @@ import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../contracts/auth_expired_exception.dart';
+import '../contracts/sync_cancelled_exception.dart';
+import '../contracts/sync_progress.dart';
 import '../outbox/outbox_queue.dart';
+import '../pull/cancel_token.dart';
 import '../sync_actions.dart';
 import '../type_registry.dart';
 import 'sync_job_context.dart';
@@ -21,12 +24,18 @@ class DrainSummary {
   final int conflicts;
   final bool authExpired;
 
+  /// El usuario cortó el envío. NO se contabiliza como `retryable`: un envío
+  /// cancelado a mano y uno que falló por red son desenlaces distintos y el
+  /// aviso al operador tiene que distinguirlos. Simétrico a `PullSummary`.
+  final bool cancelled;
+
   const DrainSummary({
     this.succeeded = 0,
     this.retryable = 0,
     this.rejected = 0,
     this.conflicts = 0,
     this.authExpired = false,
+    this.cancelled = false,
   });
 
   DrainSummary copyWith({
@@ -35,6 +44,7 @@ class DrainSummary {
     int? rejected,
     int? conflicts,
     bool? authExpired,
+    bool? cancelled,
   }) =>
       DrainSummary(
         succeeded: succeeded ?? this.succeeded,
@@ -42,6 +52,7 @@ class DrainSummary {
         rejected: rejected ?? this.rejected,
         conflicts: conflicts ?? this.conflicts,
         authExpired: authExpired ?? this.authExpired,
+        cancelled: cancelled ?? this.cancelled,
       );
 
   int get total => succeeded + retryable + rejected + conflicts;
@@ -78,9 +89,21 @@ class SyncEngine {
   /// Termination is guaranteed by a [Set<int>] of already-processed job ids:
   /// even if [OutboxQueue.markPendingAgain] puts a retryable job back to
   /// `pending`, it will not be re-fetched within the same drain call.
+  ///
+  /// [token] cancels the drain cooperatively. It is checked before starting
+  /// each job and travels into the adapter (which checks it inside its own long
+  /// loops, e.g. the chunked video upload). The job in flight when the token
+  /// fires goes back to `pending` — never left in `syncing`, which would hide
+  /// it from `nextPending` until the app restarts.
+  ///
+  /// [onProgress] recibe los bytes de los adaptadores que suben por trozos
+  /// (hoy solo el de vídeo). El resto de jobs no reportan nada: son una
+  /// petición y el contador "elemento N de M" del llamante ya los cubre.
   Future<DrainSummary> drain({
     String? entityType,
     Set<String>? onlyClientIds,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (_isDraining) return const DrainSummary();
     _isDraining = true;
@@ -98,6 +121,10 @@ class SyncEngine {
 
     try {
       while (true) {
+        if (token?.isCancelled ?? false) {
+          summary = summary.copyWith(cancelled: true);
+          break;
+        }
         final batch = await _outbox.nextPending(
           entityType: entityType,
           limit: 100,
@@ -110,6 +137,10 @@ class SyncEngine {
         if (fresh.isEmpty) break;
 
         for (final job in fresh) {
+          if (token?.isCancelled ?? false) {
+            summary = summary.copyWith(cancelled: true);
+            return summary;
+          }
           processed.add(job.id);
 
           final registration = _registry.lookup(job.entityType);
@@ -131,9 +162,26 @@ class SyncEngine {
           }
 
           await _outbox.markSyncing(job.id);
-          final ctx = SyncJobContext(job: job, registration: registration);
+          final ctx = SyncJobContext(
+            job: job,
+            registration: registration,
+            token: token,
+            onProgress: onProgress,
+          );
 
           final result = await pipeline.run(DataPipeline.of(ctx));
+
+          if (result.isFailure &&
+              result.errorOrNull is SyncCancelledException) {
+            // El adaptador abortó a mitad (p.ej. entre chunks de vídeo). El job
+            // vuelve a `pending`: cancelado no es fallado, y dejarlo `syncing`
+            // lo escondería de `nextPending` hasta reiniciar la app.
+            await _outbox.markPendingAgain(
+              job.id,
+              error: 'Cancelado por el usuario',
+            );
+            return summary.copyWith(cancelled: true);
+          }
 
           if (result.isFailure && result.errorOrNull is AuthExpiredException) {
             // Roll back the syncing flag so the job retries cleanly after

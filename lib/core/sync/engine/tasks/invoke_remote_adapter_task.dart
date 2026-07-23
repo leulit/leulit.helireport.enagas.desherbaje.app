@@ -2,6 +2,7 @@ import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
 
 import '../../contracts/auth_expired_exception.dart';
 import '../../contracts/remote_adapter.dart';
+import '../../contracts/sync_cancelled_exception.dart';
 import '../sync_job_context.dart';
 
 /// Calls the registration's [RemoteAdapter.push] for the entity in the
@@ -44,8 +45,15 @@ class InvokeRemoteAdapterTask extends PipelineTask<SyncJobContext> {
       ctx.outcome = await adapter.push(
         entity: entity,
         operation: ctx.job.operation,
+        token: ctx.token,
+        onProgress: ctx.onProgress,
       );
     } on AuthExpiredException {
+      rethrow;
+    } on SyncCancelledException {
+      // Cancelar no es fallar: se propaga para que el motor devuelva el job a
+      // `pending`. Tragarlo aquí lo convertiría en un SyncRetryable con un
+      // `last_error` que mentiría sobre la causa.
       rethrow;
     } catch (e) {
       ctx.outcome = SyncRetryable('Uncaught: $e');

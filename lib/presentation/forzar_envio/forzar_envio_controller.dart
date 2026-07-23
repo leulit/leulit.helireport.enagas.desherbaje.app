@@ -12,6 +12,8 @@ import '../../core/services/connectivity_service.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../../core/sync/engine/sync_engine.dart';
 import '../../core/sync/outbox/outbox_queue.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../data/sync/imagen_local_store.dart';
 import '../../data/sync/mensaje_local_store.dart';
@@ -75,6 +77,54 @@ class ForzarEnvioController extends MyGetxController {
   /// primer upsert, así que todo segmento nuevo colisionaría en la misma clave.
   final enviandoIds = <String>{}.obs;
   final isEnviandoTodos = false.obs;
+
+  /// El usuario pulsó "Cancelar" y el envío aún no se ha detenido. La
+  /// cancelación es cooperativa (hasta ~un chunk de vídeo de retardo), así que
+  /// hace falta un tercer estado: sin él, la UI volvería a "Enviar" mientras
+  /// todavía salen bytes y un segundo toque solaparía envíos.
+  final isCancelando = false.obs;
+
+  /// Token del envío en curso. Uno solo: "enviar" y "enviar todos" son
+  /// mutuamente excluyentes (ambos comprueban el otro antes de arrancar).
+  CancelToken? _token;
+
+  /// Progreso legible del envío en curso ("Enviando 2 de 7 · descripción").
+  /// Vacío cuando no hay envío. El botón ya no puede alojar el spinner —ese
+  /// sitio lo ocupa "Cancelar"—, así que el feedback de "está pasando algo"
+  /// vive aquí y en la barra que lo acompaña.
+  final progresoEnvio = ''.obs;
+
+  /// Fracción 0..1 de la subida en curso, o `null` = indeterminado. Solo los
+  /// adaptadores con bucle largo (vídeo) la rellenan; el resto de jobs son una
+  /// petición y no tienen nada que reportar.
+  final progresoFraccion = Rxn<double>();
+
+  /// Sumidero que se pasa a `drain`. Se limpia al terminar cada drain para que
+  /// la barra no se quede clavada al 100 % del vídeo anterior mientras suben
+  /// fotos o mensajes.
+  void _onProgresoBytes(SyncProgress p) => progresoFraccion.value = p.fraction;
+
+  void _publicarProgreso(int indice, int total, SegmentoEntity s) {
+    final desc = s.descripcion.trim();
+    progresoEnvio.value = desc.isEmpty
+        ? 'Enviando $indice de $total'
+        : 'Enviando $indice de $total · $desc';
+  }
+
+  /// Hay un envío vivo (individual o masivo). La vista lo usa para ocultar la
+  /// navegación y desactivar el resto de botones.
+  bool get isEnviando => isEnviandoTodos.value || enviandoIds.isNotEmpty;
+
+  /// Corta el envío en curso. No deshace nada: lo ya subido sigue subido y lo
+  /// que quedaba sigue pendiente en el móvil. El vídeo a medias se reanuda
+  /// desde el offset del servidor en el siguiente envío.
+  void cancelarEnvio() {
+    final token = _token;
+    if (token == null || token.isCancelled) return;
+    isCancelando.value = true;
+    token.cancel();
+    AppLog.i('ForzarEnvioController: envío cancelado por el usuario.');
+  }
 
   /// Último resumen de envío (subidos / reintentables / rechazados / conflictos).
   final lastDrainSummary = Rx<DrainSummary?>(null);
@@ -195,6 +245,7 @@ class ForzarEnvioController extends MyGetxController {
         rejected: a.rejected + b.rejected,
         conflicts: a.conflicts + b.conflicts,
         authExpired: a.authExpired || b.authExpired,
+        cancelled: a.cancelled || b.cancelled,
       );
 
   /// Envía a la nube todo el contenido de un segmento y, si todo queda
@@ -321,8 +372,14 @@ class ForzarEnvioController extends MyGetxController {
     List<(String, Set<String>)> scopes,
   ) async {
     AppLog.i('ForzarEnvioController._sendOne(${s.id}): drenando "segmento"...');
-    final segSummary = await _engine
-        .drain(entityType: 'segmento', onlyClientIds: {s.clientId});
+    final segSummary = await _engine.drain(
+      entityType: 'segmento',
+      onlyClientIds: {s.clientId},
+      token: _token,
+    );
+    progresoFraccion.value = null;
+
+    if (segSummary.cancelled) return segSummary;
 
     if (segSummary.authExpired ||
         segSummary.rejected > 0 ||
@@ -380,10 +437,20 @@ class ForzarEnvioController extends MyGetxController {
       if (ids.isEmpty) continue; // nada de este tipo para este segmento
       AppLog.i(
           'ForzarEnvioController._sendOne(${s.id}): drenando "$entityType"...');
-      final summary =
-          await _engine.drain(entityType: entityType, onlyClientIds: ids);
+      final summary = await _engine.drain(
+        entityType: entityType,
+        onlyClientIds: ids,
+        token: _token,
+        onProgress: _onProgresoBytes,
+      );
+      progresoFraccion.value = null;
       combined = _accumulate(combined, summary);
       if (summary.authExpired) return combined; // no purgar tras auth expirado
+      // Cancelado con hijos aún por drenar: el sobre no está completo, así que
+      // no hay nada que cerrar. Si la cancelación llega DESPUÉS de este bucle,
+      // se deja completar el sync-complete (abajo): los bytes ya están arriba y
+      // abortar el cierre dejaría sus filas `pending` en el backend para nada.
+      if (summary.cancelled) return combined;
     }
 
     // Todo OK del segmento → sync-complete + borrado; algo pendiente → se queda.
@@ -455,6 +522,14 @@ class ForzarEnvioController extends MyGetxController {
 
     if (lastError.value.isNotEmpty) return;
 
+    // Cancelado a mano ≠ terminado. Se reporta como aviso (no error): nada se
+    // ha perdido, pero decir "envío completado" sería mentir.
+    if (summary.cancelled) {
+      lastInfo.value = 'Envío cancelado: ${summary.succeeded} elemento(s) '
+          'subidos. El resto sigue guardado en el móvil.';
+      return;
+    }
+
     lastInfo.value = summary.succeeded > 0
         ? 'Envío completado: ${summary.succeeded} elemento(s) subidos a la nube.'
         : 'No había nada pendiente de enviar: ya estaba todo sincronizado.';
@@ -488,7 +563,10 @@ class ForzarEnvioController extends MyGetxController {
 
     final key = segmento.clientId;
     if (enviandoIds.contains(key)) return; // guard re-entrancia
+    if (isEnviandoTodos.value) return; // envío masivo en curso
     enviandoIds.add(key);
+    _token = CancelToken();
+    _publicarProgreso(1, 1, segmento);
 
     try {
       final summary = await _sendOne(segmento);
@@ -504,6 +582,10 @@ class ForzarEnvioController extends MyGetxController {
       lastError.value = e.toString();
       AppLog.e('ForzarEnvioController.enviarCloud', error: e, stackTrace: st);
     } finally {
+      _token = null;
+      isCancelando.value = false;
+      progresoEnvio.value = '';
+      progresoFraccion.value = null;
       enviandoIds.remove(key);
       await loadSegmentos();
     }
@@ -528,7 +610,9 @@ class ForzarEnvioController extends MyGetxController {
       return;
     }
     if (isEnviandoTodos.value) return;
+    if (enviandoIds.isNotEmpty) return; // envío individual en curso
     isEnviandoTodos.value = true;
+    _token = CancelToken();
 
     try {
       // Segmentos pendientes: los que NO están totalmente sincronizados, más
@@ -556,9 +640,18 @@ class ForzarEnvioController extends MyGetxController {
       }
 
       var combined = const DrainSummary();
-      for (final s in pending) {
+      for (var i = 0; i < pending.length; i++) {
+        final s = pending[i];
+        // Corte entre sobres: el que ya empezó decide él mismo dónde parar
+        // (`_drenarSobre`); aquí solo se evita arrancar el siguiente.
+        if (_token?.isCancelled ?? false) {
+          combined = combined.copyWith(cancelled: true);
+          break;
+        }
+        _publicarProgreso(i + 1, pending.length, s);
         final summary = await _sendOne(s);
         combined = _accumulate(combined, summary);
+        if (summary.cancelled) break;
         if (summary.authExpired) {
           AppLog.w('ForzarEnvioController.enviarAllCloud: '
               'auth expirado, abortando.');
@@ -569,8 +662,11 @@ class ForzarEnvioController extends MyGetxController {
       // GPS es global (no per-segmento): drenar una vez al final. El tipo
       // registrado es 'traza' (antes 'position', que nunca existió como
       // entidad — el GPS jamás se enviaba desde esta pantalla).
-      if (!combined.authExpired) {
-        final trazaSummary = await _engine.drain(entityType: 'traza');
+      if (!combined.authExpired && !combined.cancelled) {
+        final trazaSummary = await _engine.drain(
+          entityType: 'traza',
+          token: _token,
+        );
         combined = _accumulate(combined, trazaSummary);
         // Se purgan las trazas ya subidas incluso si hubo rechazos en esta
         // pasada: `deleteSynced` solo toca filas con `synced_at` puesto por un
@@ -591,6 +687,10 @@ class ForzarEnvioController extends MyGetxController {
       AppLog.e('ForzarEnvioController.enviarAllCloud',
           error: e, stackTrace: st);
     } finally {
+      _token = null;
+      isCancelando.value = false;
+      progresoEnvio.value = '';
+      progresoFraccion.value = null;
       isEnviandoTodos.value = false;
       await loadSegmentos();
     }

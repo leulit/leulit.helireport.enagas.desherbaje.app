@@ -8,6 +8,7 @@ import 'package:helireport_desherbaje/core/services/connectivity_service.dart';
 import 'package:helireport_desherbaje/core/sync/contracts/sync_job.dart';
 import 'package:helireport_desherbaje/core/sync/engine/sync_engine.dart';
 import 'package:helireport_desherbaje/core/sync/outbox/outbox_queue.dart';
+import 'package:helireport_desherbaje/core/sync/pull/cancel_token.dart';
 import 'package:helireport_desherbaje/data/model/mensaje_entity.dart';
 import 'package:helireport_desherbaje/data/sync/imagen_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
@@ -158,9 +159,11 @@ void main() {
     // Scoped drain matcher: covers both per-type-scoped calls (onlyClientIds
     // set) and the global position drain (onlyClientIds null).
     when(() => mockEngine.drain(
-          entityType: any(named: 'entityType'),
-          onlyClientIds: any(named: 'onlyClientIds'),
-        )).thenAnswer((_) async => const DrainSummary());
+            entityType: any(named: 'entityType'),
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')))
+        .thenAnswer((_) async => const DrainSummary());
 
     // Child stores empty by default → only the 'segmento' scope drains.
     when(() => mockImagenStore.findWhere(any(), any()))
@@ -218,13 +221,25 @@ void main() {
 
       verifyInOrder([
         () => mockEngine.drain(
-            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'segmento',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
         () => mockEngine.drain(
-            entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'video',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
         () => mockEngine.drain(
-            entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'imagen',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
         () => mockEngine.drain(
-            entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'mensaje',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
       ]);
       // El id remoto del segmento se propaga a los hijos ANTES de drenarlos.
       verify(() => mockPropagate.propagate('seg-1', 42)).called(1);
@@ -237,13 +252,24 @@ void main() {
 
       verify(() => mockEngine.drain(
           entityType: 'segmento',
-          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
       verifyNever(() => mockEngine.drain(
-          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'video',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockEngine.drain(
-          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'imagen',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockEngine.drain(
-          entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'mensaje',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
     });
 
     // El sobre es la unidad de sync: un upsert entregado anula el intento
@@ -253,7 +279,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 1));
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
@@ -282,7 +310,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(retryable: 1));
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
@@ -309,7 +339,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 1));
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
@@ -324,7 +356,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 1));
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
@@ -336,7 +370,10 @@ void main() {
       verifyInOrder([
         () => mockVideoStore.clearUploadSessions('seg-1'),
         () => mockEngine.drain(
-            entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'video',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
       ]);
     });
 
@@ -346,7 +383,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary());
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
@@ -386,7 +425,9 @@ void main() {
 
       verifyNever(() => mockEngine.drain(
           entityType: any(named: 'entityType'),
-          onlyClientIds: any(named: 'onlyClientIds')));
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       expect(controller.lastError.value, isNotEmpty);
     });
 
@@ -394,7 +435,9 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer(
               (_) async => const DrainSummary(rejected: 1, conflicts: 2));
 
@@ -413,7 +456,10 @@ void main() {
       when(() => mockImagenStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_img('img-1')]);
       when(() => mockEngine.drain(
-              entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')))
+              entityType: 'video',
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(authExpired: true));
 
       await controller.enviarCloud(_seg(id: 5, clientId: 'seg-1'));
@@ -422,12 +468,19 @@ void main() {
       // drenar los vídeos y corta ahí — imagen ya no se drena.
       verify(() => mockEngine.drain(
           entityType: 'segmento',
-          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
       verify(() => mockEngine.drain(
           entityType: 'video',
-          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
       verifyNever(() => mockEngine.drain(
-          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'imagen',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       // Invariante: nunca purgar tras authExpired.
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
@@ -447,18 +500,29 @@ void main() {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(rejected: 1));
 
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
       verifyNever(() => mockPropagate.propagate(any(), any()));
       verifyNever(() => mockEngine.drain(
-          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'video',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockEngine.drain(
-          entityType: 'imagen', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'imagen',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockEngine.drain(
-          entityType: 'mensaje', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'mensaje',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
 
@@ -473,7 +537,10 @@ void main() {
 
       verifyNever(() => mockPropagate.propagate(any(), any()));
       verifyNever(() => mockEngine.drain(
-          entityType: 'video', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'video',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
   });
@@ -516,7 +583,10 @@ void main() {
               operation: SyncOperation.create,
             ),
         () => mockEngine.drain(
-            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
+            entityType: 'segmento',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
       ]);
     });
 
@@ -615,8 +685,14 @@ void main() {
 
       verifyInOrder([
         () => mockEngine.drain(
-            entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')),
-        () => mockEngine.drain(entityType: 'traza'),
+            entityType: 'segmento',
+            onlyClientIds: any(named: 'onlyClientIds'),
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
+        () => mockEngine.drain(
+            entityType: 'traza',
+            token: any(named: 'token'),
+            onProgress: any(named: 'onProgress')),
       ]);
     });
 
@@ -630,9 +706,15 @@ void main() {
       await controller.enviarAllCloud();
 
       verifyNever(() => mockEngine.drain(
-          entityType: 'segmento', onlyClientIds: any(named: 'onlyClientIds')));
+          entityType: 'segmento',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       // position sí se drena siempre al final.
-      verify(() => mockEngine.drain(entityType: 'traza')).called(1);
+      verify(() => mockEngine.drain(
+          entityType: 'traza',
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
     });
 
     // MAJOR — un segmento en `finalizeFailed` (todo subido, solo cayó el POST de
@@ -652,7 +734,9 @@ void main() {
 
       verify(() => mockEngine.drain(
           entityType: 'segmento',
-          onlyClientIds: any(named: 'onlyClientIds'))).called(1);
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
       verify(() => mockPurge.purgeIfFullySynced(any())).called(1);
       expect(controller.lastError.value, isNotEmpty);
     });
@@ -684,7 +768,9 @@ void main() {
 
       verifyNever(() => mockEngine.drain(
           entityType: any(named: 'entityType'),
-          onlyClientIds: any(named: 'onlyClientIds')));
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       expect(controller.lastError.value, isNotEmpty);
     });
 
@@ -698,12 +784,17 @@ void main() {
       );
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(authExpired: true));
 
       await controller.enviarAllCloud();
 
-      verifyNever(() => mockEngine.drain(entityType: 'traza'));
+      verifyNever(() => mockEngine.drain(
+          entityType: 'traza',
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
       verifyNever(() => mockPurge.purgeIfFullySynced(any()));
     });
 
@@ -716,9 +807,14 @@ void main() {
       );
       when(() => mockEngine.drain(
               entityType: 'segmento',
-              onlyClientIds: any(named: 'onlyClientIds')))
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(succeeded: 2));
-      when(() => mockEngine.drain(entityType: 'traza'))
+      when(() => mockEngine.drain(
+              entityType: 'traza',
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
           .thenAnswer((_) async => const DrainSummary(conflicts: 1));
 
       await controller.enviarAllCloud();
@@ -726,6 +822,117 @@ void main() {
       final s = controller.lastDrainSummary.value!;
       expect(s.succeeded, 2);
       expect(s.conflicts, 1);
+    });
+  });
+
+  group('cancelación', () {
+    test('cancelarEnvio sin envío en curso no hace nada', () {
+      controller.cancelarEnvio();
+      expect(controller.isCancelando.value, isFalse);
+    });
+
+    test('el token viaja a drain y se cancela al pulsar', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      CancelToken? capturado;
+      when(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).thenAnswer((inv) async {
+        capturado = inv.namedArguments[#token] as CancelToken?;
+        // El usuario pulsa "Cancelar" mientras el primer drain está en vuelo.
+        controller.cancelarEnvio();
+        return const DrainSummary(succeeded: 1);
+      });
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      expect(capturado, isNotNull);
+      expect(capturado!.isCancelled, isTrue);
+      // El estado se limpia al terminar: si no, los botones quedarían
+      // congelados en "Cancelando…" para siempre.
+      expect(controller.isCancelando.value, isFalse);
+      expect(controller.enviandoIds, isEmpty);
+      expect(controller.isEnviando, isFalse);
+    });
+
+    test('cancelado a media tanda: no arranca el siguiente segmento ni traza',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      controller.segmentos.assignAll([
+        _seg(id: 42, clientId: 'seg-1'),
+        _seg(id: 43, clientId: 'seg-2'),
+      ]);
+      when(() => mockPurge.readUnsyncedSets()).thenAnswer(
+        (_) async => const UnsyncedSets(
+            segmento: {'seg-1', 'seg-2'}, imagen: {}, video: {}, mensaje: {}),
+      );
+      // El primer drain de segmento devuelve "cancelado".
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
+          .thenAnswer((_) async => const DrainSummary(cancelled: true));
+
+      await controller.enviarAllCloud();
+
+      verify(() => mockEngine.drain(
+          entityType: 'segmento',
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).called(1);
+      verifyNever(() => mockEngine.drain(
+          entityType: 'traza',
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
+      expect(controller.lastDrainSummary.value!.cancelled, isTrue);
+      // Cancelar no es error: se informa, no se alarma.
+      expect(controller.lastError.value, isEmpty);
+      expect(controller.lastInfo.value, contains('cancelado'));
+      expect(controller.isEnviandoTodos.value, isFalse);
+    });
+
+    test('progresoEnvio se publica durante el envío y se limpia al terminar',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      controller.segmentos.assignAll([
+        _seg(id: 42, clientId: 'seg-1'),
+        _seg(id: 43, clientId: 'seg-2'),
+      ]);
+      when(() => mockPurge.readUnsyncedSets()).thenAnswer(
+        (_) async => const UnsyncedSets(
+            segmento: {'seg-1', 'seg-2'}, imagen: {}, video: {}, mensaje: {}),
+      );
+      final vistos = <String>[];
+      when(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress'))).thenAnswer((_) async {
+        vistos.add(controller.progresoEnvio.value);
+        return const DrainSummary();
+      });
+
+      await controller.enviarAllCloud();
+
+      expect(vistos.any((v) => v.startsWith('Enviando 1 de 2')), isTrue);
+      expect(vistos.any((v) => v.startsWith('Enviando 2 de 2')), isTrue);
+      // Sin limpiar, la barra se quedaría colgada tras el envío.
+      expect(controller.progresoEnvio.value, isEmpty);
+    });
+
+    test('envío individual y masivo son mutuamente excluyentes', () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      controller.enviandoIds.add('seg-1');
+
+      await controller.enviarAllCloud();
+
+      verifyNever(() => mockEngine.drain(
+          entityType: any(named: 'entityType'),
+          onlyClientIds: any(named: 'onlyClientIds'),
+          token: any(named: 'token'),
+          onProgress: any(named: 'onProgress')));
     });
   });
 }

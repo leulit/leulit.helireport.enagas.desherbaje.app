@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api_endpoints.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart' show SyncOperation;
 import '../../domain/entities/imagen_segmento_entity.dart';
@@ -43,6 +45,8 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
   Future<SyncOutcome<ImagenSegmentoEntity>> push({
     required ImagenSegmentoEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (operation != SyncOperation.create) {
       return SyncUnrecoverable<ImagenSegmentoEntity>(

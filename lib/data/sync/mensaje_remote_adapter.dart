@@ -1,4 +1,6 @@
 import '../../core/api_endpoints.dart';
+import '../../core/sync/contracts/sync_progress.dart';
+import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/contracts/remote_adapter.dart';
 import '../../core/sync/contracts/sync_job.dart';
 import '../model/mensaje_entity.dart';
@@ -18,6 +20,8 @@ class MensajeRemoteAdapter extends RemoteAdapter<MensajeSegmentoEntity> {
   Future<SyncOutcome<MensajeSegmentoEntity>> push({
     required MensajeSegmentoEntity entity,
     required SyncOperation operation,
+    CancelToken? token,
+    SyncProgressCallback? onProgress,
   }) async {
     if (operation != SyncOperation.create) {
       return SyncUnrecoverable<MensajeSegmentoEntity>(
