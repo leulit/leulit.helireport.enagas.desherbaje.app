@@ -53,3 +53,6 @@ android/helireport-desherbaje-release.jks
 
 # Credenciales App Store Connect (por máquina)
 .asc.env
+
+# Worktrees de agentes de Claude Code (locales, nunca al repo)
+.claude/worktrees/
