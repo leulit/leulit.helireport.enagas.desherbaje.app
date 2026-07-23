@@ -13,7 +13,7 @@ import 'adapter_support.dart';
 
 /// Push-only adapter for [TrazaEntity]. Builds the track's GeoJSON
 /// `FeatureCollection` and sends it as-is (decoded `Map`, not a `String`) to
-/// `POST /positions/batch`, idempotent by `traza_client_id` per the backend
+/// `POST /trazas`, idempotent by `traza_client_id` per the backend
 /// sync contract.
 class TrazaRemoteAdapter extends RemoteAdapter<TrazaEntity> {
   final NetworkService _network;
@@ -57,7 +57,7 @@ class TrazaRemoteAdapter extends RemoteAdapter<TrazaEntity> {
       // Sin cabecera de Bearer: esta API no tiene token de sesión, el HMAC del
       // interceptor es la única autenticación (§1).
       final response = await _network.post(
-        ApiEndpoints.positionsBatch,
+        ApiEndpoints.trazas,
         body: body,
       );
       if (!response.isSuccess) {

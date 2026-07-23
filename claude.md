@@ -276,7 +276,7 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 - `error_message` legible en español en respuestas 4xx (especialmente 422).
 - `GET /mensajes?operador=X` para pull global de mensajes (§12.1) — hasta entonces lectura online + merge con pendientes locales.
 - `GET /api/gasoductos` y `GET /api/pks` REST únicos para integrar master data al motor (§12.2) — hasta entonces flujo legacy multi-archivo GeoJSON.
-- `POST /positions/batch` idempotente por `traza_client_id` (payload: `FeatureCollection`/`MultiLineString`, no batches de puntos sueltos) para subida de trazas GPS. **Pendiente:** el cuerpo puede superar los 4 MB en trazas largas (jornada completa a 1 muestra/5m) — confirmar/subir el límite de tamaño de body aceptado por el endpoint.
+- `POST /trazas` idempotente por `traza_client_id` (payload: `FeatureCollection`/`MultiLineString`, no batches de puntos sueltos) para subida de trazas GPS. **Pendiente:** el cuerpo puede superar los 4 MB en trazas largas (jornada completa a 1 muestra/5m) — confirmar/subir el límite de tamaño de body aceptado por el endpoint.
 - `updated_at` ISO8601 UTC en TODAS las entidades sincronizables.
 
 ### Plataforma — al publicar (config nativa ya cableada en repo)

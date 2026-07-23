@@ -21,7 +21,11 @@
       "Read(//Users/emiloalvarez/**)",
       "WebFetch(domain:claude.com)",
       "WebFetch(domain:docs.powersync.com)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(sed -i '' -e 's|ApiEndpoints.positionsBatch|ApiEndpoints.trazas|g' -e 's|POST /positions/batch|POST /trazas|g' lib/domain/entities/traza_entity.dart lib/data/sync/traza_remote_adapter.dart)",
+      "Bash(sed -i '' -e 's|POST /api/enagas/v1/positions/batch|POST /api/enagas/v1/trazas|g' -e 's|`/positions/batch`|`/trazas`|g' docs/BACKEND_SYNC_CONTRACT.md)",
+      "Bash(sed -i '' -e 's|POST /positions/batch|POST /trazas|g' docs/ARCHITECTURE_REFERENCE.md)",
+      "Bash(sed -i '' -e 's|`POST /positions/batch`|`POST /trazas`|g' claude.md)"
     ]
   },
   "enabledPlugins": {}

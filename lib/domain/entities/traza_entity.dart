@@ -43,7 +43,7 @@ class TrazaPunto {
 
 /// A manually-recorded GPS track ("traza"). The unit of synchronisation: one
 /// outbox job pushes the whole track (header + points) in a single HTTP
-/// request to `POST /positions/batch`.
+/// request to `POST /trazas`.
 ///
 /// `endedAt == null` means the traza is still open (recording in progress or
 /// left open by a crash); the local store enforces at most one open traza

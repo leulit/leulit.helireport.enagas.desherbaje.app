@@ -54,7 +54,8 @@ class ApiEndpoints {
   /// antiguos `create`/`update/{id}`.
   static String get segmentoUpsert => '$apiBaseUrl/segmentos/upsert';
   static String get segmentosByEstado => '$apiBaseUrl/segmentos/byestado';
-  static String mensajeAdd(int segmentoId) => '$apiBaseUrl/segmentos/mensajes/$segmentoId';
+  static String mensajeAdd(int segmentoId) =>
+      '$apiBaseUrl/segmentos/mensajes/$segmentoId';
   static String deleteSegmento(int id) => '$apiBaseUrl/segmentos/delete/$id';
 
   /// Marca un segmento como "envío finalizado": el cliente ha subido con éxito
@@ -72,13 +73,16 @@ class ApiEndpoints {
   static String ctsByUser(int iduser) => '$apiBaseUrl/users/ctsbyuser/$iduser';
 
   /// JSON con la traza de gasoductos del CT identificado por [filename].
-  static String gasoductosTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-gasoductos.json';
+  static String gasoductosTrack(String filename) =>
+      '$apiBaseUrl/tracks/json/$filename-gasoductos.json';
 
   /// JSON con los puntos kilométricos (PKs) del CT identificado por [filename].
-  static String pkTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-pk.json';
+  static String pkTrack(String filename) =>
+      '$apiBaseUrl/tracks/json/$filename-pk.json';
 
   /// JSON con los hitos del CT identificado por [filename].
-  static String hitosTrack(String filename) => '$apiBaseUrl/tracks/json/$filename-hitos.json';
+  static String hitosTrack(String filename) =>
+      '$apiBaseUrl/tracks/json/$filename-hitos.json';
 
   // ──────────────────────────── Imágenes ────────────────────────────
 
@@ -89,7 +93,8 @@ class ApiEndpoints {
   /// Subida multipart de una foto ligada a un segmento (contrato backend).
   /// `POST /api/enagas/v1/segmentos/{id}/imagenes`. Campos: file, tipoFoto
   /// (antes|despues), capturada_at?, subida_por?. Respuesta `{id, url}`.
-  static String segmentoImagenes(int id) => '$apiBaseUrl/segmentos/$id/imagenes';
+  static String segmentoImagenes(int id) =>
+      '$apiBaseUrl/segmentos/$id/imagenes';
 
   // ──────────────────────────── Media (fotos + vídeos) ────────────────────────────
 
@@ -122,27 +127,32 @@ class ApiEndpoints {
   /// `POST /api/enagas/v1/videos/upload/{uploadId}`
   ///   Header `Upload-Offset: <bytesYaEnServidor>`, body = bytes raw.
   ///   → `200 { offset }`.
-  static String videoUpload(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId';
+  static String videoUpload(String uploadId) =>
+      '$apiBaseUrl/videos/upload/$uploadId';
 
   /// Completa la sesión de subida (activa la conversión MOV→MP4 asíncrona).
   /// `POST /api/enagas/v1/videos/upload/{uploadId}/complete`
   /// → `200 { uploadId, id, status: "recibido" }`. El `id` es la fila de
   /// `imagenes_segmento`: con él se construye la URL de reproducción vía
   /// [segmentoThumb]. `/videos/download/{uploadId}.mp4` está RETIRADO.
-  static String videoUploadComplete(String uploadId) => '$apiBaseUrl/videos/upload/$uploadId/complete';
+  static String videoUploadComplete(String uploadId) =>
+      '$apiBaseUrl/videos/upload/$uploadId/complete';
 
-  // ──────────────────────────── Posiciones GPS ────────────────────────────
+  // ────────────────────────────── Trazas GPS ──────────────────────────────
 
-  /// Subida en lote de puntos GPS. Idempotente por `batch_client_id`.
+  /// Subida de una traza GPS completa (un `FeatureCollection` por petición).
+  /// Idempotente por `traza_client_id`.
   /// Documentado en `docs/BACKEND_SYNC_CONTRACT.md` §8.
-  static String get positionsBatch => '$apiBaseUrl/positions/batch';
+  static String get trazas => '$apiBaseUrl/trazas';
 
   /// Thumbnail de incidencia (mock data en `captura_fotos_controller`).
-  static String incidenciaThumb(int id, int width, int height) => '$apiBaseUrl/incidencias/thumbdb/$id/$width/$height';
+  static String incidenciaThumb(int id, int width, int height) =>
+      '$apiBaseUrl/incidencias/thumbdb/$id/$width/$height';
 
   // ──────────────────────────── Posiciones fijas ────────────────────────────
 
   /// Posiciones fijas asociadas a los CTs del usuario, filtradas por nombre
   /// de CT (mismo esquema que [segmentosByCt]).
-  static String posicionesFijasByCts(String cts) => '$apiBaseUrl/incidencias/posicionesfijasbycts/$cts';
+  static String posicionesFijasByCts(String cts) =>
+      '$apiBaseUrl/incidencias/posicionesfijasbycts/$cts';
 }

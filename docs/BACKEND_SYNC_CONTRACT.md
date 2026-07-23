@@ -23,7 +23,7 @@ Para que esa sincronización sea **idempotente, robusta y reanudable**, el backe
 3. Endpoint de pull "full" para entidades descargables.
 4. Mensajes de error 4xx legibles en español.
 5. Códigos HTTP semánticos consistentes.
-6. Endpoint específico `POST /api/enagas/v1/positions/batch` para trazas GPS (GeoJSON).
+6. Endpoint específico `POST /api/enagas/v1/trazas` para trazas GPS (GeoJSON).
 7. Campo `updated_at` ISO8601 UTC en todas las entidades sincronizables.
 
 ---
@@ -285,7 +285,7 @@ El `server_version` debe ser el recurso completo, listo para que el cliente lo p
 **Sustituye la versión anterior de este apartado (lotes de puntos sueltos).** El cliente ahora sube una traza completa por POST, como GeoJSON.
 
 ```http
-POST /api/enagas/v1/positions/batch
+POST /api/enagas/v1/trazas
 Content-Type: application/json
 X-HMAC-Signature: <hex>
 X-Timestamp: <epoch_ms>
@@ -434,7 +434,7 @@ Para que la app cliente sea funcional con la nueva arquitectura, el backend debe
 - [ ] Devolver `error_message` legible en español en todas las respuestas 4xx.
 - [ ] Aplicar códigos HTTP semánticos según §5.1.
 - [ ] Devolver `server_version` completa en 409.
-- [ ] Implementar `POST /api/enagas/v1/positions/batch` con idempotencia por `traza_client_id` (§8).
+- [ ] Implementar `POST /api/enagas/v1/trazas` con idempotencia por `traza_client_id` (§8).
 
 ---
 
@@ -478,7 +478,7 @@ devuelven todos los registros aplicables al operador en un único array JSON, co
 Estas decisiones se cerrarán cuando el equipo de backend revise este documento:
 
 1. **Filtros exactos de los GET de pull**: ¿`?operador=`, `?ct_id=`, ambos, otros?
-2. **Tamaño máximo de payload aceptado** en POST (especialmente para subida de imágenes; `/positions/batch` ya fija mínimo 4 MB, ver §8.4).
+2. **Tamaño máximo de payload aceptado** en POST (especialmente para subida de imágenes; `/trazas` ya fija mínimo 4 MB, ver §8.4).
 3. **Política de retención** de posiciones GPS en backend (¿cuánto tiempo se guardan los puntos?).
 4. **Endpoint de revocación** de token (logout server-side) — opcional.
 5. **Lista cerrada de entidades pulleables** (gasoductos, pks, segmentos, mensajes... — depende del producto).
@@ -492,7 +492,7 @@ Estas decisiones se cerrarán cuando el equipo de backend revise este documento:
 |---|---|
 | `client_id` | UUID v4 generado por el cliente. PK lógica del dominio. Inmutable. |
 | `remote_id` | Identificador interno del backend. Asignado al primer sync. |
-| `traza_client_id` | UUID v4 que identifica una traza GPS completa. Usado para idempotencia del endpoint `/positions/batch` (§8). |
+| `traza_client_id` | UUID v4 que identifica una traza GPS completa. Usado para idempotencia del endpoint `/trazas` (§8). |
 | Push | Envío del cliente al backend (creación/actualización/borrado). |
 | Pull | Descarga del backend al cliente. Manual y explícita. |
 | Drain | Proceso de vaciar el outbox del cliente enviando todos los jobs pendientes al backend. |

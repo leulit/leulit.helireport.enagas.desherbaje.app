@@ -120,7 +120,7 @@ lib/
 │       ├── mensaje_local_store.dart
 │       ├── mensaje_remote_adapter.dart
 │       ├── traza_local_store.dart                 # tablas trazas + trazas_puntos; appendPoints/findOpen/findAnyOpen/finalize/deleteSynced además del contrato LocalStore
-│       ├── traza_remote_adapter.dart              # POST /positions/batch — body = buildTrackGeoJson (FeatureCollection/MultiLineString), push-only (create), idempotente por traza_client_id
+│       ├── traza_remote_adapter.dart              # POST /trazas — body = buildTrackGeoJson (FeatureCollection/MultiLineString), push-only (create), idempotente por traza_client_id
 │       ├── posicion_fija_local_store.dart         # tabla posiciones_fijas — pull-only, sin outbox
 │       └── posicion_fija_remote_fetcher.dart      # GET /incidencias/posicionesfijasbycts/{cts}
 └── presentation/
@@ -268,7 +268,7 @@ Traza GPS manual (nombre "traza" en toda la app y el backend). La unidad de sinc
 | `name` | `String` | Default `'Traza yyyy-MM-dd HH:mm'` (hora local de `startedAt`); editable al finalizar vía `showFinalizeTrazaDialog`; clamp a 100 caracteres |
 | `points` | `List<TrazaPunto>` | `capturedAt`, `lat`, `lng`, `accuracyMeters?`, `altitudeMeters?`, `speedMps?` — no son `Syncable`, nunca se sincronizan sueltos |
 
-Tablas SQLite: `trazas` (cabecera) + `trazas_puntos` (uno por punto, FK `traza_client_id`). Reemplazan `posiciones_gps_batches`/`posiciones_gps`, borradas en la migración `schemaVersion 1` de `TrazaLocalStore` (app aún no en producción, sin backwards-compat). Payload de subida: `POST /positions/batch` con un `FeatureCollection`/`MultiLineString` (`buildTrackGeoJson` en `core/gis/media_gis_geojson.dart`), partido en segmentos cuando el hueco entre dos puntos consecutivos supera 60 s; segmentos de 1 solo punto se descartan; sin ningún segmento superviviente el adapter devuelve éxito sin llamar a la red.
+Tablas SQLite: `trazas` (cabecera) + `trazas_puntos` (uno por punto, FK `traza_client_id`). Reemplazan `posiciones_gps_batches`/`posiciones_gps`, borradas en la migración `schemaVersion 1` de `TrazaLocalStore` (app aún no en producción, sin backwards-compat). Payload de subida: `POST /trazas` con un `FeatureCollection`/`MultiLineString` (`buildTrackGeoJson` en `core/gis/media_gis_geojson.dart`), partido en segmentos cuando el hueco entre dos puntos consecutivos supera 60 s; segmentos de 1 solo punto se descartan; sin ningún segmento superviviente el adapter devuelve éxito sin llamar a la red.
 
 ### `PosicionFijaEntity` — `Syncable`, **pull only**
 Posición fija (instalación/vigilancia) asociada a un CT. Se descarga y se muestra en el mapa; nunca se sube (sin outbox).
