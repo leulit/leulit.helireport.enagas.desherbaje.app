@@ -34,10 +34,16 @@ class ApiEndpoints {
   static String get userLogin => '$apiBaseUrl/users/login';
 
   /// Solicitud de recuperación de contraseña. `POST {email}`; el backend
-  /// genera el token y envía el email con el enlace a la webapp. La app móvil
-  /// solo dispara la solicitud — el cambio de contraseña se hace en el enlace.
+  /// genera un código OTP de 6 dígitos y lo envía por email. Responde 200
+  /// siempre, con `{success, message}`.
   static String get userForgotPassword =>
       '$apiBaseUrl/users/recuperar-password';
+
+  /// Cambio de contraseña con código OTP. `POST {email, codigo, newPassword}`.
+  /// El backend valida el código y cambia la contraseña en la misma llamada:
+  /// `200 {success, message}` o `400 {error}`.
+  static String get userResetPassword =>
+      '$apiBaseUrl/users/restablecer-password';
 
   // ──────────────────────────── Segmentos ────────────────────────────
 

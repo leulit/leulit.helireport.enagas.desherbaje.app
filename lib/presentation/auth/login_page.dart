@@ -210,31 +210,21 @@ class _LoginBody extends StatelessWidget {
                 return const SizedBox.shrink();
               }),
               Obx(() {
-                final busy = controller.isLoading.value ||
-                    controller.isSyncing.value ||
-                    controller.isSendingReset.value;
+                final busy =
+                    controller.isLoading.value || controller.isSyncing.value;
                 return Align(
                   alignment: Alignment.center,
                   child: TextButton(
                     onPressed: busy ? null : controller.forgotPassword,
-                    child: controller.isSendingReset.value
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              color: Color(0xFF388E3C),
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            '¿Contraseña olvidada?',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF388E3C),
-                              decoration: TextDecoration.underline,
-                              decorationColor: Color(0xFF388E3C),
-                            ),
-                          ),
+                    child: const Text(
+                      '¿Contraseña olvidada?',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF388E3C),
+                        decoration: TextDecoration.underline,
+                        decorationColor: Color(0xFF388E3C),
+                      ),
+                    ),
                   ),
                 );
               }),

@@ -125,9 +125,10 @@ lib/
 │       └── posicion_fija_remote_fetcher.dart      # GET /incidencias/posicionesfijasbycts/{cts}
 └── presentation/
     ├── auth/
-    │   ├── login_page.dart
+    │   ├── login_page.dart                        # incluye enlace "¿Contraseña olvidada?"
     │   ├── login_page_binding.dart
-    │   └── login_page_controller.dart
+    │   ├── login_page_controller.dart             # forgotPassword(): dialog email → pide OTP → navega a ResetPasswordPage
+    │   └── reset_password_page.dart               # OTP: código 6 dígitos + nueva contraseña (StatefulWidget, setState); Get.to desde login
     ├── segmentos/                                 # Listado de segmentos
     │   ├── segmentos_list_page.dart
     │   ├── segmentos_list_binding.dart

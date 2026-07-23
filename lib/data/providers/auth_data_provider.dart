@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
+
 import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
+import '../../data/network/network_error.dart';
 import '../../data/network/network_service.dart';
 import '../../domain/entities/user_entity.dart';
 
@@ -49,8 +52,48 @@ class AuthDataProvider {
     }
     return message?.isNotEmpty == true
         ? message!
-        : 'En breve recibirás un email con las instrucciones para recuperar '
-            'tu contraseña.';
+        : 'Te hemos enviado un código de 6 dígitos a tu email.';
+  }
+
+  /// Cambia la contraseña con el código OTP. El backend valida el código y
+  /// cambia la contraseña en la misma llamada. Devuelve el mensaje de éxito;
+  /// lanza `Exception` con el motivo del backend (`error`) si rechaza —
+  /// código inválido/caducado, contraseña corta…
+  Future<String> resetPassword({
+    required String email,
+    required String codigo,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _network.post(
+        ApiEndpoints.userResetPassword,
+        body: {'email': email, 'codigo': codigo, 'newPassword': newPassword},
+      );
+      final data = response.data;
+      final message = (data is Map ? data['message'] as String? : null)?.trim();
+      return message?.isNotEmpty == true
+          ? message!
+          : 'Contraseña actualizada. Ya puedes iniciar sesión.';
+    } on NetworkError catch (e) {
+      throw Exception(
+        _backendError(e) ?? 'No se ha podido cambiar la contraseña',
+      );
+    }
+  }
+
+  /// Extrae el `error` del cuerpo de un 4xx. `_mapDioException` solo rescata
+  /// `message`, pero este endpoint devuelve `{error}` en 400 → hay que leerlo
+  /// del `DioException` original que viaja en `NetworkError.cause`.
+  String? _backendError(NetworkError e) {
+    final cause = e.cause;
+    if (cause is DioException) {
+      final data = cause.response?.data;
+      if (data is Map && data['error'] is String) {
+        final msg = (data['error'] as String).trim();
+        if (msg.isNotEmpty) return msg;
+      }
+    }
+    return null;
   }
 
   /// Carga la lista de CTs del usuario tras el login. El endpoint de login

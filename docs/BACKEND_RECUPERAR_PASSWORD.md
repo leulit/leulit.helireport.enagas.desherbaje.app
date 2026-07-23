@@ -1,44 +1,87 @@
-# Backend — Recuperar contraseña (app Desherbaje)
+# Backend — Recuperar contraseña por código OTP (app Desherbaje)
 
-Estado: la app móvil YA llama al endpoint. Falta implementarlo en `BACKEND-ENAGAS`.
+Flujo: la app pide email → backend manda un **código de 6 dígitos** por email →
+el operador teclea el código + la contraseña nueva en la misma pantalla → cambio.
+Todo dentro de la app, sin enlaces ni navegador.
 
-## 1. Endpoint que la app llama
+**2 endpoints.** Ambos bajo `/api/enagas/v1`, misma firma HMAC que el resto (sin
+sesión ni Bearer).
+
+---
+
+## Endpoint 1 — Pedir código
 
 ```
 POST /api/enagas/v1/users/recuperar-password
 Body: { "email": "operador@empresa.com" }
 ```
 
-- Misma firma HMAC que el resto de la API (`X-HMAC-Signature`, `X-Timestamp`). Sin sesión ni Bearer.
-- Respuestas — **siempre 200**, el desenlace va en el cuerpo:
+**Siempre 200.** El desenlace va en el cuerpo:
 
 ```jsonc
-// OK
-{ "success": true,  "message": "En breve recibirás un email con las instrucciones para recuperar tu contraseña." }
-// Email no existe / usuario borrado
-{ "success": false, "message": "Ese email no existe en la base de datos de usuarios. Comprueba que la dirección sea correcta." }
-// Fallo de envío SMTP
+{ "success": true,  "message": "Te hemos enviado un código de 6 dígitos a tu email." }
+{ "success": false, "message": "Ese email no existe en la base de datos de usuarios." }
 { "success": false, "message": "No hemos podido enviar el email en este momento. Inténtalo de nuevo en unos minutos." }
 ```
 
-- 4xx/5xx solo para errores reales de servidor, con `{ "error": "..." }`.
-- La app muestra `message` tal cual al operador. Que sea legible en español.
+Lógica:
+1. `SELECT id, nombre, email FROM usuarios WHERE email = ? AND deleted IS NULL`. Sin fila → `success:false` "no existe".
+2. Invalidar códigos previos del email: `UPDATE password_reset_tokens SET used_at = NOW() WHERE email = ? AND used_at IS NULL`.
+3. Generar código: **6 dígitos**, `String(crypto.randomInt(0, 1000000)).padStart(6, '0')`.
+4. Insertar fila con `expires_at = NOW() + 10 min` y `attempts = 0`.
+5. Enviar email con el código (`EmailService`, ya existe). Cuerpo tipo: "Tu código de recuperación es **473829**. Caduca en 10 minutos."
+6. `EmailService.isConfigured()` false o envío lanza → `success:false` "no hemos podido enviar".
 
-## 2. Tabla de tokens
+---
 
-Nueva migración `database/migrations/015_create_password_reset_tokens.sql`:
+## Endpoint 2 — Cambiar contraseña (valida código + cambia, en una sola llamada)
+
+```
+POST /api/enagas/v1/users/restablecer-password
+Body: { "email": "...", "codigo": "473829", "newPassword": "nueva123" }
+
+200 → { "success": true,  "message": "Contraseña actualizada. Ya puedes iniciar sesión." }
+400 → { "error": "Código incorrecto o caducado" }
+400 → { "error": "La contraseña debe tener al menos 6 caracteres" }
+```
+
+Lógica:
+1. Validar el código (reglas abajo). Inválido → 400 `{error}`.
+2. Validar `newPassword` (mínimo 6 chars, o lo que decidáis) → 400 `{error}`.
+3. `UPDATE usuarios SET password = ? WHERE id = ?`.
+4. `UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?` (un solo uso).
+
+La app lee `message` en 200 y `error` en 400, y los muestra tal cual. Que sean legibles en español.
+
+---
+
+## Reglas de validación del código
+
+Un código es válido si, para ese `email`:
+- Existe fila con ese `token` (= el código).
+- `used_at IS NULL`.
+- `expires_at > NOW()`.
+- `attempts < 5`.
+
+En cada intento fallido: `UPDATE ... SET attempts = attempts + 1 WHERE email = ? AND used_at IS NULL`. Con 5 fallos el código queda quemado (fuerza a pedir uno nuevo) → protege contra fuerza bruta sobre 6 dígitos.
+
+---
+
+## Tabla
+
+Migración `database/migrations/015_create_password_reset_tokens.sql`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
   `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `usuario_id` INT UNSIGNED NOT NULL,
   `email`      VARCHAR(255) NOT NULL,
-  `token`      VARCHAR(64)  NOT NULL,
+  `token`      VARCHAR(6)   NOT NULL,          -- el código OTP de 6 dígitos
+  `attempts`   TINYINT UNSIGNED NOT NULL DEFAULT 0,
   `expires_at` DATETIME     NOT NULL,
   `used_at`    DATETIME     NULL DEFAULT NULL,
   `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_token` (`token`),
   INDEX `idx_email` (`email`),
   INDEX `idx_expires` (`expires_at`),
   CONSTRAINT `fk_reset_token_usuario`
@@ -46,45 +89,28 @@ CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-## 3. Lógica del endpoint
+Nota: `token` NO es único (el código de 6 dígitos se repite entre usuarios). La identidad de un intento es `(email, token, used_at IS NULL)`.
 
-1. `SELECT id, nombre, email FROM usuarios WHERE email = ? AND deleted IS NULL` → si no hay fila, devolver el `success:false` de "email no existe".
-2. Invalidar tokens previos de ese email (`UPDATE ... SET used_at = NOW() WHERE email = ? AND used_at IS NULL`).
-3. Generar token: `crypto.randomBytes(32).toString('hex')`. `expires_at = NOW() + 30 min`.
-4. Insertar en `password_reset_tokens`.
-5. Enviar email con `EmailService` (`src/infrastructure/email/email.service.js`, ya existe, usa `ENAGAS_SMTP_*`). Enlace del email:
-   `{APP_URL}/reset-password?email={email urlencoded}&token={token}`
-   con `APP_URL` = nueva env `ENAGAS_APP_URL` (URL de la webapp).
-6. Si `EmailService.isConfigured()` es `false` o el envío lanza → devolver el `success:false` de "no hemos podido enviar".
+---
 
-Ficheros a tocar (patrón del propio repo):
-- `src/api/routes/usuarios.routes.js` → registrar la ruta con schema `body: { email: string, required }`.
-- `src/services/usuarios.service.js` → `solicitarRecuperacion(email)`.
-- `src/infrastructure/repositories/usuarios.repository.js` → `findByEmail`, `createPasswordResetToken`, `invalidateTokensByEmail`.
+## Ficheros a tocar (patrón del propio repo)
 
-## 4. Cambio de contraseña (webapp, fuera del alcance de la app móvil)
+- `src/api/routes/usuarios.routes.js` → registrar las 2 rutas con su schema de body.
+- `src/services/usuarios.service.js` → `solicitarRecuperacion(email)`, `restablecerPassword(email, codigo, newPassword)`.
+- `src/infrastructure/repositories/usuarios.repository.js` → `findByEmail`, `createResetCode`, `findValidCode`, `incrementAttempts`, `invalidateCodesByEmail`, `markUsed`, `updatePassword`.
 
-La app solo dispara el email. La página `/reset-password` necesita dos endpoints más:
+---
 
+## Aviso importante — contraseña en claro
+
+Hoy `usuarios.password` se guarda **en claro** (`WHERE u.usuario = ? AND u.password = ?` en `findByCredentialsWithCts`). El endpoint 2 guardaría también en claro para no romper el login. Si queréis hashear, es una migración aparte que toca login, `/users/new` y `/users/save` a la vez — no lo mezcléis con esto.
+
+---
+
+## Env
+
+Ya soportadas por `EmailService` (`config/index.js`):
 ```
-POST /api/enagas/v1/users/validar-token
-Body: { "email", "token" }
-200 → { "valid": true, "email": "..." }
-400 → { "error": "Token inválido o expirado" }
-
-POST /api/enagas/v1/users/restablecer-password
-Body: { "email", "token", "newPassword" }
-200 → { "success": true, "message": "Contraseña actualizada" }
-400 → { "error": "Token inválido o expirado" }
+ENAGAS_SMTP_HOST / _PORT / _USER / _PASSWORD / _FROM_NAME / _FROM_EMAIL
 ```
-
-`restablecer-password`: validar token (no usado, no expirado), `UPDATE usuarios SET password = ?`, marcar `used_at = NOW()`.
-
-**Aviso:** hoy `usuarios.password` se guarda en claro (`WHERE u.usuario = ? AND u.password = ?` en `findByCredentialsWithCts`). Guardar la nueva contraseña con hash rompería el login de todos los clientes. Si se quiere hashear, es una migración aparte que toca login, `/users/new` y `/users/save` a la vez.
-
-## 5. Env nuevas
-
-```
-ENAGAS_APP_URL=https://enagastool.helireport.com     # base del enlace del email
-ENAGAS_SMTP_HOST / _PORT / _USER / _PASSWORD / _FROM_NAME / _FROM_EMAIL   # ya soportadas
-```
+El flujo OTP **no** necesita `APP_URL` (no hay enlace).

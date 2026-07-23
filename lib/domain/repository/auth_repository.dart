@@ -14,8 +14,17 @@ abstract class AuthRepository {
   /// Lanza si no hay sesión activa o el backend devuelve error.
   Future<UserModel> refreshUserData();
 
-  /// Solicita al backend el email de recuperación de contraseña. Devuelve el
+  /// Solicita al backend el envío del código OTP de recuperación. Devuelve el
   /// mensaje de confirmación; lanza `Exception` con el motivo si el backend
   /// rechaza la solicitud (email inexistente, envío fallido…).
   Future<String> requestPasswordReset(String email);
+
+  /// Cambia la contraseña con el código OTP recibido por email. Devuelve el
+  /// mensaje de éxito; lanza `Exception` con el motivo si el código es
+  /// inválido/caducado o la contraseña no cumple los requisitos.
+  Future<String> resetPassword({
+    required String email,
+    required String codigo,
+    required String newPassword,
+  });
 }
