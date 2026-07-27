@@ -1,7 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'login_page_controller.dart';
+
+/// Versión de la app leída del bundle nativo (rellenado desde `pubspec.yaml`
+/// al compilar). Si falla la lectura no se pinta nada.
+class _AppVersionLabel extends StatelessWidget {
+  const _AppVersionLabel();
+
+  // ponytail: el Future se crea una vez, no en cada build.
+  static final Future<PackageInfo> _info = PackageInfo.fromPlatform();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PackageInfo>(
+      future: _info,
+      builder: (context, snapshot) {
+        final pkg = snapshot.data;
+        if (pkg == null) return const SizedBox.shrink();
+        return Text(
+          'v${pkg.version} (${pkg.buildNumber})',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+        );
+      },
+    );
+  }
+}
 
 class LoginPage extends GetView<LoginPageController> {
   const LoginPage({super.key});
@@ -14,9 +39,11 @@ class LoginPage extends GetView<LoginPageController> {
         child: Stack(
           children: [
             _LoginBody(controller: controller),
-            Obx(() => controller.isSyncing.value
-                ? const _SyncingOverlay()
-                : const SizedBox.shrink()),
+            Obx(
+              () => controller.isSyncing.value
+                  ? const _SyncingOverlay()
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -62,6 +89,8 @@ class _LoginBody extends StatelessWidget {
                 'Operadores de campo',
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
+              const SizedBox(height: 4),
+              const _AppVersionLabel(),
               const SizedBox(height: 8),
               Obx(() {
                 final last = controller.lastSyncAt.value;
@@ -69,7 +98,7 @@ class _LoginBody extends StatelessWidget {
                   last == null
                       ? 'Sin datos sincronizados'
                       : 'Datos sincronizados: '
-                          '${DateFormat('dd/MM/yyyy HH:mm').format(last)}',
+                            '${DateFormat('dd/MM/yyyy HH:mm').format(last)}',
                   style: TextStyle(
                     fontSize: 12,
                     color: last == null
@@ -91,40 +120,45 @@ class _LoginBody extends StatelessWidget {
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 16),
-              Obx(() => TextFormField(
-                    controller: controller.passwordController,
-                    obscureText: !controller.showPassword.value,
-                    decoration: InputDecoration(
-                      labelText: 'Contraseña',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(controller.showPassword.value
+              Obx(
+                () => TextFormField(
+                  controller: controller.passwordController,
+                  obscureText: !controller.showPassword.value,
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        controller.showPassword.value
                             ? Icons.visibility_off
-                            : Icons.visibility),
-                        onPressed: controller.toggleShowPassword,
+                            : Icons.visibility,
                       ),
+                      onPressed: controller.toggleShowPassword,
                     ),
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? 'Introduce tu contraseña'
-                        : null,
-                    onFieldSubmitted: (_) => controller.login(),
-                  )),
+                  ),
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Introduce tu contraseña'
+                      : null,
+                  onFieldSubmitted: (_) => controller.login(),
+                ),
+              ),
               const SizedBox(height: 16),
-              Obx(() => Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Recordar contraseña',
-                        style:
-                            TextStyle(fontSize: 14, color: Color(0xFF1B5E20)),
-                      ),
-                      Switch(
-                        value: controller.rememberPassword.value,
-                        onChanged: (_) => controller.toggleRememberPassword(),
-                        activeThumbColor: const Color(0xFF388E3C),
-                      ),
-                    ],
-                  )),
+              Obx(
+                () => Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Recordar contraseña',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF1B5E20)),
+                    ),
+                    Switch(
+                      value: controller.rememberPassword.value,
+                      onChanged: (_) => controller.toggleRememberPassword(),
+                      activeThumbColor: const Color(0xFF388E3C),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
               Obx(() {
                 final busy =
@@ -170,7 +204,9 @@ class _LoginBody extends StatelessWidget {
                           onPressed: busy ? null : controller.sincronizar,
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(
-                                color: Color(0xFF388E3C), width: 1.5),
+                              color: Color(0xFF388E3C),
+                              width: 1.5,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -202,9 +238,7 @@ class _LoginBody extends StatelessWidget {
                 if (controller.isLoading.value) {
                   return const Padding(
                     padding: EdgeInsets.only(top: 8),
-                    child: LinearProgressIndicator(
-                      color: Color(0xFF388E3C),
-                    ),
+                    child: LinearProgressIndicator(color: Color(0xFF388E3C)),
                   );
                 }
                 return const SizedBox.shrink();

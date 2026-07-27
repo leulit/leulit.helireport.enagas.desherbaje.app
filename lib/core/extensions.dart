@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:auto_size_text_plus/auto_size_text_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,32 +7,30 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
-
-
 extension MapCaseInsensitiveExtensions on Map<String, dynamic> {
   /// Obtiene un valor ignorando mayúsculas/minúsculas del key
   Object? getIgnoreCase(String key) {
     final keyLower = key.toLowerCase();
-    
+
     for (final entry in entries) {
       if (entry.key.toLowerCase() == keyLower) {
         return entry.value;
       }
     }
-    
+
     return null;
   }
-  
+
   /// Obtiene un valor String o retorna un default
   String getStringIgnoreCase(String key, {String defaultValue = ''}) {
     return getIgnoreCase(key)?.toString() ?? defaultValue;
   }
-  
+
   /// Verifica si existe un key (ignorando case)
   bool containsKeyIgnoreCase(String key) {
     return getIgnoreCase(key) != null;
   }
-  
+
   /// Intenta múltiples keys y retorna el primero que encuentre
   Object? getFirstOf(List<String> keys) {
     for (final key in keys) {
@@ -44,7 +41,6 @@ extension MapCaseInsensitiveExtensions on Map<String, dynamic> {
   }
 }
 
-
 extension GetDialogExtensions on GetInterface {
   /// Muestra un diálogo y ejecuta callback después de cerrarlo
   Future<T?> dialogWithCallback<T>(
@@ -52,17 +48,17 @@ extension GetDialogExtensions on GetInterface {
     required Future<void> Function() onClosed,
     bool barrierDismissible = true,
   }) async {
-    final result = await Get.dialog<T>(dialog, barrierDismissible: barrierDismissible);
-    
+    final result =
+        await Get.dialog<T>(dialog, barrierDismissible: barrierDismissible);
+
     SchedulerBinding.instance.addPostFrameCallback((_) {
       SchedulerBinding.instance.addPostFrameCallback((_) async {
         await onClosed();
       });
-    });          
+    });
     return result;
   }
 }
-
 
 const whiteColor = Color(0xFFFFFFFF);
 
@@ -92,22 +88,15 @@ extension MarkerExtension on Marker {
   }
 }
 
-
-
 extension LatLngBoundsExtensions on LatLngBounds {
   bool overlaps(LatLngBounds other) {
     // Verificar si los límites no se solapan
-    final noOverlap =
-        (south >
-                other.north || // Este límite está completamente al sur del otro
-            north <
-                other
-                    .south || // Este límite está completamente al norte del otro
-            east <
-                other
-                    .west || // Este límite está completamente al oeste del otro
-            west >
-                other.east); // Este límite está completamente al este del otro
+    final noOverlap = (south >
+            other.north || // Este límite está completamente al sur del otro
+        north <
+            other.south || // Este límite está completamente al norte del otro
+        east < other.west || // Este límite está completamente al oeste del otro
+        west > other.east); // Este límite está completamente al este del otro
 
     // Si no hay solapamiento, devolver false
     return !noOverlap;
@@ -125,8 +114,7 @@ extension MapControllerExtensions on MapController {
     final mapHeight = mapSize.height;
 
     // Calcula el tamaño de una unidad de píxel en coordenadas geográficas
-    final resolution =
-        156543.03392 *
+    final resolution = 156543.03392 *
         (1 / (1 << zoom.toInt())); // Resolución en metros por píxel
     final halfWidthInMeters = (mapWidth / 2) * resolution;
     final halfHeightInMeters = (mapHeight / 2) * resolution;
@@ -212,6 +200,7 @@ extension ColorExtension on Color {
       },
     );
   }
+
   /// Convierte el color a una versión neón, optimizada para alto contraste.
   ///
   /// El color resultante es muy luminoso y se destaca sobre fondos oscuros,
@@ -284,14 +273,16 @@ extension StringExtensions on String {
   String extractBetweenLastDashAndDot() {
     final lastDashIndex = lastIndexOf('-');
     final lastDotIndex = lastIndexOf('.');
-    
-    if (lastDashIndex == -1 || lastDotIndex == -1 || lastDashIndex >= lastDotIndex) {
+
+    if (lastDashIndex == -1 ||
+        lastDotIndex == -1 ||
+        lastDashIndex >= lastDotIndex) {
       return ''; // Retorna vacío si no encuentra el patrón
     }
-    
+
     return substring(lastDashIndex + 1, lastDotIndex);
   }
-  
+
   /// Extrae el tipo de archivo de nombres como "ct-ciudad-tipo.extension"
   String extractFileType() {
     return extractBetweenLastDashAndDot();
@@ -335,36 +326,40 @@ extension ConvertidorDeDouble on String {
 }
 
 extension FilenameParser on String {
-
   String extractCtFromUrl() {
     // Extraer el nombre del archivo de la URL
     final fileName = split('/').last;
-    
+
     // Remover la extensión .json
     final nameWithoutExtension = fileName.replaceAll('.json', '');
-    
+
     // Remover el sufijo -gasoductos
     final ctName = nameWithoutExtension.replaceAll('-gasoductos', '');
-    
+
     return ctName;
   }
-  
+
   /// Método más genérico para extraer CT de cualquier URL de tracks
   String extractCtName() {
     final fileName = split('/').last; // Obtener nombre del archivo
     final withoutExtension = fileName.split('.').first; // Remover extensión
-    
+
     // Remover sufijos conocidos
-    final suffixes = ['-gasoductos', '-estaciones', '-valvulas', '-compresores'];
+    final suffixes = [
+      '-gasoductos',
+      '-estaciones',
+      '-valvulas',
+      '-compresores'
+    ];
     String result = withoutExtension;
-    
+
     for (final suffix in suffixes) {
       result = result.replaceAll(suffix, '');
     }
-    
+
     return result;
   }
-  
+
   String extractLastPart() {
     return split('-').last.split('.').first;
   }
@@ -486,84 +481,92 @@ extension BuildContextEntension<T> on BuildContext {
 
   TextStyle? get tooltipstyle =>
       Theme.of(this).textTheme.displayMedium!.copyWith(
-        fontWeight: FontWeight.bold,
-        fontSize: rFontSize(8.0),
-        color: Colors.yellow,
-      );
+            fontWeight: FontWeight.bold,
+            fontSize: rFontSize(8.0),
+            color: Colors.yellow,
+          );
 
   TextStyle? get displayMedium => Theme.of(
-    this,
-  ).textTheme.displayMedium!.copyWith(fontSize: rFontSize(18.0));
+        this,
+      ).textTheme.displayMedium!.copyWith(fontSize: rFontSize(18.0));
   TextStyle? get displaySmall => Theme.of(
-    this,
-  ).textTheme.displaySmall!.copyWith(fontSize: rFontSize(12.0));
+        this,
+      ).textTheme.displaySmall!.copyWith(fontSize: rFontSize(12.0));
   TextStyle? get headlineLarge => Theme.of(this).textTheme.headlineLarge;
   TextStyle? get headlineMedium =>
       Theme.of(this).textTheme.headlineMedium!.copyWith(color: whiteColor);
   TextStyle? get titleLarge => Theme.of(this).textTheme.titleLarge!.copyWith(
-    overflow: TextOverflow.ellipsis,
-    fontWeight: FontWeight.bold,
-    color: Colors.black,
-  );
+        overflow: TextOverflow.ellipsis,
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+      );
   TextStyle? get titleMedium => Theme.of(this).textTheme.titleMedium!.copyWith(
-    overflow: TextOverflow.ellipsis,
-    fontWeight: FontWeight.bold,
-    color: Colors.black,
-  );
+        overflow: TextOverflow.ellipsis,
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+      );
   TextStyle? get titleSmall => Theme.of(this).textTheme.titleSmall!.copyWith(
-    overflow: TextOverflow.ellipsis,
-    fontWeight: FontWeight.bold,
-    color: Colors.black,
-  );
+        overflow: TextOverflow.ellipsis,
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+      );
   TextStyle? get hintStyle => Theme.of(this).textTheme.titleSmall!.copyWith(
-    fontWeight: FontWeight.bold,
-    color: Colors.black,
-  );
-  TextStyle? get labelLarge =>
-      Theme.of(this).textTheme.labelLarge!.copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
-  TextStyle? get bodySmall =>
-      Theme.of(this).textTheme.bodySmall!.copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
-  TextStyle? get bodyMedium =>
-      Theme.of(this).textTheme.bodyMedium!.copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+      );
+  TextStyle? get labelLarge => Theme.of(this)
+      .textTheme
+      .labelLarge!
+      .copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
+  TextStyle? get bodySmall => Theme.of(this)
+      .textTheme
+      .bodySmall!
+      .copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
+  TextStyle? get bodyMedium => Theme.of(this)
+      .textTheme
+      .bodyMedium!
+      .copyWith(color: Colors.black, overflow: TextOverflow.ellipsis);
   TextStyle? get inputLabel => Theme.of(
-    this,
-  ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.bold);
+        this,
+      ).textTheme.bodyMedium!.copyWith(fontWeight: FontWeight.bold);
   TextStyle? get inputText =>
       Theme.of(this).textTheme.bodyMedium!.copyWith(color: Colors.black);
-  TextStyle? get dialogTextTitle => Theme.of(this).textTheme.bodyMedium!
+  TextStyle? get dialogTextTitle => Theme.of(this)
+      .textTheme
+      .bodyMedium!
       .copyWith(fontWeight: FontWeight.bold, fontSize: rFontSize(12.0));
   TextStyle? get buttonMedium => Theme.of(this).textTheme.bodyMedium!.copyWith(
-    fontWeight: FontWeight.bold,
-    fontSize: rFontSize(18.0),
-  );
+        fontWeight: FontWeight.bold,
+        fontSize: rFontSize(18.0),
+      );
   TextStyle? get buttonDialog => Theme.of(this).textTheme.bodyMedium!.copyWith(
-    fontWeight: FontWeight.bold,
-    fontSize: rFontSize(12.0),
-  );
+        fontWeight: FontWeight.bold,
+        fontSize: rFontSize(12.0),
+      );
   TextStyle? get titleTextStyle =>
       Theme.of(this).appBarTheme.titleTextStyle!.copyWith(color: Colors.black);
   TextStyle? get bodyExtraSmall => bodySmall?.copyWith(
-    fontSize: rFontSize(10),
-    height: 1.6,
-    letterSpacing: .5,
-  );
+        fontSize: rFontSize(10),
+        height: 1.6,
+        letterSpacing: .5,
+      );
   TextStyle? get bodyLarge =>
       Theme.of(this).textTheme.bodyLarge!.copyWith(color: Colors.black);
   TextStyle? get dividerTextSmall => bodySmall?.copyWith(
-    letterSpacing: 0.5,
-    fontWeight: FontWeight.w700,
-    fontSize: rFontSize(12.0),
-  );
+        letterSpacing: 0.5,
+        fontWeight: FontWeight.w700,
+        fontSize: rFontSize(12.0),
+      );
   TextStyle? get dividerTextLarge => bodySmall?.copyWith(
-    letterSpacing: 1.5,
-    fontWeight: FontWeight.w700,
-    fontSize: rFontSize(13.0),
-    height: 1.23,
-  );
+        letterSpacing: 1.5,
+        fontWeight: FontWeight.w700,
+        fontSize: rFontSize(13.0),
+        height: 1.23,
+      );
   TextStyle? get markertext => Theme.of(this).textTheme.titleMedium!.copyWith(
-    fontWeight: FontWeight.bold,
-    fontSize: rFontSize(3.0),
-  );
+        fontWeight: FontWeight.bold,
+        fontSize: rFontSize(3.0),
+      );
 
   Color get primaryColor => Theme.of(this).primaryColor;
   Color get primaryColorDark => Theme.of(this).primaryColorDark;
@@ -591,153 +594,156 @@ extension BuildContextEntension<T> on BuildContext {
   Color get actionButtonColor => whiteColor;
 
   BoxDecoration get maindecoration => BoxDecoration(
-    borderRadius: BorderRadius.circular(0.0),
-    color: whiteColor,
-    border: const Border(
-      top: BorderSide(width: 1, color: Colors.blueGrey),
-      bottom: BorderSide(width: 1, color: Colors.blueGrey),
-      left: BorderSide(width: 1, color: Colors.blueGrey),
-      right: BorderSide(width: 1, color: Colors.blueGrey),
-    ),
-  );
+        borderRadius: BorderRadius.circular(0.0),
+        color: whiteColor,
+        border: const Border(
+          top: BorderSide(width: 1, color: Colors.blueGrey),
+          bottom: BorderSide(width: 1, color: Colors.blueGrey),
+          left: BorderSide(width: 1, color: Colors.blueGrey),
+          right: BorderSide(width: 1, color: Colors.blueGrey),
+        ),
+      );
 
   BoxDecoration get buttondecoration => BoxDecoration(
-    borderRadius: BorderRadius.circular(8.0),
-    color: buttonColor.withValues(alpha: 0.75),
-    border: const Border(
-      top: BorderSide(width: 1, color: whiteColor),
-      bottom: BorderSide(width: 1, color: whiteColor),
-      left: BorderSide(width: 1, color: whiteColor),
-      right: BorderSide(width: 1, color: whiteColor),
-    ),
-  );
+        borderRadius: BorderRadius.circular(8.0),
+        color: buttonColor.withValues(alpha: 0.75),
+        border: const Border(
+          top: BorderSide(width: 1, color: whiteColor),
+          bottom: BorderSide(width: 1, color: whiteColor),
+          left: BorderSide(width: 1, color: whiteColor),
+          right: BorderSide(width: 1, color: whiteColor),
+        ),
+      );
 
   BoxDecoration get bottomlinedecoration => const BoxDecoration(
-    color: whiteColor,
-    border: Border(bottom: BorderSide(width: 1, color: whiteColor)),
-  );
+        color: whiteColor,
+        border: Border(bottom: BorderSide(width: 1, color: whiteColor)),
+      );
 
   BoxDecoration get squaredecoration => const BoxDecoration(
-    border: Border(
-      bottom: BorderSide(width: 1, color: Colors.blueGrey),
-      top: BorderSide(width: 1, color: Colors.blueGrey),
-      left: BorderSide(width: 1, color: Colors.blueGrey),
-      right: BorderSide(width: 1, color: Colors.blueGrey),
-    ),
-  );
+        border: Border(
+          bottom: BorderSide(width: 1, color: Colors.blueGrey),
+          top: BorderSide(width: 1, color: Colors.blueGrey),
+          left: BorderSide(width: 1, color: Colors.blueGrey),
+          right: BorderSide(width: 1, color: Colors.blueGrey),
+        ),
+      );
 
   BoxDecoration get squaredecorationSelected => const BoxDecoration(
-    border: Border(
-      bottom: BorderSide(width: 2, color: Colors.yellow),
-      top: BorderSide(width: 2, color: Colors.yellow),
-      left: BorderSide(width: 2, color: Colors.yellow),
-      right: BorderSide(width: 2, color: Colors.yellow),
-    ),
-  );
+        border: Border(
+          bottom: BorderSide(width: 2, color: Colors.yellow),
+          top: BorderSide(width: 2, color: Colors.yellow),
+          left: BorderSide(width: 2, color: Colors.yellow),
+          right: BorderSide(width: 2, color: Colors.yellow),
+        ),
+      );
 
   BoxDecoration get markerdecoration => const BoxDecoration(
-    color: Colors.blueAccent,
-    border: Border(
-      bottom: BorderSide(width: 1, color: Colors.yellow),
-      top: BorderSide(width: 1, color: Colors.yellow),
-      left: BorderSide(width: 1, color: Colors.yellow),
-      right: BorderSide(width: 1, color: Colors.yellow),
-    ),
-  );
+        color: Colors.blueAccent,
+        border: Border(
+          bottom: BorderSide(width: 1, color: Colors.yellow),
+          top: BorderSide(width: 1, color: Colors.yellow),
+          left: BorderSide(width: 1, color: Colors.yellow),
+          right: BorderSide(width: 1, color: Colors.yellow),
+        ),
+      );
 
   BoxDecoration get actionbuttondecoration => BoxDecoration(
-    color: Colors.blue[900]!,
-    border: Border(
-      top: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
-      bottom: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
-      left: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
-      right: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
-    ),
-  );
+        color: Colors.blue[900]!,
+        border: Border(
+          top: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
+          bottom:
+              BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
+          left: BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
+          right:
+              BorderSide(width: 1, color: Colors.blue[900]!.getBorderColor()),
+        ),
+      );
 
   InputDecoration get boldInputDecoration => InputDecoration(
-    fillColor: Colors.blueGrey.withValues(alpha: 0.1),
-    filled: true,
-    border: OutlineInputBorder(
-      borderSide: BorderSide(
-        color: Colors.black, // Color negro
-        width: 2.0, // Ancho doble
-      ),
-    ),
-    focusedBorder: OutlineInputBorder(
-      // Opcional: Borde al enfocar
-      borderSide: BorderSide(color: Colors.black, width: 2.0),
-    ),
-    enabledBorder: OutlineInputBorder(
-      // Opcional: Borde cuando está habilitado
-      borderSide: BorderSide(color: Colors.black, width: 2.0),
-    ),
-    floatingLabelBehavior: FloatingLabelBehavior.always, // Label siempre arriba
-    labelStyle: TextStyle(
-      fontWeight: FontWeight.bold, // Label en negrita
-      fontSize: 14, // Tamaño más pequeño para diferenciar
-      color: Colors.blueGrey.shade800, // Color más oscuro para mayor contraste
-      letterSpacing: 0.5, // Espaciado entre letras
-    ),
-    hintStyle: TextStyle(
-      fontWeight: FontWeight.normal,
-      fontSize: 16,
-      color: Colors.grey.shade600,
-    ),
-  );
+        fillColor: Colors.blueGrey.withValues(alpha: 0.1),
+        filled: true,
+        border: OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.black, // Color negro
+            width: 2.0, // Ancho doble
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          // Opcional: Borde al enfocar
+          borderSide: BorderSide(color: Colors.black, width: 2.0),
+        ),
+        enabledBorder: OutlineInputBorder(
+          // Opcional: Borde cuando está habilitado
+          borderSide: BorderSide(color: Colors.black, width: 2.0),
+        ),
+        floatingLabelBehavior:
+            FloatingLabelBehavior.always, // Label siempre arriba
+        labelStyle: TextStyle(
+          fontWeight: FontWeight.bold, // Label en negrita
+          fontSize: 14, // Tamaño más pequeño para diferenciar
+          color:
+              Colors.blueGrey.shade800, // Color más oscuro para mayor contraste
+          letterSpacing: 0.5, // Espaciado entre letras
+        ),
+        hintStyle: TextStyle(
+          fontWeight: FontWeight.normal,
+          fontSize: 16,
+          color: Colors.grey.shade600,
+        ),
+      );
 
   InputDecoration get normalInputDecoration => InputDecoration(
-    border: OutlineInputBorder(
-      borderSide: BorderSide(
-        color: Colors.black54, // Color negro
-        width: 1.0, // Ancho doble
-      ),
-    ),
-    focusedBorder: OutlineInputBorder(
-      // Opcional: Borde al enfocar
-      borderSide: BorderSide(color: Colors.black54, width: 1.0),
-    ),
-    enabledBorder: OutlineInputBorder(
-      // Opcional: Borde cuando está habilitado
-      borderSide: BorderSide(color: Colors.black54, width: 1.0),
-    ),
-    floatingLabelBehavior: FloatingLabelBehavior.always, // Label siempre arriba
-    labelStyle: TextStyle(
-      color: Colors.blueGrey.shade800, // Color más oscuro
-      fontWeight: FontWeight.w600, // Semi-negrita
-      fontSize: 14, // Tamaño más pequeño
-      letterSpacing: 0.5,
-    ),
-    hintStyle: TextStyle(
-      color: Colors.grey.shade600,
-      fontWeight: FontWeight.normal,
-      fontSize: 16, // Valor ligeramente más grande que el label
-    ),
-  );
-
-
+        border: OutlineInputBorder(
+          borderSide: BorderSide(
+            color: Colors.black54, // Color negro
+            width: 1.0, // Ancho doble
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          // Opcional: Borde al enfocar
+          borderSide: BorderSide(color: Colors.black54, width: 1.0),
+        ),
+        enabledBorder: OutlineInputBorder(
+          // Opcional: Borde cuando está habilitado
+          borderSide: BorderSide(color: Colors.black54, width: 1.0),
+        ),
+        floatingLabelBehavior:
+            FloatingLabelBehavior.always, // Label siempre arriba
+        labelStyle: TextStyle(
+          color: Colors.blueGrey.shade800, // Color más oscuro
+          fontWeight: FontWeight.w600, // Semi-negrita
+          fontSize: 14, // Tamaño más pequeño
+          letterSpacing: 0.5,
+        ),
+        hintStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontWeight: FontWeight.normal,
+          fontSize: 16, // Valor ligeramente más grande que el label
+        ),
+      );
 
   InputDecoration get inputDecoration => InputDecoration(
-    alignLabelWithHint: true,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8.0),
-      borderSide: BorderSide(
-        color: Colors.grey.shade200, // Borde gris muy claro
-      ),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8.0),
-      borderSide: BorderSide(
-        color: Colors.grey.shade200, // Borde gris muy claro
-      ),
-    ),
-    errorStyle: TextStyle(
-      color: Colors.red.shade900, // Color de texto de error rojo intenso
-    ),
-    labelStyle: const TextStyle(
-      color: whiteColor, // Texto blanco
-    ),
-  );
+        alignLabelWithHint: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200, // Borde gris muy claro
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200, // Borde gris muy claro
+          ),
+        ),
+        errorStyle: TextStyle(
+          color: Colors.red.shade900, // Color de texto de error rojo intenso
+        ),
+        labelStyle: const TextStyle(
+          color: whiteColor, // Texto blanco
+        ),
+      );
 
   double get longestSide => MediaQuery.of(this).size.longestSide;
   double get shortestSide => MediaQuery.of(this).size.shortestSide;
@@ -745,52 +751,37 @@ extension BuildContextEntension<T> on BuildContext {
   EdgeInsets get padding => MediaQuery.of(this).padding;
 }
 
-extension ElevatedButtonExtension on ElevatedButton {
-  ElevatedButton customButton(String text, VoidCallback onPressed) =>
-      ElevatedButton(
-        onPressed: onPressed,
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.all<Color>(
-            whiteColor,
-          ), // Fondo blanco
-          side: WidgetStateProperty.all<BorderSide>(
-            BorderSide(color: Colors.grey.shade500),
-          ), // Borde gris medio
-          foregroundColor: WidgetStateProperty.all<Color>(
-            Colors.black,
-          ), // Color de texto negro
-        ),
-        child: AutoSizeText(text),
-      );
+extension NumFormatting on num {
+  /// Formatea el número con coma como separador decimal
+  String toStringWithComma({int decimals = 2}) {
+    final formatter = NumberFormat('#,##0.${'0' * decimals}', 'es_ES');
+    return formatter.format(this);
+  }
 }
-
-
- extension NumFormatting on num {                                                                                                                                                               
-    /// Formatea el número con coma como separador decimal                                                                                                                                       
-    String toStringWithComma({int decimals = 2}) {
-      final formatter = NumberFormat('#,##0.${'0' * decimals}', 'es_ES');                                                                                                                        
-      return formatter.format(this);                        
-    }                                                                                                                                                                                            
-  } 
 
 extension WidgetExt on Widget {
   Expanded expanded({int flex = 1}) => Expanded(flex: flex, child: this);
 
   Opacity setOpacity(double val) => Opacity(opacity: val, child: this);
 
-  Padding withPadding(EdgeInsets padding) => Padding(padding: padding, child: this);
+  Padding withPadding(EdgeInsets padding) =>
+      Padding(padding: padding, child: this);
 
-  SizedBox box({double? width, double? height}) => SizedBox(width: width, height: height, child: this);
+  SizedBox box({double? width, double? height}) =>
+      SizedBox(width: width, height: height, child: this);
 
   Center center() => Center(child: this);
 
   Widget centered({EdgeInsetsGeometry? padding, Color? color}) {
-    return Container(alignment: Alignment.center, padding: padding, color: color, child: this);
+    return Container(
+        alignment: Alignment.center,
+        padding: padding,
+        color: color,
+        child: this);
   }
 
   Widget onClick(Function() onClick) => InkWell(onTap: onClick, child: this);
 
-  RotatedBox rotate(int quarterTurns) => RotatedBox(quarterTurns: quarterTurns, child: this);
+  RotatedBox rotate(int quarterTurns) =>
+      RotatedBox(quarterTurns: quarterTurns, child: this);
 }
-
-

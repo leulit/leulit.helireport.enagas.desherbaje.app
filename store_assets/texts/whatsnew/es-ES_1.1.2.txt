@@ -1,0 +1,9 @@
+Novedades de la versión 1.1.2
+
+• Recuperación de contraseña desde la propia app: si olvidas tu contraseña, ahora puedes restablecerla con un código de verificación, sin salir de la aplicación.
+
+• Nuevo acceso "¿Contraseña olvidada?" en la pantalla de inicio de sesión.
+
+• Registro de recorridos GPS más preciso: cada punto de la traza guarda ahora la precisión y la velocidad, mejorando la calidad del seguimiento en campo.
+
+• Mejoras de estabilidad y rendimiento.

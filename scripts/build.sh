@@ -99,6 +99,11 @@ ARTIFACT_BASE="helireport_desherbaje-${VERSION_NAME}+${BUILD_NUMBER}"
 
 log "Target: $TARGET — versión: $VERSION_NAME (build $BUILD_NUMBER)"
 
+# Borrador de "Novedades" para la ficha de tienda. Idempotente: si el fichero de
+# esta versión ya existe, no lo pisa (puede estar ya redactado a mano).
+NOTES_FILE="store_assets/texts/whatsnew/es-ES_${VERSION_NAME}.txt"
+"$SCRIPT_DIR/release-notes.sh" "$VERSION_NAME" || warn "No se pudo generar el borrador de novedades (sigo con el build)"
+
 # --- Limpieza + deps (una sola vez, compartida) --------------------------------
 if ! $SKIP_CLEAN; then
   log "flutter clean"
@@ -216,6 +221,17 @@ $(printf "%b" "${C_BLUE}")iOS$(printf "%b" "${C_RESET}") — subir a App Store C
        --file dist/ios/${ARTIFACT_BASE}.ipa \\
        --apiKey <ASC_KEY_ID> --apiIssuer <ASC_ISSUER_ID>
   Tras ~5-15 min el build aparece en TestFlight → Internal Testing.
+
+EOF
+fi
+
+if [[ -f "$NOTES_FILE" ]]; then
+  cat <<EOF
+$(printf "%b" "${C_BLUE}")Novedades$(printf "%b" "${C_RESET}") — texto para la caja "Novedades de esta versión":
+  Fichero: ${NOTES_FILE}
+  Revísalo (los subjects vienen de commits técnicos) y pégalo en:
+    · App Store Connect → versión → "Novedades de esta versión"
+    · Play Console → release → "Notas de la versión"
 
 EOF
 fi

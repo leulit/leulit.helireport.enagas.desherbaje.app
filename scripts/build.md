@@ -45,6 +45,7 @@ Script de construcción de artefactos de release para **Helireport Desherbaje** 
 2. Validación de .env (HMAC_SECRET) → DEFINES=(--dart-define-from-file=.env)
 2b. --bump (opcional) → bump-version.sh
 3. Lectura de versión desde pubspec.yaml  →  VERSION_NAME + BUILD_NUMBER
+3b. release-notes.sh → borrador de "Novedades" de la versión
 3. flutter clean   (omitible con --no-clean)
 4. flutter pub get
 5. build_android() y/o build_ios()        (según target)
@@ -118,3 +119,30 @@ version: 1.0.0+1
 ```
 
 Usa `--bump` para incrementarla automáticamente antes de cada build destinado a las tiendas. Ambas tiendas rechazan un build number repetido.
+
+---
+
+## Novedades de la versión (What's New)
+
+Cada build genera el borrador del texto de novedades en:
+
+```
+store_assets/texts/whatsnew/es-ES_<version>.txt
+```
+
+Lo produce `release-notes.sh`, que recoge los commits **Conventional Commits** `feat:` y `fix:` posteriores al último cambio de la línea `version:` en `pubspec.yaml` (no hay tags de release, así que ese es el corte).
+
+```bash
+./scripts/release-notes.sh            # versión actual de pubspec.yaml
+./scripts/release-notes.sh 1.2.0      # versión explícita
+./scripts/release-notes.sh --force    # regenera pisando el fichero existente
+```
+
+- **Idempotente**: si el fichero de esa versión ya existe, no lo pisa. Así el texto que redactes a mano sobrevive a los rebuilds.
+- **Es un borrador**: los subjects son técnicos y en inglés. Reescríbelos en lenguaje de operador antes de publicar.
+- **Límites**: App Store admite 4000 caracteres; Google Play corta en **500**. El script avisa si se pasa de 500, para que el mismo texto sirva en ambas tiendas.
+- Commits que no empiezan por `feat:`/`fix:` (chore, docs, test, refactor…) se ignoran: no son visibles para el operador.
+
+Destino del texto:
+- App Store Connect → versión → **Novedades de esta versión**
+- Play Console → release → **Notas de la versión**
