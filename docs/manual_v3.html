@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual de operario — Helireport Desherbaje v3</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #212121; }
+
+  .page {
+    width: 210mm; height: 297mm; position: relative; overflow: hidden;
+    background: #fff; page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* ── Banda verde superior ─────────────────────────────────────────────── */
+  .band {
+    height: 15mm; background: #388E3C; color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14mm; font-size: 9pt; letter-spacing: .4px;
+  }
+  .band .l { text-transform: uppercase; font-weight: 600; }
+  .band .r { opacity: .92; }
+
+  .content { padding: 9mm 14mm 0 14mm; height: 268mm; overflow: hidden; }
+
+  footer {
+    position: absolute; bottom: 8mm; left: 14mm; right: 14mm;
+    display: flex; justify-content: space-between;
+    font-size: 8pt; color: #9E9E9E;
+  }
+
+  h2 { color: #1B5E20; font-size: 19pt; font-weight: 700; margin: 0 0 3mm 0; }
+  h3 { color: #2E7D32; font-size: 12.5pt; font-weight: 700; margin: 5mm 0 2mm 0; }
+  p.intro { color: #555; font-size: 10.5pt; line-height: 1.45; margin: 0 0 4mm 0; }
+  p.body  { font-size: 10.3pt; line-height: 1.5; margin: 0 0 3mm 0; }
+
+  ul { margin: 0 0 3mm 0; padding-left: 6mm; }
+  li { font-size: 10.2pt; line-height: 1.48; margin-bottom: 1.6mm; }
+  li::marker { color: #388E3C; }
+
+  .note { color: #2E7D32; font-size: 9.6pt; line-height: 1.42; margin: 2mm 0 0 0; }
+
+  .warn {
+    border-left: 4px solid #F57C00; background: #FFF3E0;
+    padding: 3mm 4mm; font-size: 9.8pt; line-height: 1.45; margin: 3mm 0 0 0;
+    border-radius: 3px;
+  }
+  .warn b { color: #B45309; }
+
+  .danger {
+    border-left: 4px solid #C62828; background: #FFEBEE;
+    padding: 3mm 4mm; font-size: 9.8pt; line-height: 1.45; margin: 3mm 0 0 0;
+    border-radius: 3px;
+  }
+  .danger b { color: #B71C1C; }
+
+  /* ── Chips de estado — colores REALES de app_theme.dart ───────────────── */
+  .chip { display: inline-block; padding: 1.2mm 2.6mm; border-radius: 11px;
+          font-size: 8.6pt; font-weight: 700; white-space: nowrap; line-height: 1;
+          color: #fff; }
+  .e-prop { background: #FDD835; color: #5D4037; }
+  .e-vali { background: #1976D2; }
+  .e-cont { background: #ED92F0; color: #4A148C; }
+  .e-ejec { background: #D32F2F; }
+  .e-fin  { background: #388E3C; }
+  .e-cer  { background: #546E7A; }
+  .owner-en { color: #1565C0; font-weight: 700; }
+  .owner-op { color: #1B5E20; font-weight: 700; }
+
+  /* ── Diagrama dos mundos ──────────────────────────────────────────────── */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 2mm 0 4mm 0; }
+  .world { flex: 1; border: 1.5px solid #C8E6C9; border-radius: 8px; padding: 4mm; background: #fff; }
+  .world.web { border-top: 5px solid #388E3C; }
+  .world.mob { border-top: 5px solid #97BC62; }
+  .world .t { font-weight: 700; color: #1B5E20; font-size: 10.5pt; margin-bottom: 2mm; }
+  .world ul { padding-left: 5mm; margin: 0; }
+  .world li { font-size: 9.2pt; margin-bottom: 1mm; }
+  .sync-mid { width: 26mm; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; gap: 1.5mm; }
+  .sync-mid .arr { color: #388E3C; font-size: 14pt; line-height: 1; }
+  .sync-mid .tag { background: #1B5E20; color: #fff; font-size: 7pt; font-weight: 700;
+                   padding: 2mm 2.5mm; border-radius: 5px; text-align: center; line-height: 1.15; }
+
+  /* ── Tablas ───────────────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 0 0; }
+  th { background: #E8F5E9; color: #1B5E20; font-size: 9.2pt; text-align: left;
+       padding: 2mm 2.5mm; border-bottom: 1.5px solid #A5D6A7; }
+  td { font-size: 9.2pt; padding: 2mm 2.5mm; border-bottom: 1px solid #EEEEEE;
+       vertical-align: top; line-height: 1.4; }
+  td.c1 { width: 30mm; } td.c2 { width: 32mm; }
+
+  .flowline { display: flex; align-items: center; flex-wrap: wrap; gap: 1.5mm;
+              margin: 2mm 0 3mm 0; }
+  .flowline .arr { color: #9E9E9E; font-size: 9pt; }
+
+  /* ── Página de pantalla: texto izquierda + captura derecha ────────────── */
+  .screen { display: flex; gap: 8mm; height: 100%; }
+  .screen .txt { flex: 1 1 0; min-width: 0; }
+  .screen .cap { width: 78mm; flex: 0 0 78mm; }
+
+  .shot { position: relative; width: 78mm; height: 158mm;
+          border-radius: 6px; overflow: hidden; background: #FAFAFA; }
+  .shot.short { height: 100mm; }
+  .shot .ph { position: absolute; inset: 0; border: 1.5px dashed #BDBDBD;
+              border-radius: 6px; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; gap: 2mm;
+              color: #9E9E9E; font-size: 9pt; text-align: center; padding: 4mm; }
+  .shot .ph .fn { font-family: "SF Mono", Menlo, monospace; font-size: 8.5pt;
+                  color: #616161; background: #EEEEEE; padding: 1.5mm 2.5mm;
+                  border-radius: 3px; word-break: break-all; }
+  .shot .ph .what { font-size: 8.2pt; line-height: 1.35; color: #9E9E9E; }
+  .shot img { position: relative; display: block; width: 100%; height: 100%;
+              object-fit: contain; background: #fff; }
+  .shot .cappair { position: relative; display: flex; flex-direction: column;
+                   height: 100%; gap: 2mm; }
+  .shot .cappair img { height: calc(50% - 1mm); }
+
+  /* Captura flotada a la derecha en páginas de texto a ancho completo. */
+  .shot.floatr { float: right; margin: 0 0 4mm 6mm; height: 96mm; width: 62mm; }
+
+  .kbd { font-family: "SF Mono", Menlo, monospace; font-size: 9pt;
+         background: #F1F8E9; border: 1px solid #C8E6C9; border-radius: 3px;
+         padding: .4mm 1.5mm; color: #1B5E20; }
+
+  /* ── Portada ──────────────────────────────────────────────────────────── */
+  .cover-top { height: 60mm; background: #2E7D32; }
+  .cover-mid { padding: 55mm 0 0 0; text-align: center; }
+  .cover-mid h1 { color: #388E3C; font-size: 34pt; font-weight: 400; margin: 0; }
+  .cover-mid .sub { color: #616161; font-size: 14pt; margin-top: 4mm; }
+  .cover-foot { position: absolute; bottom: 60mm; left: 0; right: 0;
+                text-align: center; color: #757575; font-size: 9.5pt; line-height: 1.6; }
+  .cover-band { position: absolute; bottom: 0; left: 0; right: 0;
+                height: 22mm; background: #E8F5E9; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ PORTADA ═══════════════════════════════════ -->
+<div class="page">
+  <div class="cover-top"></div>
+  <div class="cover-mid">
+    <h1>Helireport Desherbaje</h1>
+    <div class="sub">Manual de operario de campo</div>
+  </div>
+  <div class="cover-foot">
+    Módulo Desherbaje — Enagas<br>
+    Segmentos, fotos, vídeos, trazas GPS y sincronización offline<br><br>
+    Versión de app 1.1.5 · Julio 2026
+  </div>
+  <div class="cover-band"></div>
+</div>
+
+<!-- ═══════════════════════════ A · CÓMO TRABAJAMOS ═══════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Cómo trabajamos con Enagas</h2>
+    <p class="intro">La aplicación conecta dos mundos: la oficina de <b>Enagas</b> (aplicación web) y tú, el operario, en <b>campo</b> (app móvil). El trabajo va y vuelve entre los dos.</p>
+
+    <div class="flow">
+      <div class="world web">
+        <div class="t">WEB · Gestores de Enagas</div>
+        <ul>
+          <li>Preparan y te asignan el trabajo</li>
+          <li>Validan los cambios que propones</li>
+          <li>Aprueban las zonas nuevas</li>
+          <li>Cierran las zonas terminadas</li>
+        </ul>
+      </div>
+      <div class="sync-mid">
+        <div class="arr">➜</div>
+        <div class="tag">DESCARGAR<br>/ ENVIAR</div>
+        <div class="arr">⬅</div>
+      </div>
+      <div class="world mob">
+        <div class="t">MÓVIL · Tú, en campo</div>
+        <ul>
+          <li>Verificas la zona sobre el terreno</li>
+          <li>Ejecutas los trabajos</li>
+          <li>Reportas fotos y vídeos antes / después</li>
+          <li>Propones cambios y zonas nuevas</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Dos botones, dos direcciones</h3>
+    <p class="body">No hay un único botón de "sincronizar". Son dos pantallas distintas, y las dos viven en los iconos de la barra verde de arriba:</p>
+    <table>
+      <tr><th style="width:42mm">Icono / pantalla</th><th style="width:34mm">Botón</th><th>Qué hace y cuándo</th></tr>
+      <tr>
+        <td><b>Sincronización</b><br><span style="color:#757575;font-size:8.6pt">nube con flecha hacia abajo</span></td>
+        <td><span class="kbd">Descargar todo</span></td>
+        <td><b>BAJA</b> el trabajo desde Enagas a tu móvil. Hazlo <b>antes de salir</b>, con cobertura o WiFi.</td>
+      </tr>
+      <tr>
+        <td><b>Forzar envío</b><br><span style="color:#757575;font-size:8.6pt">nube con flecha hacia arriba</span></td>
+        <td><span class="kbd">Enviar todos</span></td>
+        <td><b>SUBE</b> tu trabajo a Enagas. Hazlo <b>al volver</b>, con cobertura o WiFi.</td>
+      </tr>
+    </table>
+    <p class="note">«Forzar envío» es solo el nombre del botón. No es un último recurso: es la forma normal de entregar tu jornada.</p>
+
+    <h3>Tu jornada, paso a paso</h3>
+    <ul>
+      <li>Los gestores de Enagas preparan el trabajo en la web y te lo asignan.</li>
+      <li>Antes de salir, lo descargas al móvil: <b>Sincronización → Descargar todo</b>.</li>
+      <li>En campo trabajas <b>sin conexión</b>: todo lo que haces se guarda en el móvil.</li>
+      <li>Al volver, lo subes: <b>Forzar envío → Enviar todos</b>. Enagas recibe tu trabajo.</li>
+    </ul>
+    <p class="note">Internet solo hace falta dos veces al día: al empezar (descargar) y al terminar (subir). El resto de la jornada la app funciona aunque no haya cobertura. <b>Pendientes a 0 = jornada cerrada.</b></p>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Cómo trabajamos · A</span></footer>
+</div>
+
+<!-- ═══════════════════════════ B · VERIFICAR Y PROPONER ══════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Verificar, proponer cambios y zonas nuevas</h2>
+    <p class="intro">Lo que Enagas dibuja en la oficina puede no coincidir con lo que hay en el terreno. Tu trabajo es <b>comprobarlo</b> y, si hace falta, <b>proponer un cambio</b> para que Enagas lo apruebe.</p>
+
+    <h3>Verificar y proponer un cambio</h3>
+    <ul>
+      <li>Abre el detalle del segmento y comprueba sobre el mapa que la zona es correcta.</li>
+      <li>Si la zona es más grande, más pequeña o está mal situada: pulsa <b>“Editar extremos”</b> y ajusta la geometría sobre el mapa. También puedes corregir la descripción y el tipo de actividad.</li>
+      <li>Cambia el estado a <span class="chip e-cont">Contratista</span> y guarda. Al enviar, Enagas ve tu propuesta y la valida (o la devuelve).</li>
+    </ul>
+
+    <div class="warn">
+      ⚠ <b>Si crees que en esa zona NO hace falta actuar:</b> se comunica escribiendo un <b>Mensaje</b> en el segmento explicando el motivo y dejándolo en <span class="chip e-cont">Contratista</span>. <b>Sigue sin existir</b> un botón “No requiere actuación” — pendiente de acordar con Enagas.
+    </div>
+
+    <h3>Proponer una zona nueva</h3>
+    <ul>
+      <li>Ve al <b>Mapa global</b> y acércate hasta pasar de <b>zoom 14</b>: por debajo de ese zoom el botón de corte no aparece.</li>
+      <li>Pulsa el botón redondo <b>verde con la tijera ✂</b> (abajo a la derecha).</li>
+      <li>Con dos líneas de dos puntos cada una, corta la traza del gasoducto: la app extrae uno o varios segmentos nuevos.</li>
+      <li>Rellena la descripción y el tipo de actividad. La zona nueva nace siempre en estado <span class="chip e-cont">Contratista</span>.</li>
+      <li>Al enviar, Enagas recibe la zona nueva y la valida.</li>
+    </ul>
+
+    <p class="note">Regla de oro: <b>tú propones, Enagas aprueba.</b> Mientras una zona esté en <span class="chip e-cont">Contratista</span>, está pendiente de que Enagas la valide. Nada se da por aprobado hasta que pasa a <span class="chip e-vali">Validada</span>.</p>
+
+    <div class="warn" style="margin-top:5mm">
+      ⚠ La app <b>sí te deja</b> pasar de <span class="chip e-cont">Contratista</span> a <span class="chip e-ejec">En Ejecución</span> sin esperar la validación. Que puedas no significa que debas: si empiezas antes de que Enagas valide, asumes tú el riesgo de que la zona se devuelva.
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Verificar y proponer · B</span></footer>
+</div>
+
+<!-- ═══════════════════════════ C · ESTADOS ═══════════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Los estados y qué hago yo</h2>
+    <p class="intro">Cada zona tiene un <b>estado</b> con un color. Es el idioma común entre tú y Enagas. Son los mismos colores que ves en las tarjetas de la app.</p>
+
+    <div class="flowline">
+      <span class="chip e-prop">Propuesta</span><span class="arr">➜</span>
+      <span class="chip e-cont">Contratista</span><span class="arr">➜</span>
+      <span class="chip e-vali">Validada</span><span class="arr">➜</span>
+      <span class="chip e-ejec">En Ejecución</span><span class="arr">➜</span>
+      <span class="chip e-fin">Finalizada</span><span class="arr">➜</span>
+      <span class="chip e-cer">Cerrada</span>
+    </div>
+
+    <table>
+      <tr><th>Estado</th><th>Quién manda</th><th>Qué significa y qué hago yo</th></tr>
+      <tr><td class="c1"><span class="chip e-prop">Propuesta</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Zona propuesta por Enagas. <b>Revísala en campo.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-cont">Contratista</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Has propuesto un cambio o una zona nueva. <b>Espera a que Enagas la valide.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-vali">Validada</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Enagas la ha aprobado. Lista para ejecutar.</td></tr>
+      <tr><td class="c1"><span class="chip e-ejec">En Ejecución</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Trabajos en curso. <b>Haz fotos antes y después.</b></td></tr>
+      <tr><td class="c1"><span class="chip e-fin">Finalizada</span></td><td class="c2"><span class="owner-op">Tú (operario)</span></td><td>Trabajos terminados. Envía para que Enagas lo reciba.</td></tr>
+      <tr><td class="c1"><span class="chip e-cer">Cerrada</span></td><td class="c2"><span class="owner-en">Gestor Enagas</span></td><td>Zona cerrada. <b>No se puede tocar ni editar</b> desde la app.</td></tr>
+    </table>
+
+    <h3>A qué estado puedo pasar desde dónde</h3>
+    <p class="body">El desplegable de Estado solo te ofrece los destinos válidos desde el estado actual. Esta es la tabla completa:</p>
+    <table>
+      <tr><th style="width:38mm">Estando en…</th><th>…puedes pasar a</th></tr>
+      <tr><td><span class="chip e-prop">Propuesta</span></td><td><span class="chip e-cont">Contratista</span> &nbsp; <span class="chip e-ejec">En Ejecución</span> &nbsp; <span class="chip e-fin">Finalizada</span></td></tr>
+      <tr><td><span class="chip e-cont">Contratista</span></td><td><span class="chip e-ejec">En Ejecución</span></td></tr>
+      <tr><td><span class="chip e-vali">Validada</span></td><td><span class="chip e-ejec">En Ejecución</span> &nbsp; <span class="chip e-fin">Finalizada</span></td></tr>
+      <tr><td><span class="chip e-ejec">En Ejecución</span></td><td><span class="chip e-fin">Finalizada</span></td></tr>
+      <tr><td><span class="chip e-fin">Finalizada</span></td><td><span class="chip e-cer">Cerrada</span> &nbsp; <span class="chip e-ejec">En Ejecución</span> <span style="color:#757575;font-size:8.6pt">(reabrir)</span></td></tr>
+      <tr><td><span class="chip e-cer">Cerrada</span></td><td style="color:#757575">— nada. Estado final, bloqueado.</td></tr>
+    </table>
+
+    <p class="note">Los estados que <b>tú</b> pones habitualmente son <span class="chip e-cont">Contratista</span> (propongo un cambio), <span class="chip e-ejec">En Ejecución</span> (empiezo los trabajos) y <span class="chip e-fin">Finalizada</span> (he terminado).</p>
+    <div class="warn">
+      ⚠ La app te permite pasar de <span class="chip e-fin">Finalizada</span> a <span class="chip e-cer">Cerrada</span>. <b>El cierre lo decide Enagas</b>, no tú: no cierres una zona salvo que te lo indiquen. Una vez cerrada no se puede reabrir desde el móvil.
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Estados · C</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 1 · PERMISOS ══════════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>1. La primera vez que abres la app</h2>
+        <p class="intro">La app te pedirá varios permisos. Contéstalos bien la primera vez: un permiso mal dado no da error, simplemente hace que algo deje de funcionar en silencio.</p>
+
+        <table>
+          <tr><th style="width:26mm">Permiso</th><th>Qué contestar y por qué</th></tr>
+          <tr><td><b>Ubicación</b></td><td><b>Permitir siempre / todo el tiempo.</b> Sin esto la traza GPS se corta al bloquear la pantalla y las fotos salen sin coordenadas.</td></tr>
+          <tr><td><b>Cámara</b></td><td>Permitir. Sin esto no puedes hacer fotos ni vídeos.</td></tr>
+          <tr><td><b>Micrófono</b></td><td>Permitir. El vídeo se graba con sonido.</td></tr>
+          <tr><td><b>Fotos</b></td><td>Permitir. Para elegir imágenes de la galería y guardar las capturas.</td></tr>
+          <tr><td><b>Notificaciones</b></td><td>Permitir. Es la notificación fija que avisa de que la traza se está grabando.</td></tr>
+        </table>
+
+        <h3>Android</h3>
+        <ul>
+          <li>Ubicación → elige <b>“Permitir todo el tiempo”</b>. Si solo aparece “Mientras se usa la app”, acéptalo y luego cámbialo en Ajustes.</li>
+          <li><b>Quita la app de la optimización de batería:</b> Ajustes → Aplicaciones → Helireport → Batería → <b>Sin restricciones</b>. Si no, el móvil matará la grabación de traza al rato.</li>
+          <li>Mientras grabas verás una <b>notificación permanente</b>. Es normal: no la descartes.</li>
+        </ul>
+
+        <h3>iPhone</h3>
+        <ul>
+          <li>Ubicación → primero pedirá <b>“Permitir mientras se usa la app”</b>. Acepta.</li>
+          <li>Más adelante iOS te preguntará si quieres <b>“Cambiar a Siempre”</b>. Di que <b>sí</b>: es lo que permite grabar con la pantalla bloqueada.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ <b>Si ya dijiste que no.</b> No se vuelve a preguntar solo. Ve a Ajustes del móvil → Aplicaciones → Helireport → Permisos y actívalos a mano. Cuando la app no puede grabar te lo dice con un aviso que incluye un botón <span class="kbd">Ajustes</span> que te lleva directo.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">01_permiso_ubicacion.png</div>
+            <div class="what">Diálogo del sistema pidiendo permiso de ubicación, con la opción “Permitir siempre / Cambiar a Siempre” visible.</div>
+          </div>
+          <img src="capturas/01_permiso_ubicacion.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 1</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 2 · LOGIN ═════════════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>2. Iniciar sesión</h2>
+        <p class="intro">Al abrir la app aparece una pantalla de carga y luego el acceso.</p>
+        <ul>
+          <li>Introduce tu <b>usuario</b> y <b>contraseña</b>.</li>
+          <li>Activa <b>Recordar contraseña</b> para no escribirla cada vez.</li>
+          <li>Pulsa <b>Iniciar sesión</b>.</li>
+          <li><b>Sincronizar</b>: entra y descarga los datos maestros en un solo paso. Útil a primera hora, cuando ya sabes que vas a descargar igualmente. Verás el aviso <i>“Preparando sincronización…”</i>.</li>
+        </ul>
+        <p class="note">Necesitas conexión a internet la primera vez que entras.</p>
+
+        <h3>Si el usuario o la contraseña fallan</h3>
+        <p class="body">La app dice <i>“Usuario o contraseña incorrectos”</i>. Revísalos y vuelve a intentarlo. Si estás seguro de que son correctos y sigue fallando, avisa a la oficina: puede ser un problema de configuración del móvil, no tuyo.</p>
+
+        <h3>La versión de la app</h3>
+        <p class="body">Abajo del todo de esta pantalla verás algo como <span class="kbd">v1.1.5 (115)</span>. Cuando llames para reportar un problema, <b>di ese número</b>: es lo primero que te van a preguntar.</p>
+
+        <div class="warn">
+          ⚠ <b>No cierres sesión al terminar la jornada</b> si te quedan cambios sin enviar. Sube primero (Forzar envío) y sal después.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">02_login.png</div>
+            <div class="what">Pantalla de login completa: usuario relleno, “Recordar contraseña” activado, los botones Iniciar sesión / Sincronizar, el enlace “¿Contraseña olvidada?” y la versión abajo.</div>
+          </div>
+          <img src="capturas/02_login.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 2</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 3 · RECUPERAR CONTRASEÑA ══════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>3. Recuperar la contraseña</h2>
+        <p class="intro">Si no recuerdas la contraseña, puedes cambiarla tú mismo desde la app. No hace falta llamar a nadie.</p>
+
+        <h3>Paso 1 — pedir el código</h3>
+        <ul>
+          <li>En la pantalla de acceso pulsa <b>“¿Contraseña olvidada?”</b>.</li>
+          <li>Escribe tu <b>email</b> (el que tienes dado de alta) y pulsa <b>Enviar</b>.</li>
+        </ul>
+
+        <h3>Paso 2 — introducir el código</h3>
+        <ul>
+          <li>Recibirás un <b>código de 6 dígitos</b> en ese correo.</li>
+          <li>Escríbelo, pon la <b>nueva contraseña</b> dos veces y pulsa <b>Cambiar contraseña</b>.</li>
+          <li>Si el correo no llega, pulsa <b>“¿No te ha llegado? Reenviar código”</b>.</li>
+        </ul>
+
+        <p class="note">Necesitas conexión a internet para todo este proceso. Revisa también la carpeta de correo no deseado.</p>
+
+        <div class="warn">
+          ⚠ Cambiar la contraseña <b>no borra nada</b> de lo que tengas en el móvil. Tus fotos, vídeos y cambios pendientes siguen ahí y se subirán igual cuando vuelvas a entrar.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Dos capturas pendientes</div>
+            <div class="fn">03_recuperar_dialogo.png</div>
+            <div class="what">Diálogo “Recuperar contraseña” con el campo Email.</div>
+            <div class="fn">04_recuperar_codigo.png</div>
+            <div class="what">Pantalla del código de 6 dígitos + nueva contraseña + “Reenviar código”.</div>
+          </div>
+          <div class="cappair">
+            <img src="capturas/03_recuperar_dialogo.png" alt="" onerror="this.style.display='none'">
+            <img src="capturas/04_recuperar_codigo.png" alt="" onerror="this.style.display='none'">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 3</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 4 · LISTA DE SEGMENTOS ════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>4. Lista de segmentos</h2>
+        <p class="intro">Tras entrar ves los segmentos asignados a tus CTs, agrupados por CT.</p>
+        <ul>
+          <li>Busca por descripción en la barra superior.</li>
+          <li>Filtra por <b>estado</b> y por <b>tipo de actividad</b>.</li>
+          <li>Cada tarjeta muestra número, longitud, superficie, traza, estado y tipo.</li>
+          <li>Toca una tarjeta para abrir su detalle.</li>
+          <li>Desliza la lista hacia abajo para recargar.</li>
+        </ul>
+
+        <h3>Los iconos de la barra verde</h3>
+        <table>
+          <tr><th style="width:30mm">Icono (de izq. a der.)</th><th>Qué hace</th></tr>
+          <tr><td><b>Mapa</b> desplegado</td><td>Abre el <b>Mapa global</b>.</td></tr>
+          <tr><td><b>Nube</b> con flecha arriba</td><td>Abre <b>Forzar envío</b> — subir tu trabajo.</td></tr>
+          <tr><td><b>Flecha</b> circular</td><td>Recarga la lista desde el móvil.</td></tr>
+          <tr><td><b>Círculo</b> relleno</td><td><b>Iniciar registro de traza</b> (GPS). Se pone <b>rojo, con un cuadrado</b>, mientras graba.</td></tr>
+          <tr><td><b>Puerta</b> con flecha</td><td>Cerrar sesión.</td></tr>
+        </table>
+
+        <p class="note">El botón de traza está en las cuatro pantallas principales y es siempre el mismo: si lo ves rojo, estás grabando, da igual dónde estés.</p>
+
+        <div class="warn">
+          ⚠ Si la lista sale vacía, no es que no tengas trabajo: probablemente no has descargado. Ve a <b>Sincronización → Descargar todo</b>.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">05_lista.png</div>
+            <div class="what">Lista de segmentos agrupada por CT, con la barra verde completa arriba — que se vean los 5 iconos, incluido el de traza.</div>
+          </div>
+          <img src="capturas/05_lista.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 4</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 5 · DETALLE · DATOS ═══════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>5. Detalle del segmento — Datos</h2>
+        <p class="intro">Aquí consultas y editas un segmento. Tiene cuatro pestañas: <b>Datos</b>, <b>Mensajes</b>, <b>Antes</b> y <b>Después</b>.</p>
+        <ul>
+          <li><b>Datos</b>: traza, longitud, superficie, tipo, estado, descripción y mapa.</li>
+          <li>Cambia el <b>Estado</b> y el <b>Tipo de actividad</b> con los desplegables. El desplegable de estado solo ofrece los destinos permitidos (ver página C).</li>
+          <li>Edita la <b>descripción</b> del trabajo.</li>
+          <li><b>Guardar</b>: los cambios se guardan en el móvil aunque no haya red.</li>
+        </ul>
+
+        <h3>Los botones de abajo</h3>
+        <table>
+          <tr><th style="width:30mm">Botón</th><th>Qué hace</th></tr>
+          <tr><td><b>Guardar</b></td><td>Guarda en el móvil y deja el segmento listo para enviar.</td></tr>
+          <tr><td><b>Editar extremos</b></td><td>Ajusta la geometría del segmento sobre el mapa (pág. 11).</td></tr>
+          <tr><td><b>Foto/vídeo</b></td><td>Abre la cámara para la pestaña en la que estés (pág. 7).</td></tr>
+          <tr><td><b>Eliminar</b></td><td>Solo aparece en zonas que creaste tú y aún no has enviado. Ver pág. 15.</td></tr>
+        </table>
+
+        <div class="warn">
+          ⚠ <b>Guardar no es enviar.</b> Guardar deja el cambio en el móvil. Para que Enagas lo vea hay que ir a <b>Forzar envío</b>.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">06_detalle_datos.png</div>
+            <div class="what">Pestaña Datos: cabecera con nº de segmento y CT, las 4 pestañas, desplegables Tipo/Estado, descripción y el mapa con el botón “Editar extremos”.</div>
+          </div>
+          <img src="capturas/06_detalle_datos.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 5</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 6 · DETALLE · MENSAJES ════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>6. Detalle del segmento — Mensajes</h2>
+        <p class="intro">Cada zona tiene su propio hilo de mensajes. Es el canal para contarle a Enagas lo que los campos del formulario no recogen.</p>
+
+        <h3>Para qué se usa</h3>
+        <ul>
+          <li>Explicar por qué <b>NO hace falta actuar</b> en esa zona.</li>
+          <li>Justificar un <b>cambio de geometría</b> o de tipo de actividad.</li>
+          <li>Avisar de un <b>impedimento en campo</b>: acceso cortado, ganado, obra, propietario.</li>
+        </ul>
+
+        <h3>Cómo funciona</h3>
+        <ul>
+          <li>Escribe en la caja de abajo y pulsa el botón de <b>enviar</b>.</li>
+          <li>El mensaje se guarda en el móvil <b>aunque no haya red</b> y sale con el resto del trabajo cuando pulses <b>Enviar todos</b>.</li>
+          <li>Tus mensajes salen en verde a la derecha; los de otros, en gris a la izquierda.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ <b>Esto no es un chat instantáneo.</b> Las respuestas de Enagas aparecen cuando vuelves a hacer <b>Sincronización → Descargar todo</b>. Si esperas contestación, descarga otra vez antes de dar por hecho que nadie te ha respondido.
+        </div>
+
+        <p class="note">Un mensaje bien escrito ahorra un viaje. Concreto y con el motivo: “No se actúa: la zona la desbrozó el propietario el 12/07” dice más que “no hace falta”.</p>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">07_detalle_mensajes.png</div>
+            <div class="what">Pestaña Mensajes con al menos dos burbujas (una propia verde y una ajena gris) y la caja de escritura abajo.</div>
+          </div>
+          <img src="capturas/07_detalle_mensajes.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 6</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 7 · FOTOS Y VÍDEOS ════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>7. Fotos y vídeos (antes / después)</h2>
+        <p class="intro">Documenta el estado del segmento antes y después del desherbaje. Es la prueba del trabajo hecho.</p>
+        <ul>
+          <li>En el detalle, abre la pestaña <b>Antes</b> o <b>Después</b>.</li>
+          <li>Pulsa <b>Foto/vídeo</b>. Se abre la cámara de la app.</li>
+          <li>Arriba eliges el modo: <b>FOTO</b> o <b>VÍDEO</b>.</li>
+          <li>Todo se guarda en el móvil y se geoposiciona. Sube al enviar.</li>
+        </ul>
+
+        <h3>Cuándo foto y cuándo vídeo</h3>
+        <p class="body"><b>La foto es el registro normal</b>, antes y después. Usa vídeo <b>solo cuando una foto no lo cuenta</b>: un recorrido largo de la zona, un impedimento que hay que ver en movimiento.</p>
+        <ul>
+          <li><b>Máximo 3 minutos por clip</b> — la app corta sola al llegar.</li>
+          <li>Mientras grabas vídeo, la app guarda además <b>tu recorrido</b>, que se dibuja luego sobre el mapa del segmento.</li>
+          <li>Sube los vídeos con <b>buena cobertura o WiFi</b>: pesan mucho más que las fotos.</li>
+          <li>Si la subida se corta, <b>continúa donde iba</b> — no empieza de cero.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ Un vídeo puede tardar en aparecer como listo: verás <b>“Procesando…”</b> mientras el servidor lo convierte. Es normal. Si sale <b>“Conversión fallida”</b>, avisa a la oficina: ese vídeo no ha quedado bien y conviene repetirlo.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Dos capturas pendientes</div>
+            <div class="fn">08_camara_foto.png</div>
+            <div class="what">Cámara de la app en modo FOTO (pestaña FOTO activa en verde).</div>
+            <div class="fn">09_camara_video.png</div>
+            <div class="what">Cámara grabando en modo VÍDEO, con el indicador REC visible.</div>
+          </div>
+          <div class="cappair">
+            <img src="capturas/08_camara_foto.png" alt="" onerror="this.style.display='none'">
+            <img src="capturas/09_camara_video.png" alt="" onerror="this.style.display='none'">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 7</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 8 · TRAZA GPS ═════════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>8. Registrar tu recorrido (traza GPS)</h2>
+        <p class="intro">La app puede guardar por dónde has pasado. Es <b>opcional</b>: tú decides cuándo grabar y cuándo no.</p>
+
+        <h3>Cómo se graba</h3>
+        <ul>
+          <li>Pulsa el botón del <b>círculo verde</b> de la barra de arriba. Empieza a grabar.</li>
+          <li>El botón se pone <b>rojo, con un cuadrado dentro</b>: eso significa <b>grabando</b>.</li>
+          <li>Puedes moverte por toda la app y bloquear la pantalla: la grabación sigue.</li>
+          <li>Para terminar, pulsa ese mismo botón rojo. La app te propone un nombre con la fecha y la hora; cámbialo si quieres y pulsa <b>Aceptar</b>.</li>
+          <li>La traza queda guardada y se envía con el resto del trabajo.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ <b>No hagas trazas de muchas horas.</b> Graba tramos: por debajo de <b>2 horas</b> la traza sube rápido y gasta poca batería. Si vas a parar a comer o a hacer un desplazamiento largo en coche, <b>párala</b> y empieza otra al reanudar.
+        </div>
+
+        <h3>Mientras grabas</h3>
+        <ul>
+          <li>No puedes <b>cerrar sesión</b> ni <b>sincronizar</b>. Para eso, para la traza primero.</li>
+          <li>En Android verás una <b>notificación permanente</b>. Es normal, no la quites.</li>
+        </ul>
+
+        <p class="note">Si la app no consigue arrancar la grabación, te lo dice con un aviso abajo. Casi siempre es el permiso de ubicación: el aviso trae un botón <span class="kbd">Ajustes</span> que te lleva donde hay que activarlo.</p>
+
+        <div class="warn">
+          ⚠ Si dejaste una traza a medias porque la app se cerró sola, al volver a entrar te preguntará si quieres cerrarla. Ponle nombre y acepta: se recupera lo grabado hasta ese momento.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">10_traza_finalizar.png</div>
+            <div class="what">Diálogo “Finalizar registro de traza” con el nombre propuesto y el botón Aceptar. Si cabe, que se vea el botón rojo de la barra.</div>
+          </div>
+          <img src="capturas/10_traza_finalizar.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 8</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 9 · MAPA GLOBAL ═══════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>9. Mapa global y capas de referencia</h2>
+        <p class="intro">Vista de la red de gasoductos y tus segmentos sobre el terreno.</p>
+        <ul>
+          <li>Filtra por <b>estado</b> y por <b>tipo de actividad</b>.</li>
+          <li><b>+ / −</b> para acercar o alejar.</li>
+          <li>Botón de <b>ubicación</b> para centrarte en tu posición.</li>
+          <li>Pulsa sobre la <b>etiqueta</b> de un segmento para abrir su detalle.</li>
+          <li>El botón de <b>leyenda</b> (ⓘ) explica los colores.</li>
+        </ul>
+
+        <h3>Qué se ve en el mapa</h3>
+        <table>
+          <tr><th style="width:34mm">Capa</th><th>Qué es</th></tr>
+          <tr><td><b>Gasoductos (CTs)</b><br><span style="color:#1565C0">línea azul</span></td><td>La traza de los gasoductos de tus CTs.</td></tr>
+          <tr><td><b>Tus segmentos</b></td><td>Pintados con el color de su estado (ver pág. C).</td></tr>
+          <tr><td><b>Puntos kilométricos</b></td><td>Los PK del gasoducto. Referencia para situarte.</td></tr>
+          <tr><td><b>Hitos</b></td><td>Hitos de señalización asociados a cada CT.</td></tr>
+          <tr><td><b>Posiciones fijas</b></td><td>Instalaciones fijas del CT, con su zona, tramo y tipo de vigilancia.</td></tr>
+        </table>
+
+        <div class="warn">
+          ⚠ <b>Los puntos solo aparecen a partir de zoom 14.</b> Si estás viendo media provincia no verás PKs, hitos ni posiciones fijas — no es que no se hayan descargado, es que a esa escala serían decenas de miles de puntos. Acércate.
+        </div>
+
+        <p class="note">Si el mapa no muestra las trazas de gasoducto, ve a <b>Sincronización</b> y descarga el bloque <b>Trazas de gasoductos</b>.</p>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">11_mapa.png</div>
+            <div class="what">Mapa global con zoom suficiente para que se vean segmentos de colores y algún PK/hito. Si es posible, con el panel de leyenda abierto.</div>
+          </div>
+          <img src="capturas/11_mapa.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 9</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 10 · LÍNEAS DE CORTE ══════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>10. Proponer una zona nueva (líneas de corte)</h2>
+        <p class="intro">Cuando hace falta actuar en un tramo que Enagas no te ha asignado, lo propones tú: recortas un trozo de la traza del gasoducto y se convierte en un segmento nuevo.</p>
+
+        <h3>Paso a paso</h3>
+        <ul>
+          <li>Abre el <b>Mapa global</b> y <b>acércate hasta pasar de zoom 14</b>. Por debajo, el botón no aparece.</li>
+          <li>Pulsa el botón redondo <b>verde con la tijera ✂</b>.</li>
+          <li>Marca <b>dos puntos</b> sobre el mapa: es la <b>Línea 1</b>, el corte de un extremo.</li>
+          <li>Marca <b>otros dos</b>: la <b>Línea 2</b>, el corte del otro extremo.</li>
+          <li>Puedes <b>arrastrar</b> cualquiera de los cuatro puntos para afinar.</li>
+          <li>El panel de abajo te va diciendo qué toca: <i>“Marca el segundo punto de la Línea 1”</i>, y al final <i>“✓ Líneas listas para cortar”</i>.</li>
+          <li>El botón pasa a <b>azul con un ✓</b>. Púlsalo.</li>
+          <li>Rellena <b>Descripción</b> y <b>Tipo de actividad</b> y pulsa <b>Aplicar</b>.</li>
+        </ul>
+
+        <p class="note">El diálogo te enseña antes de aceptar los <b>metros totales</b> y los <b>m² de superficie</b> del trozo que vas a crear. Comprueba que cuadra con lo que has visto en campo.</p>
+
+        <div class="warn">
+          ⚠ Si el panel dice <b>“⚠ Las líneas se intersectan”</b>, las dos líneas se cruzan entre sí y el corte no es válido. Pulsa <span class="kbd">Limpiar</span> y vuelve a marcarlas separadas.
+        </div>
+
+        <p class="body">La zona nueva nace siempre en estado <span class="chip e-cont">Contratista</span>: es una <b>propuesta</b>. Enagas la valida desde la web.</p>
+
+        <div class="warn">
+          ⚠ El botón de corte <b>solo muestra el icono, sin texto</b>. Guíate por el color: <b>verde ✂</b> = empezar · <b>azul ✓</b> = aplicar el corte · <b>morado ✕</b> = salir sin cortar.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">12_lineas_corte.png</div>
+            <div class="what">Modo corte activo con las dos líneas ya marcadas (4 puntos numerados), el panel de estado abajo y el botón en azul con el ✓.</div>
+          </div>
+          <img src="capturas/12_lineas_corte.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 10</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 11 · EDITAR EXTREMOS ══════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>11. Ajustar la zona (editar extremos)</h2>
+        <p class="intro">Si la zona que te han asignado es más larga, más corta o empieza en otro sitio, la ajustas tú sobre el mapa. No hace falta crear una zona nueva: se corrige la que ya tienes.</p>
+
+        <h3>Paso a paso</h3>
+        <ul>
+          <li>En el detalle del segmento, pestaña <b>Datos</b>, pulsa <b>Editar extremos</b>.</li>
+          <li>Se abre el mapa con los <b>dos extremos</b> del segmento marcados.</li>
+          <li><b>Arrastra</b> cada extremo a donde toque. El segmento se recorta o se alarga siguiendo la traza del gasoducto.</li>
+          <li>Según arrastras, se actualizan la <b>longitud</b> y la <b>superficie</b>.</li>
+          <li>Pulsa <b>Guardar</b> para aceptar, o <b>Cancelar</b> para dejarlo como estaba.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ Ajustar la geometría es <b>proponer un cambio</b>. Acuérdate de poner el estado en <span class="chip e-cont">Contratista</span> y de explicar el motivo en la pestaña <b>Mensajes</b>: si Enagas ve que la zona ha cambiado de tamaño y no sabe por qué, te la devolverá.
+        </div>
+
+        <p class="note">Los extremos se mueven <b>sobre la traza</b>, no libremente por el mapa: no puedes sacar el segmento fuera del gasoducto. Es a propósito.</p>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">13_editar_extremos.png</div>
+            <div class="what">Pantalla de edición de extremos: mapa con los dos marcadores de extremo, la longitud/superficie actualizándose y los botones Cancelar / Guardar.</div>
+          </div>
+          <img src="capturas/13_editar_extremos.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 11</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 12 · SINCRONIZACIÓN ═══════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>12. Sincronización — descargar</h2>
+        <p class="intro">Descarga al móvil todo lo necesario para trabajar sin conexión. <b>Esta pantalla solo baja datos; no sube nada.</b></p>
+
+        <h3>La tarjeta de arriba te lo resume</h3>
+        <ul>
+          <li>Chip <b>Online / Sin conexión</b> a la izquierda.</li>
+          <li>Contador <b>“X de 6 al día”</b> a la derecha.</li>
+          <li>Y el titular, que es lo único que hay que mirar:</li>
+        </ul>
+        <table>
+          <tr><th style="width:52mm">Si dice…</th><th>Significa</th></tr>
+          <tr><td><b>✓ Listo para trabajar en campo</b></td><td>Todo descargado. Puedes salir.</td></tr>
+          <tr><td><b>Faltan N descargas</b></td><td>Pulsa <span class="kbd">Descargar todo</span>.</td></tr>
+          <tr><td><b>Sin conexión — N pendientes</b></td><td>No hay red. Busca cobertura antes de salir.</td></tr>
+        </table>
+
+        <h3>Los 6 bloques</h3>
+        <ul>
+          <li><b>Datos de usuario</b> — tu perfil y los CTs asignados.</li>
+          <li><b>Segmentos</b> — las zonas de trabajo.</li>
+          <li><b>Trazas de gasoductos</b> — las líneas del mapa.</li>
+          <li><b>Puntos kilométricos</b> · <b>Hitos</b> · <b>Posiciones fijas</b> — referencias del mapa.</li>
+        </ul>
+        <p class="body">Puedes pulsar <b>Descargar todo</b> (o <b>Actualizar todo</b>, si ya estaba todo al día) o descargar bloque a bloque. Cada fila indica cuándo se descargó por última vez. Mientras trabaja hay un botón <b>Cancelar</b>.</p>
+
+        <div class="danger">
+          ⚠ <b>SUBE ANTES DE DESCARGAR.</b> Si tienes cambios sin enviar y descargas encima, puedes perder ediciones hechas en campo. El orden correcto al empezar el día es: <b>Forzar envío</b> (por si quedó algo de ayer) → <b>Descargar todo</b>.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">14_sync_descargar.png</div>
+            <div class="what">Pantalla Sincronización con la tarjeta “Listo para trabajar en campo”, el chip Online, el contador “6 de 6 al día” y las 6 filas de bloques.</div>
+          </div>
+          <img src="capturas/14_sync_descargar.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 12</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 13 · FORZAR ENVÍO ═════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>13. Forzar envío — subir tu trabajo</h2>
+        <p class="intro">Envía a Enagas los segmentos con cambios pendientes: estados, descripciones, fotos, vídeos, mensajes y trazas. <b>Esta pantalla solo sube; no baja nada.</b></p>
+        <ul>
+          <li>Ves la lista de segmentos con cambios sin enviar.</li>
+          <li><b>Enviar todos</b> sube todos los pendientes.</li>
+          <li><b>Enviar</b> (en la tarjeta) sube un segmento concreto.</li>
+          <li>Puedes filtrar por <b>estado</b>, <b>tipo</b> y <b>CT</b>.</li>
+        </ul>
+        <p class="note">Necesita conexión a internet.</p>
+
+        <h3>Mientras sube</h3>
+        <ul>
+          <li>Aparece una <b>barra de progreso</b> con el texto de por dónde va.</li>
+          <li>Si hay un vídeo subiendo, verás además <b>“vídeo N %”</b>: los vídeos tardan minutos, es normal que el contador de segmentos parezca parado.</li>
+          <li>El botón se convierte en <b>Cancelar todo</b>. Al pulsarlo pasa a <b>“Cancelando envío…”</b>: espera a que termine, no fuerces el cierre.</li>
+          <li>Lo cancelado <b>no se pierde</b>: queda pendiente y se reanuda en el siguiente envío, incluso a mitad de un vídeo.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ Mientras hay un envío en marcha, la app <b>bloquea la navegación y el botón atrás</b>. Es a propósito: salir a media subida dejaría el trabajo a medias sin que te enteres.
+        </div>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">15_forzar_envio.png</div>
+            <div class="what">Pantalla Forzar envío con un envío EN CURSO: barra de progreso visible, texto de progreso y el botón en rojo “Cancelar todo”.</div>
+          </div>
+          <img src="capturas/15_forzar_envio.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 13</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 14 · RESULTADO DEL ENVÍO ══════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div>
+      <div>
+        <div class="shot floatr">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">16_envio_resultado.png</div>
+            <div class="what">El banner de resultado tras un envío, con la línea de contadores y —si se puede provocar— algún motivo de rechazo debajo.</div>
+          </div>
+          <img src="capturas/16_envio_resultado.png" alt="" onerror="this.style.display='none'">
+        </div>
+        <h2>14. Qué te dice el envío al terminar</h2>
+        <p class="intro">Al acabar aparece un aviso con el resultado y una línea de contadores. <b>Léela siempre</b>: es la única forma de saber si tu jornada ha llegado entera.</p>
+
+        <p class="body" style="font-family:'SF Mono',Menlo,monospace;font-size:9pt;background:#F5F5F5;padding:2.5mm;border-radius:4px;overflow:hidden;">
+          Subidos: 4 · Reintentables: 0 · Rechazados: 1 · Conflictos: 0
+        </p>
+
+        <table style="clear:both">
+          <tr><th style="width:30mm">Si sale…</th><th style="width:58mm">Significa</th><th>Qué hago</th></tr>
+          <tr><td><b>Subidos</b></td><td>Llegó a Enagas.</td><td>Nada. Hecho.</td></tr>
+          <tr><td><b>Reintentables</b></td><td>Falló la red o el servidor no contestó.</td><td>Vuelve a pulsar <b>Enviar todos</b> con mejor cobertura.</td></tr>
+          <tr><td><b>Rechazados</b></td><td>El servidor lo ha rechazado. El motivo sale justo debajo, en la lista de puntos.</td><td><b>Lee el motivo.</b> Pulsa <b>Enviar todos</b> otra vez: la app lo reintenta una vez. Si vuelve a salir, avisa a la oficina con el motivo tal cual.</td></tr>
+          <tr><td><b>Conflictos</b></td><td>Enagas cambió esa misma zona a la vez que tú.</td><td><b>Avisa a la oficina.</b> Esto no se arregla desde el móvil por muchas veces que pulses.</td></tr>
+        </table>
+
+        <p class="note">Cuando la lista de pendientes se queda vacía y solo hay <b>Subidos</b>, tu jornada está entregada. <b>Pendientes a 0 = jornada cerrada.</b></p>
+
+        <div class="warn">
+          ⚠ El aviso se cierra con la <b>✕</b>. Si lo cierras sin leerlo, no vuelve. Y si algo quedó sin subir, la app no te lo va a recordar sola.
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 14</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 15 · SIN CONEXIÓN / PROBLEMAS ═════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div>
+      <div>
+        <h2>15. Sin conexión y si algo va mal</h2>
+        <p class="intro">La app está pensada para el campo, donde a menudo no hay cobertura.</p>
+        <ul>
+          <li>Todo lo que ves está guardado en el móvil: puedes consultar y editar sin red.</li>
+          <li>Tus cambios (estado, descripción, fotos, vídeos, mensajes, trazas) quedan en una <b>cola local</b>.</li>
+          <li>Al recuperar conexión, ve a <b>Forzar envío</b> y sube la cola.</li>
+          <li>Si el chip dice <b>Sin conexión</b>, descargar y subir no están disponibles.</li>
+        </ul>
+
+        <h3>Consejos</h3>
+        <ul>
+          <li>Sube al empezar y al terminar la jornada.</li>
+          <li><b>Sube antes de descargar</b>: así no pierdes ediciones hechas en campo.</li>
+          <li>Si una descarga falla, la fila se marca en rojo: reintenta con buena cobertura.</li>
+          <li>Si no aparecen las trazas en el mapa, descarga <b>Trazas de gasoductos</b>.</li>
+          <li>Si no ves PKs ni hitos, <b>acércate</b>: solo salen a partir de zoom 14.</li>
+          <li>Al llamar para reportar un problema, di la <b>versión</b> que aparece en la pantalla de acceso.</li>
+        </ul>
+
+        <h3>Preguntas que salen siempre</h3>
+        <table>
+          <tr><th style="width:62mm">Lo que ves</th><th>Qué está pasando</th></tr>
+          <tr><td>La lista de segmentos está vacía</td><td>No has descargado. <b>Sincronización → Descargar todo</b>.</td></tr>
+          <tr><td>El mapa sale en blanco o sin líneas</td><td>Falta el bloque <b>Trazas de gasoductos</b>. Descárgalo.</td></tr>
+          <tr><td>No veo PKs, hitos ni posiciones fijas</td><td>Estás demasiado lejos. Acércate por encima de zoom 14.</td></tr>
+          <tr><td>Guardé el cambio pero Enagas no lo ve</td><td>Guardar no es enviar. Ve a <b>Forzar envío</b>.</td></tr>
+          <tr><td>Escribí un mensaje y no me contestan</td><td>Las respuestas llegan al <b>descargar</b>, no solas.</td></tr>
+          <tr><td>La traza se paró sola</td><td>Permiso de ubicación o batería (ver pág. 1).</td></tr>
+          <tr><td>El envío lleva mucho parado</td><td>Hay un vídeo subiendo. Mira el <b>% de vídeo</b> en la barra.</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 15</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 16 · DESTRUCTIVAS ═════════════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div class="screen">
+      <div class="txt">
+        <h2>16. Dos botones que borran cosas</h2>
+        <p class="intro">Existen y los vas a ver. Léelos antes de tocarlos: uno de los dos no tiene vuelta atrás.</p>
+
+        <div class="danger">
+          <b>⚠ Reset de datos locales</b><br>
+          <i>Sincronización → icono de la papelera, arriba a la derecha</i><br><br>
+          Borra <b>TODO</b> lo guardado en este dispositivo: segmentos, fotos, vídeos, trazas y la cola de envío.<br><br>
+          <b>Lo que no hayas enviado se pierde para siempre.</b> Las fotos, los vídeos y las trazas solo viajan del móvil al servidor, <b>nunca al revés</b>: no hay copia en ningún sitio de la que recuperarlas.
+        </div>
+
+        <p class="body" style="margin-top:3mm">Es el <b>último recurso</b>, y solo si te lo indica la oficina. Si hay que hacerlo, este es el orden y no otro:</p>
+        <ul>
+          <li><b>1)</b> Sube todo lo que puedas — <b>Forzar envío → Enviar todos</b>.</li>
+          <li><b>2)</b> Comprueba que la lista de pendientes se ha quedado vacía.</li>
+          <li><b>3)</b> Solo entonces, resetea.</li>
+          <li><b>4)</b> Vuelve a descargar — <b>Sincronización → Descargar todo</b>.</li>
+        </ul>
+        <p class="note">Mientras hay una descarga en marcha el botón está desactivado, a propósito.</p>
+
+        <div class="danger" style="margin-top:5mm">
+          <b>⚠ Eliminar segmento</b><br>
+          <i>Detalle del segmento → botón rojo</i><br><br>
+          Solo aparece en zonas que <b>creaste tú</b> con las líneas de corte y que <b>aún no has enviado</b>. Sirve para deshacer un corte mal hecho.
+        </div>
+        <p class="note">Una zona que ya subió a Enagas <b>no se borra desde el móvil</b>. Si hay que anularla, escríbelo en un <b>Mensaje</b> y que lo hagan desde la web.</p>
+      </div>
+      <div class="cap">
+        <div class="shot">
+          <div class="ph">
+            <div>Captura pendiente</div>
+            <div class="fn">17_reset.png</div>
+            <div class="what">El diálogo de confirmación “Reset de datos locales”, con el texto de aviso y el botón rojo “Borrar todo”.</div>
+          </div>
+          <img src="capturas/17_reset.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 16</span></footer>
+</div>
+
+</body>
+</html>

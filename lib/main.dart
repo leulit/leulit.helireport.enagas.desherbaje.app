@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image_picker_android/image_picker_android.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
@@ -6,6 +7,8 @@ import 'main_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // La app es solo portrait: el giro del dispositivo no rota la UI.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   // Photo Picker del sistema: evita READ_MEDIA_IMAGES/VIDEO (política Play).
   final ImagePickerPlatform picker = ImagePickerPlatform.instance;
   if (picker is ImagePickerAndroid) picker.useAndroidPhotoPicker = true;
