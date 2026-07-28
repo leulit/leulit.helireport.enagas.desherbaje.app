@@ -6,9 +6,12 @@ en cuanto lo pongas y regeneres, la captura ocupa ese hueco.
 
 Dispositivo acordado: **iPhone**, orientación vertical.
 
+> El punto 1 (diálogos de permiso de ubicación) **no necesita captura**: el manual los
+> dibuja en HTML/CSS con el texto real del `Info.plist`. Si algún día cambian esos textos
+> en `ios/Runner/Info.plist`, hay que reflejarlo en el bloque `.shot.mock` de `manual_v3.html`.
+
 | Fichero | Qué tiene que verse |
 |---|---|
-| `01_permiso_ubicacion.png` | Diálogo del sistema pidiendo ubicación, con la opción **Permitir siempre / Cambiar a Siempre** visible |
 | `02_login.png` | Login completo: usuario relleno, *Recordar contraseña* activado, botones **Iniciar sesión** / **Sincronizar**, enlace **¿Contraseña olvidada?** y la versión abajo |
 | `03_recuperar_dialogo.png` | Diálogo **Recuperar contraseña** con el campo Email |
 | `04_recuperar_codigo.png` | Pantalla del código de 6 dígitos + nueva contraseña + **Reenviar código** |

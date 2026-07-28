@@ -9,9 +9,12 @@ OUT="$DIR/MANUAL_OPERARIO_HELIREPORT_DESHERBAJE_v3.pdf"
 
 [ -x "$CHROME" ] || { echo "No encuentro Chrome en: $CHROME"; exit 1; }
 
+# virtual-time-budget: da margen a que corra el script que retira los marcos
+# punteados de los huecos que ya tienen captura. Sin él Chrome imprime antes.
 "$CHROME" --headless \
   --disable-gpu \
   --no-pdf-header-footer \
+  --virtual-time-budget=3000 \
   --print-to-pdf="$OUT" \
   "file://$DIR/manual_v3.html"
 

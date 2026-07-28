@@ -28,7 +28,7 @@ dependencies:
   image_picker_android: ^0.8.13
   image_picker_platform_interface: ^2.11.0
   video_player: ^2.13.0
-  gal: ^2.3.2
+  gal: ^2.3.3
   latlong2: ^0.9.1 # pinned: flutter_map_location_marker 10.3.0 requires ^0.9.1
 
   leulit_flutter_actionmanager: ^5.9.0

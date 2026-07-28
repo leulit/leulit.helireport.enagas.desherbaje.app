@@ -112,7 +112,7 @@
                   color: #616161; background: #EEEEEE; padding: 1.5mm 2.5mm;
                   border-radius: 3px; word-break: break-all; }
   .shot .ph .what { font-size: 8.2pt; line-height: 1.35; color: #9E9E9E; }
-  .shot img { position: relative; display: block; width: 100%; height: 100%;
+  .shot img { position: relative; z-index: 1; display: block; width: 100%; height: 100%;
               object-fit: contain; background: #fff; }
   .shot .cappair { position: relative; display: flex; flex-direction: column;
                    height: 100%; gap: 2mm; }
@@ -120,6 +120,30 @@
 
   /* Captura flotada a la derecha en páginas de texto a ancho completo. */
   .shot.floatr { float: right; margin: 0 0 4mm 6mm; height: 96mm; width: 62mm; }
+
+  /* ── Mock de diálogo del sistema iOS (no es una captura: se dibuja) ────── */
+  .shot.mock { background: linear-gradient(160deg, #4E5A63 0%, #2C343A 100%);
+               display: flex; flex-direction: column; align-items: center;
+               justify-content: center; gap: 4mm; padding: 4mm; }
+  .iosdlg { width: 58mm; background: #F7F7F7; border-radius: 3.2mm;
+            overflow: hidden; text-align: center;
+            font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Helvetica, sans-serif;
+            box-shadow: 0 1.5mm 4mm rgba(0,0,0,.35); }
+  .iosdlg .t { font-size: 8.4pt; font-weight: 600; line-height: 1.22;
+               color: #000; padding: 3mm 3.5mm 1.2mm 3.5mm; }
+  .iosdlg .d { font-size: 7pt; line-height: 1.28; color: #000;
+               padding: 0 3.5mm 2.4mm 3.5mm; }
+  .iosdlg .b { font-size: 8.6pt; color: #007AFF; padding: 2.1mm 3mm;
+               border-top: .3pt solid #D3D3D6; }
+  .iosdlg .b.strong { font-weight: 600; }
+  .iosdlg .b.pick { background: #E3F2E5; }
+  .mockpick { display: flex; align-items: center; gap: 1.5mm;
+              font-size: 8pt; font-weight: 700; color: #C8E6C9; margin-top: 1.5mm; }
+  .mockpick .n { background: #388E3C; color: #fff; border-radius: 50%;
+                 width: 4.2mm; height: 4.2mm; line-height: 4.2mm; text-align: center;
+                 font-size: 7.4pt; }
+  .mocknote { font-size: 7.4pt; color: #CFD8DC; line-height: 1.35;
+              text-align: center; padding: 0 2mm; }
 
   .kbd { font-family: "SF Mono", Menlo, monospace; font-size: 9pt;
          background: #F1F8E9; border: 1px solid #C8E6C9; border-radius: 3px;
@@ -333,13 +357,29 @@
         </div>
       </div>
       <div class="cap">
-        <div class="shot">
-          <div class="ph">
-            <div>Captura pendiente</div>
-            <div class="fn">01_permiso_ubicacion.png</div>
-            <div class="what">Diálogo del sistema pidiendo permiso de ubicación, con la opción “Permitir siempre / Cambiar a Siempre” visible.</div>
+        <div class="shot mock">
+          <div>
+            <div class="iosdlg">
+              <div class="t">¿Permitir que “Leulit Helireport Enagas Desherbaje App” use tu ubicación?</div>
+              <div class="d">Necesario para geolocalizar las fotos y registrar la ruta durante la jornada de campo.</div>
+              <div class="b">Permitir una vez</div>
+              <div class="b strong pick">Permitir al usar la app</div>
+              <div class="b">No permitir</div>
+            </div>
+            <div class="mockpick"><span class="n">1</span> Pulsa esta opción</div>
           </div>
-          <img src="capturas/01_permiso_ubicacion.png" alt="" onerror="this.style.display='none'">
+
+          <div>
+            <div class="iosdlg">
+              <div class="t">“Leulit Helireport Enagas Desherbaje App” quiere usar tu ubicación aunque no estés usando la app</div>
+              <div class="d">Necesario para que la app siga registrando la ruta cuando el móvil pasa a segundo plano (pantalla bloqueada o en el bolsillo) durante la jornada de campo.</div>
+              <div class="b">Mantener solo al usar la app</div>
+              <div class="b strong pick">Cambiar a Siempre</div>
+            </div>
+            <div class="mockpick"><span class="n">2</span> Aparece más tarde. Pulsa esta</div>
+          </div>
+
+          <div class="mocknote">Reproducción de los dos avisos del sistema en iPhone, con el texto real de la app.<br>En Android el aspecto cambia, pero la elección es la misma: <b>Permitir todo el tiempo</b>.</div>
         </div>
       </div>
     </div>
@@ -1022,6 +1062,22 @@
   </div>
   <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 16</span></footer>
 </div>
+
+<script>
+  // El hueco de captura lleva debajo un marco punteado con el nombre del fichero.
+  // Cuando el PNG existe se pinta encima, pero el marco asoma por los lados
+  // (la captura es más estrecha que el hueco). Se retira solo cuando están TODAS
+  // las capturas del hueco: en los huecos de dos, si falta una el marco sigue
+  // anunciando cuál es.
+  for (const shot of document.querySelectorAll('.shot')) {
+    const imgs = [...shot.querySelectorAll('img')];
+    if (!imgs.length) continue;
+    const ok = i => i.complete && i.naturalWidth > 0;
+    const check = () => { if (imgs.every(ok)) shot.querySelector('.ph')?.remove(); };
+    imgs.forEach(i => i.complete || i.addEventListener('load', check));
+    check();
+  }
+</script>
 
 </body>
 </html>
