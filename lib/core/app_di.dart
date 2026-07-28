@@ -33,6 +33,7 @@ import 'services/pks_service.dart';
 import 'services/hitos_service.dart';
 import 'services/session_state.dart';
 import 'sync/sync.dart';
+import 'widgets/orto_tile_layers.dart';
 
 class AppDI {
   /// Completer compartido: la 2ª llamada concurrent o secuencial reutiliza el
@@ -53,6 +54,12 @@ class AppDI {
   static void resetForTest() => reset();
 
   static Future<void> _init() async {
+    // 0. Caché de tiles de mapa: hay que configurarla ANTES de que se pinte
+    //    el primer mapa (getOrCreateInstance solo respeta los parámetros si
+    //    aún no existe una instancia). Parámetros centralizados en
+    //    orto_tile_layers.dart junto con resetMapTileCache().
+    configureMapTileCache();
+
     // 1. SessionState MUST be registered BEFORE any code calls AppDI.sessionState.
     //    AuthMiddleware.redirect is synchronous and reads hasSession directly.
     DI.registerLazySingleton<SessionState>(() => SessionState());

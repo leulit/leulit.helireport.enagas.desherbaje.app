@@ -60,6 +60,13 @@ class MapaGlobalController extends MyGetxController {
   final errorHitos = Rx<String?>(null);
   final currentZoom = 0.0.obs;
 
+  /// `true` cuando el zoom supera el umbral de las etiquetas de segmento
+  /// (z > 12). Deriva de `currentZoom` pero solo notifica al CRUZAR el
+  /// umbral, no en cada frame de zoom — consumido por `SegmentosMapLayer`
+  /// con `ValueListenableBuilder`, en vez del `Obx` sobre `currentZoom` que
+  /// reconstruía la capa de labels en cada frame de un gesto de zoom.
+  final mostrarLabelsSegmento = ValueNotifier<bool>(false);
+
   GasoductosService get _gasoductosService => AppDI.gasoductosService;
   PksService get _pksService => AppDI.pksService;
   HitosService get _hitosService => AppDI.hitosService;
@@ -102,8 +109,11 @@ class MapaGlobalController extends MyGetxController {
     );
     Get.put<LinesCutController>(linesCut);
     gasoductosPolylines.assignAll(_gasoductosService.polylines);
-    ever(_gasoductosService.polylines,
-        (List<Polyline> lines) => gasoductosPolylines.assignAll(lines));
+    // `_gasoductosService` es un GetxService singleton: sin `addWorker` este
+    // worker sobrevive al `onClose` del controller y se acumula en cada
+    // entrada/salida de la pantalla del mapa.
+    addWorker(ever(_gasoductosService.polylines,
+        (List<Polyline> lines) => gasoductosPolylines.assignAll(lines)));
     _loadUserCts();
     _loadSavedView();
     loadAll();
@@ -114,6 +124,7 @@ class MapaGlobalController extends MyGetxController {
     _state.dispose();
     _alignPositionCtrl.close();
     followHeading.dispose();
+    mostrarLabelsSegmento.dispose();
     if (Get.isRegistered<LinesCutController>()) {
       Get.delete<LinesCutController>();
     }
@@ -154,6 +165,10 @@ class MapaGlobalController extends MyGetxController {
     final z = _savedZoom;
     if (c == null || z == null) return;
     try {
+      // Sin llamada a `_persistViewDebounced()` aquí a propósito: `move()`
+      // está aplicando justo lo que ya está en `ScreenState` (`c`/`z` vienen
+      // de ahí), así que persistirlo de nuevo sería un round-trip
+      // read-then-write-the-same-value sin efecto observable.
       mapController.move(c, z);
       _viewRestored = true;
     } catch (e, s) {
@@ -185,8 +200,43 @@ class MapaGlobalController extends MyGetxController {
   void onMapEvent(MapEvent event) {
     final z = mapController.camera.zoom;
     if (currentZoom.value != z) currentZoom.value = z;
+    final mostrarLabels = z > 12;
+    if (mostrarLabelsSegmento.value != mostrarLabels) {
+      mostrarLabelsSegmento.value = mostrarLabels;
+    }
     linesCut.updateZoom(z);
-    _persistViewDebounced();
+    if (_isViewSettleEvent(event)) _persistViewDebounced();
+  }
+
+  /// `true` cuando el evento marca el FIN de un gesto — el único momento en
+  /// que tiene sentido persistir la vista a partir de un `MapEvent`. Antes se
+  /// llamaba a `_persistViewDebounced()` en CADA `MapEvent`, y como
+  /// `ScreenState.save` cancela+re-crea un `Timer` por llamada, un gesto de
+  /// arrastre disparaba ese ciclo en cada frame.
+  ///
+  /// NO se filtra por `event.source == MapEventSource.mapController`: parece
+  /// tentador para cubrir los movimientos programáticos (zoomIn/zoomOut,
+  /// fitCamera), pero `flutter_map_location_marker` (capa de "mi ubicación",
+  /// botón de seguir rumbo) mueve/rota la cámara con ESE MISMO source en
+  /// cada lectura de brújula/GPS — decenas por segundo con
+  /// `AlignOnUpdate.always` — así que ese filtro reintroduce el ciclo
+  /// cancel+alloc de `Timer` justo en el modo en que el mapa está más activo.
+  /// Los movimientos programáticos que sí queremos persistir llaman a
+  /// `_persistViewDebounced()` explícitamente en su propio sitio (ver
+  /// `zoomIn`, `zoomOut`, `_fitAllBounds`): el que mueve la cámara a
+  /// propósito ya sabe que lo ha hecho, no hace falta inferirlo del evento.
+  bool _isViewSettleEvent(MapEvent event) {
+    if (event is MapEventMoveEnd) return true;
+    if (event is MapEventFlingAnimationEnd) return true;
+    if (event is MapEventDoubleTapZoomEnd) return true;
+    if (event is MapEventRotateEnd) return true;
+    // `MapEventScrollWheelZoom` no tiene evento de "fin" propio en
+    // flutter_map 8.3.1: cada scroll del ratón es un salto de zoom atómico,
+    // no un gesto en curso, así que se persiste igual que un fin de gesto.
+    // La app es táctil (móvil) y este evento no debería dispararse en
+    // producción, pero se cubre por si se ejecuta en escritorio.
+    if (event is MapEventScrollWheelZoom) return true;
+    return false;
   }
 
   void onMapTap(TapPosition tapPosition, LatLng point) {
@@ -207,6 +257,9 @@ class MapaGlobalController extends MyGetxController {
     final z = (cam.zoom + 0.25).clamp(5.0, 20.0);
     mapController.move(cam.center, z);
     currentZoom.value = z;
+    // `move()` emite `MapEventMove`, no un evento de "fin" — persistir aquí
+    // explícitamente (ver comentario en `_isViewSettleEvent`).
+    _persistViewDebounced();
   }
 
   void zoomOut() {
@@ -214,6 +267,7 @@ class MapaGlobalController extends MyGetxController {
     final z = (cam.zoom - 0.25).clamp(5.0, 20.0);
     mapController.move(cam.center, z);
     currentZoom.value = z;
+    _persistViewDebounced();
   }
 
   // ─────────────────── Carga de datos ──────────────────────────────────────
@@ -349,9 +403,11 @@ class MapaGlobalController extends MyGetxController {
         points: persisted.ubicacionGis,
         color: AppColors.accentForEstado(persisted.estado),
         centroid: _segmentos.centroid(persisted.ubicacionGis),
+        longitudKm: persisted.longitudKm,
       ));
     }
     _segmentos.segmentos.addAll(nuevos);
+    _segmentos.invalidateFilterCache();
 
     linesCut.clearAll();
     linesCut.clearExtracted();
@@ -394,6 +450,11 @@ class MapaGlobalController extends MyGetxController {
           padding: const EdgeInsets.all(40),
         ),
       );
+      // `fitCamera()` no emite un evento de "fin" — persistir aquí
+      // explícitamente (ver comentario en `_isViewSettleEvent`). Solo se
+      // llega aquí sin vista guardada (`!_viewRestored`), así que esta es la
+      // primera vista que el usuario ve y conviene recordarla.
+      _persistViewDebounced();
     } catch (_) {}
   }
 

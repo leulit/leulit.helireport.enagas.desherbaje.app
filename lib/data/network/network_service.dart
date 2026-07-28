@@ -65,12 +65,17 @@ class NetworkService extends GetxService {
     String path, {
     Map<String, dynamic>? queryParameters,
     Map<String, String>? headers,
+    // Por defecto Dio decodifica JSON en el hilo que llama a `get()` (el de
+    // UI). Pasar `ResponseType.plain` deja el body como `String` crudo — lo
+    // usan payloads grandes que se van a `jsonDecode`ar en un isolate aparte
+    // (p.ej. `JsonLoaderService`), para no pagar el decode en UI.
+    ResponseType? responseType,
   }) async {
     try {
       final response = await _dio.get<dynamic>(
         path,
         queryParameters: queryParameters,
-        options: Options(headers: headers),
+        options: Options(headers: headers, responseType: responseType),
       );
       return _toNetworkResponse(response);
     } on DioException catch (e, st) {

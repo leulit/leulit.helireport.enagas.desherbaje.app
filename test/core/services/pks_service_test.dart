@@ -131,7 +131,7 @@ void main() {
             group: kFileGroupPk,
             filename: 'x',
           ),
-          processedData: const <String, dynamic>{},
+          rawJson: '',
         ),
       );
       AppTypedActions.geoJsonLoadCompleted.dispatch();
