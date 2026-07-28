@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
@@ -15,6 +14,7 @@ import '../../core/app_typed_actions.dart';
 import '../../core/extensions.dart';
 import '../../core/services/api_security_service.dart';
 import '../../core/widgets/my_current_location_layer.dart';
+import '../../core/widgets/orto_tile_layers.dart';
 import '../../data/model/mensaje_entity.dart';
 import '../../domain/entities/imagen_segmento_entity.dart';
 import '../../domain/entities/segmento_entity.dart';
@@ -1160,14 +1160,7 @@ class _MapaSegmento extends StatelessWidget {
                 const InteractionOptions(flags: InteractiveFlag.all),
           ),
           children: [
-            TileLayer(
-              urlTemplate: ApiEndpoints.pnoaWmts,
-              fallbackUrl: ApiEndpoints.arcgisImagery,
-              maxNativeZoom: 20,
-              tileProvider: CancellableNetworkTileProvider(),
-              userAgentPackageName: 'com.leulit.enagas.helireport_desherbaje',
-              additionalOptions: const {'User-Agent': 'helireport-desherbaje'},
-            ),
+            ...buildOrtoTileLayers(),
             // Trazas de gasoductos (grises de fondo)
             Obx(() => PolylineLayer(
                   polylines: controller.gasoductosPolylines.toList(),

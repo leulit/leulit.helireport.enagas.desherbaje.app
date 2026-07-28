@@ -12,6 +12,7 @@ import '../../core/services/gasoductos_service.dart';
 import '../../core/services/master_data_load_result.dart';
 import '../../core/services/pks_service.dart';
 import '../../core/services/hitos_service.dart';
+import '../../core/widgets/orto_tile_layers.dart';
 
 import '../../core/sync/sync.dart';
 import '../../data/repository/auth_repository_impl.dart';
@@ -107,6 +108,9 @@ class SincronizacionController extends MyGetxController {
     // sin borrarlas, tras el reset cada fila seguiría mostrando una descarga
     // que ya no existe en local.
     await _clearLastDownloads();
+    // La caché de tiles de mapa vive en el directorio de caché del SO, fuera
+    // de la BD: el Reset debe enumerar TODOS los almacenes, no solo SQLite.
+    await resetMapTileCache();
     AppDI.sessionState.set(false);
     Get.offAllNamed(AppRoutes.login);
   }

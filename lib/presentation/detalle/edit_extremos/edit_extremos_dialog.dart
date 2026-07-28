@@ -3,14 +3,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:get/get.dart';
-import 'package:helireport_desherbaje/core/api_endpoints.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_di.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/widgets/my_current_location_layer.dart';
+import '../../../core/widgets/orto_tile_layers.dart';
 import '../../../domain/entities/segmento_entity.dart';
 import 'edit_extremos_controller.dart';
 
@@ -78,17 +77,7 @@ class _EditExtremosDialogState extends State<EditExtremosDialog> {
                       ),
                     ),
                     children: [
-                      TileLayer(
-                        urlTemplate: ApiEndpoints.pnoaWmts,
-                        fallbackUrl: ApiEndpoints.arcgisImagery,
-                        maxNativeZoom: 20,
-                        tileProvider: CancellableNetworkTileProvider(),
-                        userAgentPackageName:
-                            'com.leulit.enagas.helireport_desherbaje',
-                        additionalOptions: const {
-                          'User-Agent': 'helireport-desherbaje'
-                        },
-                      ),
+                      ...buildOrtoTileLayers(),
                       PolylineLayer(
                         polylines: AppDI.gasoductosService.polylines.toList(),
                       ),

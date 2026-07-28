@@ -156,6 +156,7 @@ lib/
     ├── widgets/                                   # Compartidos entre pantallas (AppBar actions, diálogos)
     │   ├── track_record_button.dart               # AppBar action: inicia/finaliza la traza vía GpsBackgroundService; ValueListenableBuilder<GpsTrackingState>
     │   ├── logout_button.dart                     # AppBar action "cerrar sesión" compartida; bloquea logout si AppTypedActions.isTrazaRecording()
+    │   ├── orto_tile_layers.dart                   # buildOrtoTileLayers(): par de TileLayer (respaldo ArcGIS + PNOA) usado por los 3 mapas; configureMapTileCache()/resetMapTileCache() gobiernan la caché de tiles en disco
     │   ├── finalize_traza_dialog.dart              # showFinalizeTrazaDialog(): diálogo no descartable para nombrar la traza al finalizar (manual o recuperación de crash)
     │   └── forgot_password_dialog.dart             # showForgotPasswordDialog(): pide el email para "¿Contraseña olvidada?" (login); devuelve email o null
     └── mapa/
@@ -352,8 +353,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 |---|---|---|
 | `get` | `^4.7.3` | State management, navegación, DI |
 | `dio` | `^5.9.2` | HTTP client |
-| `flutter_map` | `^8.3.0` | Mapas |
-| `flutter_map_cancellable_tile_provider` | `^3.1.1` | Tiles cancelables |
+| `flutter_map` | `^8.3.1` | Mapas. Su `NetworkTileProvider` (default de `TileLayer`) ya trae cancelación de peticiones obsoletas Y caché de tiles en disco (`BuiltInMapCachingProvider`), configurada en `lib/core/widgets/orto_tile_layers.dart` |
 | `supercluster` | `^3.2.0` | Clustering espacial de marcadores (PKs e hitos) |
 | `latlong2` | `^0.9.1` | Coordenadas |
 | `sqflite` | `^2.4.2` | SQLite local |

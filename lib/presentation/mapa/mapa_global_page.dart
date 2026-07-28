@@ -1,18 +1,17 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:flutter_map_compass/flutter_map_compass.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../core/api_endpoints.dart';
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/widgets/filtros_segmentos_bar.dart';
 import '../../core/widgets/my_current_location_layer.dart';
+import '../../core/widgets/orto_tile_layers.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../widgets/logout_button.dart';
 import '../widgets/track_record_button.dart';
@@ -97,18 +96,10 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               ),
             ),
             children: [
-              TileLayer(
-                urlTemplate: ApiEndpoints.pnoaWmts,
-                fallbackUrl: ApiEndpoints.arcgisImagery,
-                maxNativeZoom: 20,
-                tileProvider: CancellableNetworkTileProvider(),
-                userAgentPackageName: 'com.leulit.enagas.helireport_desherbaje',
-                additionalOptions: const {
-                  'User-Agent': 'helireport-desherbaje',
-                },
-              ),
+              ...buildOrtoTileLayers(),
               const GasoductosMapLayer(),
-              SegmentosMapLayer(currentZoom: controller.currentZoom),
+              SegmentosMapLayer(
+                  mostrarLabelsSegmento: controller.mostrarLabelsSegmento),
               const PksMapLayer(),
               const HitosMapLayer(),
               const PosicionesFijasMapLayer(),

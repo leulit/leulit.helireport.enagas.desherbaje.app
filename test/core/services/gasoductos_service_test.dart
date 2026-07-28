@@ -149,7 +149,7 @@ void main() {
             group: kFileGroupGasoducto,
             filename: 'x',
           ),
-          processedData: const <String, dynamic>{},
+          rawJson: '',
         ),
       );
       AppTypedActions.geoJsonLoadCompleted.dispatch();

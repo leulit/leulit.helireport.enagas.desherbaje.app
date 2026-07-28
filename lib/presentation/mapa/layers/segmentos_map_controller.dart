@@ -21,11 +21,17 @@ class SegmentoMapInfo {
   final Color color;
   final LatLng centroid;
 
+  /// Longitud precalculada (km) — evita recorrer `points` con haversine par a
+  /// par en cada build de la etiqueta (antes: `segmento.longitudKm`, un
+  /// getter sin caché llamado por label y por frame).
+  final double longitudKm;
+
   const SegmentoMapInfo({
     required this.segmento,
     required this.points,
     required this.color,
     required this.centroid,
+    required this.longitudKm,
   });
 }
 
@@ -45,20 +51,44 @@ class SegmentosMapController extends MyGetxController {
   final rxTipo = Rx<TipoActividad?>(null);
   final rxCt = Rx<String?>(null);
 
+  /// Se incrementa cada vez que cambia cualquier filtro (estado/tipo/ct) o se
+  /// recarga `segmentos`. Es el ÚNICO observable que necesita leer la capa
+  /// para invalidar su pintado — así el `ValueListenableBuilder` de
+  /// polilíneas reacciona también al filtro de CT (antes el `Obx` solo leía
+  /// `rxEstado`/`rxTipo` y el cambio de CT no repintaba las líneas, aunque
+  /// `filteredSegmentos` sí filtraba por CT). `ValueNotifier`, no `.obs`:
+  /// reactividad nueva va con primitivas Flutter (CLAUDE.md).
+  final filterVersion = ValueNotifier<int>(0);
+
+  List<SegmentoMapInfo>? _filteredCache;
+
+  /// Invalida la caché de [filteredSegmentos]. Público porque
+  /// `MapaGlobalController.applyLinesCut` añade segmentos directamente a
+  /// [segmentos] (fuera de [load]) al confirmar un corte de líneas.
+  void invalidateFilterCache() => _invalidateFilterCache();
+
+  void _invalidateFilterCache() {
+    _filteredCache = null;
+    filterVersion.value++;
+  }
+
   final _state = ScreenState('mapa_segmentos');
 
   void setEstado(EstadoActividad? v) {
     rxEstado.value = v;
+    _invalidateFilterCache();
     _persistFiltros();
   }
 
   void setTipo(TipoActividad? v) {
     rxTipo.value = v;
+    _invalidateFilterCache();
     _persistFiltros();
   }
 
   void setCt(String? v) {
     rxCt.value = v;
+    _invalidateFilterCache();
     _persistFiltros();
   }
 
@@ -84,17 +114,25 @@ class SegmentosMapController extends MyGetxController {
     return names;
   }
 
+  /// Lista filtrada, cacheada: recorrer y copiar `segmentos` es caro y esta
+  /// lista se evalúa dos veces por rebuild de la capa (polilíneas + labels).
+  /// Se invalida en `_invalidateFilterCache` (setters de filtro) y en `load`.
   List<SegmentoMapInfo> get filteredSegmentos {
+    final cached = _filteredCache;
+    if (cached != null) return cached;
     final estado = rxEstado.value;
     final tipo = rxTipo.value;
     final ct = rxCt.value;
-    if (estado == null && tipo == null && ct == null) return segmentos.toList();
-    return segmentos.where((info) {
-      if (estado != null && info.segmento.estado != estado) return false;
-      if (tipo != null && info.segmento.tipoActividad != tipo) return false;
-      if (ct != null && info.segmento.ctname != ct) return false;
-      return true;
-    }).toList();
+    final result = (estado == null && tipo == null && ct == null)
+        ? segmentos.toList()
+        : segmentos.where((info) {
+            if (estado != null && info.segmento.estado != estado) return false;
+            if (tipo != null && info.segmento.tipoActividad != tipo) return false;
+            if (ct != null && info.segmento.ctname != ct) return false;
+            return true;
+          }).toList();
+    _filteredCache = result;
+    return result;
   }
 
   @override
@@ -127,6 +165,7 @@ class SegmentosMapController extends MyGetxController {
       }
     }
     rxCt.value = _state.text('ct');
+    _invalidateFilterCache();
   }
 
   /// Parse tolerante de un enum por `.name`: si no matchea ningún valor
@@ -157,9 +196,11 @@ class SegmentosMapController extends MyGetxController {
           points: s.ubicacionGis,
           color: AppColors.accentForEstado(s.estado),
           centroid: _centroid(s.ubicacionGis),
+          longitudKm: s.longitudKm,
         ));
       }
       segmentos.assignAll(mapped);
+      _invalidateFilterCache();
     } catch (e) {
       error.value = 'Error cargando Segmentos';
       debugPrint('SegmentosMapController: $e');
@@ -190,6 +231,7 @@ class SegmentosMapController extends MyGetxController {
     _state.dispose();
     segmentosHitNotifier.dispose();
     filtrosVisible.dispose();
+    filterVersion.dispose();
     super.onClose();
   }
 }

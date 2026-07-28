@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:helireport_desherbaje/core/app_di.dart';
 import 'package:latlong2/latlong.dart';
@@ -46,6 +46,11 @@ class PksService extends GetxService {
 
   Completer<void>? _runCompleter;
   final _entitiesBuffer = <PkEntity>[];
+  // Parseos en curso (compute() por fichero). `_runOnce` debe esperarlos
+  // TODOS antes de dar la descarga por completa: el parseo ahora corre en
+  // otro isolate, así que ya no termina síncronamente dentro del handler
+  // de `geoJsonLoaded` como antes.
+  final _pendingParses = <Future<void>>[];
 
   final ConnectivityService? _connArg;
   final JsonLoaderService? _loaderArg;
@@ -129,6 +134,7 @@ class PksService extends GetxService {
       }
 
       _entitiesBuffer.clear();
+      _pendingParses.clear();
       _runCompleter = Completer<void>();
 
       final files = ctInfos
@@ -145,6 +151,13 @@ class PksService extends GetxService {
       await _loader.loadFiles(files, token: token);
       await _runCompleter?.future
           .timeout(const Duration(seconds: 1), onTimeout: () {});
+      // Los ficheros ya llegaron (evento `geoJsonLoaded`/`Completed`), pero
+      // su parseo corre en isolates aparte (compute()) y puede seguir en
+      // vuelo. Esperamos a que todos terminen antes de dar la carga por
+      // completa.
+      if (_pendingParses.isNotEmpty) {
+        await Future.wait(_pendingParses);
+      }
 
       // NF-13: re-check cancellation before persisting.
       if (token?.isCancelled ?? false) {
@@ -180,6 +193,7 @@ class PksService extends GetxService {
       return MasterDataLoadResult(resultSource, fetchedCount);
     } finally {
       _entitiesBuffer.clear();
+      _pendingParses.clear();
       _runCompleter = null;
       isLoading.value = false;
       totalFiles.value = 0;
@@ -196,14 +210,21 @@ class PksService extends GetxService {
 
     processedFiles.value = processedFiles.value + 1;
 
-    if (result.processedData.isEmpty) return;
+    if (result.rawJson.isEmpty) return;
 
     final ctId = result.originalFileData.tag is int
         ? result.originalFileData.tag as int
         : 0;
+    // Parseo pesado (~13k PKs, incluye el jsonDecode) fuera del hilo de UI.
+    // `_runOnce` espera este future vía `_pendingParses` antes de considerar
+    // la carga completa.
+    _pendingParses.add(_parseAndBuffer(result.rawJson, ctId));
+  }
+
+  Future<void> _parseAndBuffer(String raw, int ctId) async {
     try {
-      final entities = PkEntity.fromGeoJson(result.processedData, ctId);
-      _entitiesBuffer.addAll(entities);
+      final flat = await compute(parsePksFlat, (raw: raw, ctId: ctId));
+      _entitiesBuffer.addAll(flat.map(pkFromFlat));
     } catch (e) {
       debugPrint('PksService: parse error CT $ctId — $e');
     }

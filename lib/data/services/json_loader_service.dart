@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart' show ResponseType;
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:leulit_pipeline_pattern/leulit_pipeline_pattern.dart';
@@ -16,18 +17,22 @@ class FileLoadGeoJsonResult {
   /// Datos originales del fichero solicitado (group, filename, tag…).
   final FileData originalFileData;
 
-  /// Payload JSON ya parseado a `Map<String, dynamic>`. Vacío si la descarga
-  /// falló y el pipeline siguió en modo no bloqueante.
-  final Map<String, dynamic> processedData;
+  /// Payload JSON **crudo, sin decodificar**. Se pide con
+  /// `ResponseType.plain` para que Dio NO haga `jsonDecode` en el hilo de
+  /// UI: el `jsonDecode` + mapeo a entidades corre entero dentro del
+  /// isolate de `compute()` del consumidor (`GasoductosService` /
+  /// `PksService` / `HitosService`). Vacío si la descarga falló y el
+  /// pipeline siguió en modo no bloqueante.
+  final String rawJson;
 
   FileLoadGeoJsonResult({
     required this.originalFileData,
-    required this.processedData,
+    required this.rawJson,
   });
 
   factory FileLoadGeoJsonResult.empty() => FileLoadGeoJsonResult(
         originalFileData: const FileData(group: '', filename: ''),
-        processedData: const {},
+        rawJson: '',
       );
 }
 
@@ -118,8 +123,11 @@ class JsonLoaderService extends GetxService {
           break;
         case PipelineEventType.error:
           if (event.data != null) {
+            // `rawJson` en el path de error siempre es `''` (ver
+            // `_FileDownloadTask.execute`): esta acción solo se usa para
+            // telemetría/contadores, nunca lleva payload real.
             AppTypedActions.geoJsonLoadError
-                .dispatch(data: event.data!.processedData);
+                .dispatch(data: const <String, dynamic>{});
           }
           break;
         case PipelineEventType.pipelineEnd:
@@ -171,19 +179,26 @@ class _FileDownloadTask extends PipelineTask<FileLoadGeoJsonResult> {
         error: StateError('cancelled'),
         output: FileLoadGeoJsonResult(
           originalFileData: _fileData,
-          processedData: const {},
+          rawJson: '',
         ),
         stackTrace: StackTrace.current,
       );
     }
     try {
-      final response = await _network.get(_fileData.filename);
+      // `ResponseType.plain`: Dio devuelve el body como `String` SIN
+      // decodificar. El `jsonDecode` (caro para GeoJSON de miles de
+      // features) se hace dentro del isolate de `compute()` del consumidor,
+      // no aquí en el hilo de UI.
+      final response = await _network.get(
+        _fileData.filename,
+        responseType: ResponseType.plain,
+      );
       final raw = response.data;
-      Map<String, dynamic> rawJson;
-      if (raw is Map<String, dynamic>) {
+      final String rawJson;
+      if (raw is String) {
         rawJson = raw;
-      } else if (raw is Map) {
-        rawJson = raw.cast<String, dynamic>();
+      } else if (raw == null) {
+        rawJson = '';
       } else {
         throw FormatException(
           'Respuesta inesperada (${raw.runtimeType}) para ${_fileData.filename}',
@@ -193,7 +208,7 @@ class _FileDownloadTask extends PipelineTask<FileLoadGeoJsonResult> {
         input: inputdata.input,
         output: FileLoadGeoJsonResult(
           originalFileData: _fileData,
-          processedData: rawJson,
+          rawJson: rawJson,
         ),
       );
     } catch (e, st) {
@@ -203,7 +218,7 @@ class _FileDownloadTask extends PipelineTask<FileLoadGeoJsonResult> {
         error: e,
         output: FileLoadGeoJsonResult(
           originalFileData: _fileData,
-          processedData: const {},
+          rawJson: '',
         ),
         stackTrace: st,
       );
