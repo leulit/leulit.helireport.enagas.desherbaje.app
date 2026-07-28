@@ -56,3 +56,6 @@ android/helireport-desherbaje-release.jks
 
 # Worktrees de agentes de Claude Code (locales, nunca al repo)
 .claude/worktrees/
+
+# Índice de codebase-memory (MCP de Claude) — cache local regenerable
+.codebase-memory/
