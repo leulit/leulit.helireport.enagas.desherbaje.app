@@ -102,6 +102,12 @@ class OutboxQueue {
   Future<List<SyncJob>> syncingJobs({String? entityType}) =>
       _allWithStatus(SyncStatus.syncing, entityType: entityType);
 
+  /// Jobs ya entregados (status=synced). Llevan `syncedAt`, que es lo que
+  /// permite distinguir lo que se subió dentro de un intento ya cerrado de lo
+  /// que se subió en uno que quedó abierto.
+  Future<List<SyncJob>> syncedJobs({String? entityType}) =>
+      _allWithStatus(SyncStatus.synced, entityType: entityType);
+
   Future<int> countPending({String? entityType}) =>
       _countByStatus(SyncStatus.pending, entityType: entityType);
 

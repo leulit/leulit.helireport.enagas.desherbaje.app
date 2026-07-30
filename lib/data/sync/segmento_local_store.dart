@@ -22,7 +22,7 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
   String get entityType => 'segmento';
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
@@ -59,7 +59,8 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
           fecha_inicio      TEXT,
           fecha_fin         TEXT,
           updated_at        TEXT NOT NULL,
-          synced_at         TEXT
+          synced_at         TEXT,
+          sync_confirmed_at INTEGER
         )
       ''');
       await db.execute(
@@ -70,6 +71,47 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
         'ON $_table(id) WHERE id IS NOT NULL',
       );
     }
+    // v2 → v3: `sync_confirmed_at` (epoch ms del último `sync-complete` 200).
+    // Solo se ALTERa viniendo EXACTAMENTE de v2: en una instalación limpia
+    // (from == 0) el CREATE de arriba ya trae la columna, y un ALTER encima
+    // moriría con `duplicate column name`.
+    if (from == 2 && to >= 3) {
+      await db.execute(
+        'ALTER TABLE $_table ADD COLUMN sync_confirmed_at INTEGER',
+      );
+    }
+  }
+
+  /// Instante (epoch ms) del último `sync-complete` confirmado con 200 para
+  /// este segmento, o `null` si nunca se cerró.
+  ///
+  /// Es la frontera que separa lo que el backend tiene como `complete` de lo
+  /// que tiene como `pending`: un job del sobre con `synced_at` posterior a
+  /// esta marca subió en un intento que nadie cerró, así que el próximo
+  /// `upsert` lo borrará (`cleanupPendingChildren`) y hay que reenviarlo.
+  Future<int?> readSyncConfirmedAt(String clientId) async {
+    final rows = await _db.query(
+      _table,
+      columns: ['sync_confirmed_at'],
+      where: 'client_id = ?',
+      whereArgs: [clientId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['sync_confirmed_at'] as int?;
+  }
+
+  /// Graba la frontera de cierre. [atMs] debe ser el `max(synced_at)` de los
+  /// jobs del sobre, NO `DateTime.now()`: ambos valores salen entonces de la
+  /// misma fuente (`OutboxQueue.markSynced`) y un salto del reloj del
+  /// dispositivo no puede dejar jobs ya cerrados al otro lado de la frontera.
+  Future<void> markSyncConfirmed(String clientId, int atMs) async {
+    await _db.update(
+      _table,
+      {'sync_confirmed_at': atMs},
+      where: 'client_id = ?',
+      whereArgs: [clientId],
+    );
   }
 
   @override

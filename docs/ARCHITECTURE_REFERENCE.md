@@ -110,7 +110,8 @@ lib/
 │   │   ├── video_repository_impl.dart             # Usa OfflineRepository<VideoSegmentoEntity>
 │   │   └── mensaje_segmento_repository.dart       # Push via motor + lectura online (TODO §12.1)
 │   └── sync/                                      # Adapters/stores específicos por entidad
-│       ├── segmento_local_store.dart
+│       ├── pending_envelopes_query.dart           # UNA consulta: qué sobre tiene algo sin subir o sin cerrar. Es el filtro de forzar_envio
+│       ├── segmento_local_store.dart              # schemaVersion 3 — v3 añade sync_confirmed_at (epoch ms del último sync-complete 200)
 │       ├── segmento_remote_adapter.dart
 │       ├── segmento_remote_fetcher.dart
 │       ├── imagen_local_store.dart
@@ -143,7 +144,7 @@ lib/
     ├── camera/                                    # Captura de fotos/vídeos
     │   ├── camera_capture_page.dart               # Selector Foto|Vídeo (vídeo sin audio)
     │   └── video_player_page.dart                 # Reproductor pantalla completa (local)
-    ├── forzar_envio/                              # Atajo "subir todo lo de esta entidad"
+    ├── forzar_envio/                              # Lista TODO sobre con algo sin subir o sin cerrar (sin filtro por estado)
     │   ├── forzar_envio_page.dart                 # + _ResetButton (solo superadmin): OfflineDatabase.wipeAll + logout
     │   ├── forzar_envio_binding.dart
     │   └── forzar_envio_controller.dart
@@ -314,7 +315,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
 | `PosicionesFijasMapController` | `presentation/mapa/layers/` | Lee `PosicionFijaLocalStore` (DI get_it) y expone marcadores válidos; solo lectura local, sin red |
 | `SincronizacionController` | `presentation/sincronizacion/` | Sync page con 3 secciones + "Preparar trabajo de campo"; expone `isSuperadmin` + `resetAppData()` (wipe total, solo `UserRole.superadmin`) |
-| `ForzarEnvioController` | `presentation/forzar_envio/` | "Subir": drena el outbox (segmento/imagen/video/mensaje/traza) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired` |
+| `ForzarEnvioController` | `presentation/forzar_envio/` | Lista los sobres pendientes (`PendingEnvelopesQuery`, sin filtro por estado). "Subir": drena el outbox (segmento/imagen/video/mensaje/traza) vía `SyncEngine.drain` por tipo; guard offline; corta al primer `authExpired`. "Enviar todos" recorre `filtradas` (respeta los filtros de la barra) |
 | `SegmentosListController` | `presentation/segmentos/` | Además del listado: recuperación de traza huérfana tras crash (`_recoverOrphanedTraza`, primera pantalla con sesión activa tras login) |
 | `SplashController` | `presentation/splash/` | Ruta inicial; `await AppDI.init()` con spinner/reintentar antes de navegar a login |
 

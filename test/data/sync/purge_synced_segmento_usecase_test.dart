@@ -171,7 +171,7 @@ void main() {
     imgStore = ImagenLocalStore(db);
     vidStore = VideoLocalStore(db);
     msgStore = MensajeLocalStore(db);
-    await segStore.migrate(db, 0, 2);
+    await segStore.migrate(db, 0, segStore.schemaVersion);
     await imgStore.migrate(db, 0, 3);
     await vidStore.migrate(db, 0, 3);
     await msgStore.migrate(db, 0, msgStore.schemaVersion);
@@ -354,6 +354,34 @@ void main() {
       });
     }
 
+    // Cerrar en nube y borrar en local son decisiones distintas. Un segmento en
+    // `ejecución` se cierra (para que sus fotos queden `complete` en backend y
+    // el próximo upsert no las borre) pero NO se purga: el operario sigue
+    // trabajándolo y `GET /segmentos/contratista` no lo devuelve, así que el
+    // móvil es la única copia.
+    test('estado no terminal → finalizedKept: cierra en nube, no borra local',
+        () async {
+      final seg = _seg(clientId: 'seg-1', id: 42);
+      seg.estado = EstadoActividad.ejecucion;
+      await segStore.upsert(seg);
+      await imgStore.upsert(_img(
+          clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/i.jpg'));
+      await seedJob('segmento', 'seg-1');
+      await seedJob('imagen', 'img-1');
+
+      final outcome = await buildUseCase().purgeIfFullySynced(seg);
+
+      expect(outcome.status, PurgeStatus.finalizedKept);
+      // El cierre SÍ se pidió: es lo que blinda la foto ya subida.
+      verify(() => network.post(any(),
+          body: any(named: 'body'), headers: any(named: 'headers'))).called(1);
+      expect(await segStore.findByClientId('seg-1'), isNotNull);
+      expect(await imgStore.findByClientId('img-1'), isNotNull);
+      expect(deletedPaths, isEmpty);
+      // Y la frontera de cierre queda grabada.
+      expect(await segStore.readSyncConfirmedAt('seg-1'), isNotNull);
+    });
+
     test('segment with no remote id → skipped, nothing deleted', () async {
       final seg = _seg(clientId: 'seg-noid', id: null);
       await segStore.upsert(seg);
@@ -392,6 +420,72 @@ void main() {
       expect(await msgStore.findBySegmento(42), isNotEmpty);
       expect(await queueRowCount(), 4);
       expect(deletedPaths, isEmpty);
+    });
+  });
+
+  // Frontera de cierre: separa lo que el backend tiene `complete` (inmune al
+  // `cleanupPendingChildren` del próximo upsert) de lo que tiene `pending`
+  // (que ese upsert borrará y hay que reenviar). Reenviar de más duplica media
+  // en nube; reenviar de menos la pierde.
+  group('unconfirmedChildIds', () {
+    test('sin cierre previo → todo lo entregado cuenta como sin confirmar',
+        () async {
+      await segStore.upsert(_seg(clientId: 'seg-1', id: 42));
+      await seedJob('imagen', 'img-1');
+      await seedJob('imagen', 'img-2');
+
+      final out = await buildUseCase().unconfirmedChildIds(
+        segmentoClientId: 'seg-1',
+        entityType: 'imagen',
+        candidatos: {'img-1', 'img-2'},
+      );
+
+      expect(out, {'img-1', 'img-2'});
+    });
+
+    test('entregado ANTES del cierre → confirmado, no se reenvía', () async {
+      await segStore.upsert(_seg(clientId: 'seg-1', id: 42));
+      await seedJob('imagen', 'img-1');
+      // El cierre ocurre después de la entrega: la foto queda `complete`.
+      await segStore.markSyncConfirmed(
+          'seg-1', DateTime.now().millisecondsSinceEpoch + 1000);
+
+      final out = await buildUseCase().unconfirmedChildIds(
+        segmentoClientId: 'seg-1',
+        entityType: 'imagen',
+        candidatos: {'img-1'},
+      );
+
+      expect(out, isEmpty);
+    });
+
+    test('entregado DESPUÉS del cierre → sin confirmar, se reenvía', () async {
+      await segStore.upsert(_seg(clientId: 'seg-1', id: 42));
+      await segStore.markSyncConfirmed(
+          'seg-1', DateTime.now().millisecondsSinceEpoch - 1000);
+      await seedJob('imagen', 'img-1');
+
+      final out = await buildUseCase().unconfirmedChildIds(
+        segmentoClientId: 'seg-1',
+        entityType: 'imagen',
+        candidatos: {'img-1'},
+      );
+
+      expect(out, {'img-1'});
+    });
+
+    test('nunca devuelve hijos de OTRO sobre', () async {
+      await segStore.upsert(_seg(clientId: 'seg-1', id: 42));
+      await seedJob('imagen', 'img-1');
+      await seedJob('imagen', 'ajena-1');
+
+      final out = await buildUseCase().unconfirmedChildIds(
+        segmentoClientId: 'seg-1',
+        entityType: 'imagen',
+        candidatos: {'img-1'},
+      );
+
+      expect(out, {'img-1'});
     });
   });
 

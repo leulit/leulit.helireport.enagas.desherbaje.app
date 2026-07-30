@@ -17,6 +17,7 @@ import '../../core/sync/pull/cancel_token.dart';
 import '../../core/sync/sync_actions.dart';
 import '../../data/sync/imagen_local_store.dart';
 import '../../data/sync/mensaje_local_store.dart';
+import '../../data/sync/pending_envelopes_query.dart';
 import '../../data/sync/propagate_segmento_remote_id_usecase.dart';
 import '../../data/sync/purge_synced_segmento_usecase.dart';
 import '../../data/sync/segmento_local_store.dart';
@@ -42,7 +43,9 @@ class ForzarEnvioController extends MyGetxController {
     SegmentoLocalStore? segmentoStore,
     OutboxQueue? outbox,
     TrazaLocalStore? trazaStore,
+    PendingEnvelopesQuery? pendingQuery,
   })  : _purge = purgeUseCase ?? PurgeSyncedSegmentoUseCase(),
+        _pendingQuery = pendingQuery ?? PendingEnvelopesQuery(),
         _imagenStore = imagenStore ?? DI.get<ImagenLocalStore>(),
         _videoStore = videoStore ?? DI.get<VideoLocalStore>(),
         _mensajeStore = mensajeStore ?? DI.get<MensajeLocalStore>(),
@@ -62,6 +65,7 @@ class ForzarEnvioController extends MyGetxController {
   final SegmentoLocalStore _segmentoStore;
   final OutboxQueue _outbox;
   final TrazaLocalStore _trazaStore;
+  final PendingEnvelopesQuery _pendingQuery;
 
   final segmentos = <SegmentoEntity>[].obs;
   final filtradas = <SegmentoEntity>[].obs;
@@ -180,18 +184,28 @@ class ForzarEnvioController extends MyGetxController {
   String ctLabel(String ctname) =>
       ctname.isNotEmpty ? ctname : 'CT desconocido';
 
+  /// Qué le falta a cada sobre listado, por `clientId` del segmento. Lo llena
+  /// [loadSegmentos] junto con [segmentos]: la vista lo lee para decir POR QUÉ
+  /// aparece cada fila.
+  final pendientes = <String, PendingEnvelope>{};
+
+  /// Segmentos con trabajo pendiente en la nube. NADA de filtrar por estado:
+  /// "en qué punto del flujo de campo está la actividad" y "tengo bytes sin
+  /// subir" son preguntas distintas, y el outbox ya responde la segunda con
+  /// precisión. Filtrar por estado dejaba fuera todo lo editado durante el día
+  /// (un mensaje, una foto, un paso a `ejecución`), que no había forma de
+  /// enviar.
   Future<void> loadSegmentos() async {
     isLoading.value = true;
     error.value = null;
     final result = await _useCase.execute();
     switch (result) {
       case DataSuccess(:final data):
-        segmentos.assignAll(
-          data.where((s) => [
-                EstadoActividad.finalizada,
-                EstadoActividad.contratista
-              ].contains(s.estado)),
-        );
+        final sobres = await _pendingQuery.read();
+        pendientes
+          ..clear()
+          ..addAll(sobres);
+        segmentos.assignAll(data.where((s) => sobres.containsKey(s.clientId)));
         _applyFilter();
       case DataFailure(:final message):
         error.value = message;
@@ -219,6 +233,23 @@ class ForzarEnvioController extends MyGetxController {
     final names = segmentos.map((s) => s.ctname).toSet().toList();
     names.sort((a, b) => ctLabel(a).compareTo(ctLabel(b)));
     return names;
+  }
+
+  /// Hay algún filtro puesto, así que `filtradas` es un subconjunto propio de
+  /// `segmentos`. La vista lo usa para que el botón no prometa "todos" cuando
+  /// va a enviar solo lo visible.
+  bool get hayFiltroActivo =>
+      selectedEstado.value != null ||
+      selectedTipo.value != null ||
+      selectedCt.value != null ||
+      filterDescripcion.value.trim().isNotEmpty;
+
+  /// Estados presentes en la lista. Ya no se puede cablear a
+  /// `[contratista, finalizada]`: aquí cae cualquier estado con datos sin subir.
+  List<EstadoActividad> get estadosDisponibles {
+    final estados = segmentos.map((s) => s.estado).toSet().toList();
+    estados.sort((a, b) => a.index.compareTo(b.index));
+    return estados;
   }
 
   void _applyFilter() {
@@ -397,27 +428,39 @@ class ForzarEnvioController extends MyGetxController {
 
     await _propagate.propagate(s.clientId, backendId);
 
-    // La unidad de sincronización es el SOBRE entero, no el adjunto suelto.
-    // Un `upsert` entregado abre un intento nuevo en el backend y anula el
-    // anterior incompleto: borra sus filas y ficheros `pending`. Si un hijo
-    // sigue estando en local es que pertenece por definición a un sobre sin
-    // cerrar —uno cerrado ya se habría purgado tras el 200 de sync-complete—,
-    // así que hay que reenviarlo aunque su job figure ya como `synced`; si no,
-    // el backend lo borró y nadie lo vuelve a subir (foto perdida en campo).
-    // Solo cuando el upsert se entregó de verdad (`succeeded > 0`): sin upsert
-    // no hay borrado remoto, y reencolar duplicaría lo ya subido (el dedup por
-    // client_id ya no existe en la API).
+    // Un `upsert` entregado borra en backend TODO lo que ese segmento tenga en
+    // `estadotransmision='pending'` (`cleanupPendingChildren`), es decir lo que
+    // subió en un intento que ningún `sync-complete` cerró. Eso —y solo eso—
+    // hay que reenviarlo: si no, el backend lo borró y nadie lo vuelve a subir
+    // (foto perdida en campo).
+    //
+    // Lo que sí cerró un `sync-complete` está `complete` en backend, sobrevive
+    // al upsert y NO se toca: reenviarlo lo duplicaría, porque la API ya no
+    // deduplica por `client_id`. Antes se reencolaba el sobre entero, lo cual
+    // era correcto mientras el único envío posible ocurría con el sobre nunca
+    // cerrado; con envíos parciales durante el día duplicaba cada foto en cada
+    // envío posterior.
+    //
+    // Sin upsert entregado (`succeeded == 0`) no hay borrado remoto: nada que
+    // reenviar, ni siquiera lo sin confirmar — sigue vivo como `pending` en
+    // backend y el `sync-complete` de este mismo ciclo lo cerrará.
     if (segSummary.succeeded > 0) {
-      // §2 regla 2: el upsert entregado anula el intento anterior y borra sus
-      // ficheros `pending`. Toda sesión de subida de vídeo guardada pertenece a
-      // ese intento muerto; si no se descarta, el adapter reanudaría contra ella,
-      // vería `complete: true` y daría éxito sin subir un solo byte — y el
-      // sync-complete siguiente purgaría el vídeo local. Solo aquí: un reintento
-      // de cierre (sin upsert entregado) no anula nada y no debe forzar resubidas.
-      await _videoStore.clearUploadSessions(s.clientId);
-
+      final reenviados = <String>[];
       for (final (entityType, ids) in scopes) {
-        for (final clientId in ids) {
+        final sinConfirmar = await _purge.unconfirmedChildIds(
+          segmentoClientId: s.clientId,
+          entityType: entityType,
+          candidatos: ids,
+        );
+        if (sinConfirmar.isEmpty) continue;
+        // Toda sesión de subida de vídeo sin confirmar pertenece al intento que
+        // el upsert acaba de anular; si no se descarta, el adapter reanudaría
+        // contra ella, vería `complete: true` y daría éxito sin subir un byte —
+        // y el sync-complete siguiente purgaría el vídeo local.
+        if (entityType == 'video') {
+          await _videoStore.clearUploadSessions(s.clientId);
+        }
+        for (final clientId in sinConfirmar) {
           // Los tres adaptadores hijos solo aceptan `create`; reencolar el
           // mismo triple devuelve el job a `pending` conservando su remote_id.
           await _outbox.enqueue(
@@ -426,10 +469,12 @@ class ForzarEnvioController extends MyGetxController {
             operation: SyncOperation.create,
           );
         }
+        reenviados.add('${sinConfirmar.length} $entityType');
       }
-      final resumen = scopes.map((e) => '${e.$2.length} ${e.$1}').join(', ');
-      AppLog.i('ForzarEnvioController._sendOne(${s.id}): upsert entregado → '
-          'reencolado el sobre completo ($resumen).');
+      if (reenviados.isNotEmpty) {
+        AppLog.i('ForzarEnvioController._sendOne(${s.id}): upsert entregado → '
+            'reenviado lo subido sin cerrar (${reenviados.join(', ')}).');
+      }
     }
 
     var combined = segSummary;
@@ -615,29 +660,16 @@ class ForzarEnvioController extends MyGetxController {
     _token = CancelToken();
 
     try {
-      // Segmentos pendientes: los que NO están totalmente sincronizados, más
-      // los que solo esperan el cierre (ver abajo).
-      final u = await _purge.readUnsyncedSets();
-      final pending = <SegmentoEntity>[];
-      for (final s in List.of(segmentos)) {
-        final imgs =
-            await _imagenStore.findWhere('segmento_client_id', s.clientId);
-        final vids =
-            await _videoStore.findWhere('segmento_client_id', s.clientId);
-        final msgs =
-            await _mensajeStore.findWhere('segmento_client_id', s.clientId);
-        final fullySynced =
-            PurgeSyncedSegmentoUseCase.isFullySynced(s, imgs, vids, msgs, u);
-        // Un segmento con id de backend y CERO jobs sin sincronizar que SIGUE en
-        // local solo puede estar en `finalizeFailed`: el 200 de sync-complete lo
-        // habría purgado (§2 regla 3). Excluirlo lo condena — "Enviar todos" no
-        // volvería a tocarlo nunca, el backend dejaría sus filas `pending` para
-        // siempre y el próximo upsert las borraría. sync-complete es idempotente
-        // y no destructivo (§7): reintentar el cierre siempre es seguro, y con el
-        // upsert ya `synced` el drain no entrega nada (succeeded == 0), así que
-        // no se anula ningún intento ni se resube un solo byte.
-        if (!fullySynced || s.id != null) pending.add(s);
-      }
+      // Lo que se ve es lo que se envía: `filtradas`, no `segmentos`. Con la
+      // lista nueva (cualquier estado, todo lo que tenga algo sin subir) un
+      // "envía todo lo que hay" ignorando el filtro puede tirar vídeos de
+      // cientos de MB de CTs que el operario acababa de excluir a mano.
+      //
+      // No hace falta recalcular qué está pendiente: la lista YA es el conjunto
+      // pendiente (`loadSegmentos` la construye con `PendingEnvelopesQuery`), y
+      // eso incluye los sobres que solo esperan el `sync-complete` — su marca
+      // `sync_confirmed_at` es anterior a la entrega de sus jobs.
+      final pending = List.of(filtradas);
 
       var combined = const DrainSummary();
       for (var i = 0; i < pending.length; i++) {

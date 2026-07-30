@@ -42,10 +42,18 @@ Tres reglas que condicionan cómo se invoca:
 
 1. **El segmento va primero.** Su `id` de respuesta es el que se usa para colgar fotos,
    vídeos y mensajes. La identidad es siempre `id` entero; no existe `client_id`.
-2. **`upsert` borra todo lo `pending` de ese segmento** (filas y ficheros). Es un reenvío
-   entero del workflow, no un parche: no mandes `upsert` si solo quieres añadir una foto.
+2. **`upsert` borra todo lo `pending` de ese segmento** (filas y ficheros) — **solo lo
+   `pending`**. Lo que un `sync-complete` anterior dejó en `complete` sobrevive. No mandes
+   `upsert` si solo quieres añadir una foto: cuelga la foto y cierra con `sync-complete`.
 3. **No purgues los datos locales hasta el `200` de `sync-complete`.** Es la única señal de
    que el envío está completo; purgar antes pierde fotos y vídeos de campo sin aviso.
+4. **Cierra con `sync-complete` en cada envío que deje el sobre limpio**, no solo en el
+   último. Es lo que pasa las fotos/mensajes ya subidos de `pending` a `complete` y por
+   tanto lo que los hace inmunes al borrado de la regla 2. Sin ese cierre, el `upsert` del
+   día siguiente borra lo de hoy. Cerrar en nube ≠ borrar en local: son decisiones
+   distintas (el cliente purga solo con `estado ∈ {finalizada, contratista}`).
+5. **Un `upsert` entregado obliga a reenviar lo que subiste sin cerrar** — y solo eso.
+   Reenviar lo ya `complete` lo duplica: no hay deduplicación por `client_id`.
 
 ---
 
@@ -248,6 +256,15 @@ El vídeo aún se está convirtiendo: no es reproducible hasta `status: "disponi
 
 Sin body. Se llama **después** de enviar todas las fotos, vídeos y mensajes del segmento.
 Idempotente y no destructivo.
+
+Marca el segmento **y sus hijos** (`imagenes_segmento`, `mensajes_segmento`) como
+`estadotransmision = 'complete'` y sella `sync_completed_at`. Es la única vía por la que
+una foto deja de ser borrable por el `upsert` siguiente (§2 regla 2).
+
+> `partialUpdate` con `pending` reabre el ciclo y **limpia `sync_completed_at`**: el
+> `UPDATE` de `markSyncCompleted` filtra por `sync_completed_at IS NULL`, así que sin esa
+> limpieza el 2º `sync-complete` del mismo segmento no haría nada y la fila se quedaría
+> `pending` para siempre. El reenvío del mismo segmento es el caso normal, no la excepción.
 
 **`200`** → `{ "success": true, "id": 42 }`
 

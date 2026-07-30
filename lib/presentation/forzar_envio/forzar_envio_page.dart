@@ -5,6 +5,7 @@ import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
 import '../../core/extensions.dart';
 import '../../core/widgets/filtros_segmentos_bar.dart';
+import '../../data/sync/pending_envelopes_query.dart';
 import '../../domain/entities/segmento_entity.dart';
 import '../widgets/logout_button.dart';
 import '../widgets/track_record_button.dart';
@@ -186,8 +187,12 @@ class _FiltrosBar extends StatelessWidget {
                       _cancelColor,
                       controller.cancelarEnvio,
                     ),
+                  // Con filtro puesto se envía solo lo visible, así que el
+                  // botón no puede seguir diciendo "todos".
                   _ => (
-                      'Enviar todos',
+                      controller.hayFiltroActivo
+                          ? 'Enviar filtrados'
+                          : 'Enviar todos',
                       Icons.cloud_upload_outlined,
                       AppColors.moduleGreen,
                       controller.isEnviando ? null : controller.enviarAllCloud,
@@ -222,12 +227,9 @@ class _FiltrosBar extends StatelessWidget {
           const SizedBox(height: 6),
           Obx(() => SegmentoFiltrosRow(
                 rxEstado: controller.selectedEstado,
-                // El controller solo carga contratista/finalizada
-                // (`loadSegmentos`); ofrecer más estados nunca filtraría nada.
-                estadoItems: const [
-                  EstadoActividad.contratista,
-                  EstadoActividad.finalizada,
-                ],
+                // La lista ya no filtra por estado: cae cualquiera que tenga
+                // datos sin subir. Los items salen de lo que hay cargado.
+                estadoItems: controller.estadosDisponibles,
                 onEstado: controller.filterByEstado,
                 rxTipo: controller.selectedTipo,
                 onTipo: controller.filterByTipo,
@@ -476,6 +478,43 @@ const Map<TipoActividad, Color> _tipoColors = {
   TipoActividad.tratamientoReptilesOtros: Color(0xFF01579B),
 };
 
+/// Por qué está esta fila aquí: `Datos · 1 foto · 2 mensajes`.
+///
+/// Con el filtro por estado, la razón era obvia (estaba finalizada). Ahora un
+/// segmento aparece por un mensaje escrito hace dos días o por un cambio de
+/// estado, y sin este renglón el operario no tiene forma de saberlo.
+class _PendienteLinea extends StatelessWidget {
+  final PendingEnvelope? pendiente;
+  const _PendienteLinea({required this.pendiente});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = pendiente?.resumen ?? const <String>[];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_outlined,
+              size: 13, color: Color(0xFFF57C00)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              items.join(' · '),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFE65100),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SegmentCard extends StatelessWidget {
   final SegmentoEntity segmento;
   final String ctName;
@@ -581,6 +620,8 @@ class _SegmentCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  _PendienteLinea(
+                      pendiente: controller.pendientes[segmento.clientId]),
                   const SizedBox(height: 6),
                   Row(
                     children: [

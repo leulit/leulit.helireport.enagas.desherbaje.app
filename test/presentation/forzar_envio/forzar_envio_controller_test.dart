@@ -12,6 +12,7 @@ import 'package:helireport_desherbaje/core/sync/pull/cancel_token.dart';
 import 'package:helireport_desherbaje/data/model/mensaje_entity.dart';
 import 'package:helireport_desherbaje/data/sync/imagen_local_store.dart';
 import 'package:helireport_desherbaje/data/sync/mensaje_local_store.dart';
+import 'package:helireport_desherbaje/data/sync/pending_envelopes_query.dart';
 import 'package:helireport_desherbaje/data/sync/propagate_segmento_remote_id_usecase.dart';
 import 'package:helireport_desherbaje/data/sync/purge_synced_segmento_usecase.dart';
 import 'package:helireport_desherbaje/data/sync/segmento_local_store.dart';
@@ -47,6 +48,8 @@ class MockPropagateSegmentoRemoteIdUseCase extends Mock
     implements PropagateSegmentoRemoteIdUseCase {}
 
 class MockOutboxQueue extends Mock implements OutboxQueue {}
+
+class MockPendingEnvelopesQuery extends Mock implements PendingEnvelopesQuery {}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -117,7 +120,16 @@ void main() {
   late MockPropagateSegmentoRemoteIdUseCase mockPropagate;
   late MockOutboxQueue mockOutbox;
   late MockTrazaLocalStore mockTrazaStore;
+  late MockPendingEnvelopesQuery mockPendingQuery;
   late ForzarEnvioController controller;
+
+  // Siembra la lista como lo haría `loadSegmentos`: `filtradas` se deriva de
+  // `segmentos` aplicando los filtros activos (aquí, ninguno). `enviarAllCloud`
+  // recorre `filtradas`, no `segmentos`: lo que se ve es lo que se envía.
+  void seed(List<SegmentoEntity> list) {
+    controller.segmentos.assignAll(list);
+    controller.filterByEstado(null);
+  }
 
   setUpAll(() {
     registerFallbackValue(SegmentoEntity(null, '', TipoInstalacion.lineal, []));
@@ -139,8 +151,18 @@ void main() {
     mockPropagate = MockPropagateSegmentoRemoteIdUseCase();
     mockOutbox = MockOutboxQueue();
     mockTrazaStore = MockTrazaLocalStore();
+    mockPendingQuery = MockPendingEnvelopesQuery();
 
     when(() => mockTrazaStore.deleteSynced()).thenAnswer((_) async => 0);
+    when(() => mockPendingQuery.read()).thenAnswer((_) async => {});
+
+    // Por defecto NADA está subido-sin-confirmar: el sobre anterior cerró bien.
+    // Es el caso normal y el que prueba que no se reenvía lo ya confirmado.
+    when(() => mockPurge.unconfirmedChildIds(
+          segmentoClientId: any(named: 'segmentoClientId'),
+          entityType: any(named: 'entityType'),
+          candidatos: any(named: 'candidatos'),
+        )).thenAnswer((_) async => const <String>{});
 
     when(() => mockOutbox.enqueue(
           entityType: any(named: 'entityType'),
@@ -199,6 +221,7 @@ void main() {
       propagate: mockPropagate,
       outbox: mockOutbox,
       trazaStore: mockTrazaStore,
+      pendingQuery: mockPendingQuery,
     );
     Get.put(controller);
   });
@@ -272,10 +295,10 @@ void main() {
           onProgress: any(named: 'onProgress')));
     });
 
-    // El sobre es la unidad de sync: un upsert entregado anula el intento
-    // anterior en el backend (borra sus filas pending), así que TODO hijo local
-    // debe reenviarse aunque su job figure ya como `synced`.
-    test('(a3) upsert entregado → reencola el sobre entero', () async {
+    // Un upsert entregado borra en backend lo que ese segmento tenga en
+    // `estadotransmision='pending'`, es decir lo que subió en un intento que
+    // ningún sync-complete cerró. Eso —y solo eso— hay que reenviarlo.
+    test('(a3) upsert entregado → reencola lo subido SIN confirmar', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       when(() => mockEngine.drain(
               entityType: 'segmento',
@@ -289,6 +312,21 @@ void main() {
           .thenAnswer((_) async => [_img('img-1')]);
       when(() => mockMensajeStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_msg('msg-1')]);
+      when(() => mockPurge.unconfirmedChildIds(
+            segmentoClientId: any(named: 'segmentoClientId'),
+            entityType: 'video',
+            candidatos: any(named: 'candidatos'),
+          )).thenAnswer((_) async => const {'vid-1'});
+      when(() => mockPurge.unconfirmedChildIds(
+            segmentoClientId: any(named: 'segmentoClientId'),
+            entityType: 'imagen',
+            candidatos: any(named: 'candidatos'),
+          )).thenAnswer((_) async => const {'img-1'});
+      when(() => mockPurge.unconfirmedChildIds(
+            segmentoClientId: any(named: 'segmentoClientId'),
+            entityType: 'mensaje',
+            candidatos: any(named: 'candidatos'),
+          )).thenAnswer((_) async => const {'msg-1'});
 
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
@@ -304,6 +342,38 @@ void main() {
           entityType: 'mensaje',
           clientId: 'msg-1',
           operation: SyncOperation.create)).called(1);
+    });
+
+    // REGRESIÓN — duplicación de media en nube. Fotos/vídeos/mensajes cerrados
+    // por un sync-complete anterior están `complete` en backend y sobreviven al
+    // upsert. Reenviarlos los duplica: la API ya no deduplica por client_id.
+    // Caso real: subo dos fotos hoy, mañana paso el segmento a `finalizada` y
+    // el upsert de ese cambio no debe resubir nada.
+    test('(a3b) hijos ya confirmados → NO se reencolan aunque salga upsert',
+        () async {
+      when(() => mockConnectivity.isConnected).thenReturn(true);
+      when(() => mockEngine.drain(
+              entityType: 'segmento',
+              onlyClientIds: any(named: 'onlyClientIds'),
+              token: any(named: 'token'),
+              onProgress: any(named: 'onProgress')))
+          .thenAnswer((_) async => const DrainSummary(succeeded: 1));
+      when(() => mockVideoStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_vid('vid-1')]);
+      when(() => mockImagenStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_img('img-1')]);
+      when(() => mockMensajeStore.findWhere('segmento_client_id', any()))
+          .thenAnswer((_) async => [_msg('msg-1')]);
+      // `unconfirmedChildIds` vacío por defecto: todo cerrado en el envío previo.
+
+      await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
+
+      verifyNever(() => mockOutbox.enqueue(
+            entityType: any(named: 'entityType'),
+            clientId: any(named: 'clientId'),
+            operation: any(named: 'operation'),
+          ));
+      verifyNever(() => mockVideoStore.clearUploadSessions(any()));
     });
 
     test('(a4) upsert NO entregado → no reencola nada', () async {
@@ -346,6 +416,12 @@ void main() {
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
 
+      when(() => mockPurge.unconfirmedChildIds(
+            segmentoClientId: any(named: 'segmentoClientId'),
+            entityType: 'video',
+            candidatos: any(named: 'candidatos'),
+          )).thenAnswer((_) async => const {'vid-1'});
+
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
       verify(() => mockVideoStore.clearUploadSessions('seg-1')).called(1);
@@ -362,6 +438,12 @@ void main() {
           .thenAnswer((_) async => const DrainSummary(succeeded: 1));
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
+
+      when(() => mockPurge.unconfirmedChildIds(
+            segmentoClientId: any(named: 'segmentoClientId'),
+            entityType: 'video',
+            candidatos: any(named: 'candidatos'),
+          )).thenAnswer((_) async => const {'vid-1'});
 
       await controller.enviarCloud(_seg(id: 42, clientId: 'seg-1'));
 
@@ -674,7 +756,7 @@ void main() {
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
       final seg = _seg(id: 42, clientId: 'seg-1');
-      controller.segmentos.assignAll([seg]);
+      seed([seg]);
       // El segmento está pendiente (su clientId en el set de no-sincronizados).
       when(() => mockPurge.readUnsyncedSets()).thenAnswer(
         (_) async => const UnsyncedSets(
@@ -696,12 +778,10 @@ void main() {
       ]);
     });
 
-    test('segmento sin id de backend y sin nada pendiente no se envía',
-        () async {
+    test('lista vacía: no se drena ningún segmento, la traza sí', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([_seg(id: null, clientId: 'seg-1')]);
-      // readUnsyncedSets vacío (default) → nada que subir; sin id remoto tampoco
-      // hay cierre que reintentar (purge lo descartaría por skippedNoRemoteId).
+      // `PendingEnvelopesQuery` no devuelve nada → nada que enviar. La decisión
+      // de qué está pendiente vive AHÍ, no en `enviarAllCloud`.
 
       await controller.enviarAllCloud();
 
@@ -710,7 +790,7 @@ void main() {
           onlyClientIds: any(named: 'onlyClientIds'),
           token: any(named: 'token'),
           onProgress: any(named: 'onProgress')));
-      // position sí se drena siempre al final.
+      // El GPS es global, no cuelga de ningún segmento: se drena igualmente.
       verify(() => mockEngine.drain(
           entityType: 'traza',
           token: any(named: 'token'),
@@ -724,7 +804,7 @@ void main() {
     test('segmento en finalizeFailed se reintenta y re-POSTea sync-complete',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      seed([_seg(id: 42, clientId: 'seg-1')]);
       // Todo sincronizado (readUnsyncedSets vacío por defecto): si sigue en
       // local es que el cierre nunca se confirmó — el 200 lo habría purgado.
       when(() => mockPurge.purgeIfFullySynced(any())).thenAnswer(
@@ -743,7 +823,7 @@ void main() {
 
     test('reintento de cierre puro no descarta sesiones de vídeo', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      seed([_seg(id: 42, clientId: 'seg-1')]);
       when(() => mockVideoStore.findWhere('segmento_client_id', any()))
           .thenAnswer((_) async => [_vid('vid-1')]);
       // Drain del segmento sin entregas (succeeded 0): el upsert ya estaba
@@ -777,7 +857,7 @@ void main() {
     test('authExpired en un segmento corta el bucle: position no se drena',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      seed([_seg(id: 42, clientId: 'seg-1')]);
       when(() => mockPurge.readUnsyncedSets()).thenAnswer(
         (_) async => const UnsyncedSets(
             segmento: {'seg-1'}, imagen: {}, video: {}, mensaje: {}),
@@ -800,7 +880,7 @@ void main() {
 
     test('summary combinado acumula totales de segmentos + position', () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([_seg(id: 42, clientId: 'seg-1')]);
+      seed([_seg(id: 42, clientId: 'seg-1')]);
       when(() => mockPurge.readUnsyncedSets()).thenAnswer(
         (_) async => const UnsyncedSets(
             segmento: {'seg-1'}, imagen: {}, video: {}, mensaje: {}),
@@ -859,7 +939,7 @@ void main() {
     test('cancelado a media tanda: no arranca el siguiente segmento ni traza',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([
+      seed([
         _seg(id: 42, clientId: 'seg-1'),
         _seg(id: 43, clientId: 'seg-2'),
       ]);
@@ -896,7 +976,7 @@ void main() {
     test('progresoEnvio se publica durante el envío y se limpia al terminar',
         () async {
       when(() => mockConnectivity.isConnected).thenReturn(true);
-      controller.segmentos.assignAll([
+      seed([
         _seg(id: 42, clientId: 'seg-1'),
         _seg(id: 43, clientId: 'seg-2'),
       ]);

@@ -45,6 +45,12 @@ enum PurgeStatus {
   /// outbox jobs deleted.
   purged,
 
+  /// Todo subido y `sync-complete` confirmado, pero el segmento se queda en
+  /// local porque su estado no es terminal (`ejecución`, `propuesta`…): el
+  /// operario sigue trabajándolo y `GET /segmentos/contratista` no lo sirve,
+  /// así que borrarlo sería perderlo.
+  finalizedKept,
+
   /// At least one part (segment or a dependent) still had a
   /// pending/syncing/rejected outbox job → nothing was deleted.
   keptUnsynced,
@@ -173,9 +179,30 @@ class PurgeSyncedSegmentoUseCase {
       vids.every((v) => !u.video.contains(v.clientId)) &&
       msgs.every((m) => !u.mensaje.contains(m.clientId));
 
-  /// Purges [s] and its dependents iff all are fully synced. Never partially
-  /// deletes: if any dependent is unsynced, returns [PurgeStatus.keptUnsynced]
-  /// and performs ZERO deletes.
+  /// Estados en los que el segmento deja de vivir en el móvil una vez cerrado
+  /// en nube. El resto se queda: el operario sigue trabajándolo y el backend
+  /// no lo devuelve en el pull (`GET /segmentos/contratista` solo sirve
+  /// `propuesta` y `validada`), así que el móvil es la única copia.
+  ///
+  /// `contratista` sí purga: pasa a manos del gestor y vuelve al móvil cuando
+  /// este la promueva a `validada`.
+  static const Set<EstadoActividad> estadosQuePurgan = {
+    EstadoActividad.finalizada,
+    EstadoActividad.contratista,
+  };
+
+  /// Cierra [s] en nube si todo su contenido está subido y, solo si su estado
+  /// es terminal ([estadosQuePurgan]), lo borra del móvil.
+  ///
+  /// Las dos cosas van separadas a propósito. El `sync-complete` es lo que
+  /// marca las fotos/mensajes ya subidos como `complete` en backend y por
+  /// tanto lo que los hace inmunes al `cleanupPendingChildren` del siguiente
+  /// `upsert`; hay que llamarlo en CADA envío limpio, no solo en el último.
+  /// El borrado local es otra decisión, y depende del estado de la actividad.
+  ///
+  /// Nunca borra a medias: si algún dependiente sigue sin subir, devuelve
+  /// [PurgeStatus.keptUnsynced] y no toca nada (tampoco cierra: un sobre
+  /// incompleto no puede figurar como transmitido).
   Future<PurgeOutcome> purgeIfFullySynced(SegmentoEntity s) async {
     // A segment never accepted by the backend cannot be fully synced.
     if (s.id == null) {
@@ -208,6 +235,19 @@ class PurgeSyncedSegmentoUseCase {
     // devuelve 2xx.
     if (!await _notifySyncComplete(s)) {
       return const PurgeOutcome(status: PurgeStatus.finalizeFailed);
+    }
+
+    // Frontera de cierre: todo lo entregado hasta este instante está `complete`
+    // en backend. Se graba el `max(synced_at)` de los jobs del sobre, no
+    // `DateTime.now()`, para que ambos lados de la comparación vengan de la
+    // misma fuente (ver `SegmentoLocalStore.markSyncConfirmed`).
+    await _segmentoStore.markSyncConfirmed(
+      s.clientId,
+      await _maxSyncedAt(s, imgs, vids, msgs),
+    );
+
+    if (!estadosQuePurgan.contains(s.estado)) {
+      return const PurgeOutcome(status: PurgeStatus.finalizedKept);
     }
 
     // Atomic cascade: any failure rolls the whole thing back — never a
@@ -267,6 +307,62 @@ class PurgeSyncedSegmentoUseCase {
       mensajes: msgs.length,
       filesDeleted: deleted,
     );
+  }
+
+  /// Instante de entrega más reciente del sobre, en epoch ms.
+  ///
+  /// Cae a `DateTime.now()` solo si NINGÚN job del sobre tiene `synced_at`, lo
+  /// que en la práctica no ocurre (para llegar aquí el sobre está entero
+  /// entregado); el fallback evita escribir `null` y dejar la frontera abierta.
+  Future<int> _maxSyncedAt(
+    SegmentoEntity s,
+    List<ImagenSegmentoEntity> imgs,
+    List<VideoSegmentoEntity> vids,
+    List<MensajeSegmentoEntity> msgs,
+  ) async {
+    final ambitos = <String, Set<String>>{
+      'segmento': {s.clientId},
+      'imagen': imgs.map((i) => i.clientId).toSet(),
+      'video': vids.map((v) => v.clientId).toSet(),
+      'mensaje': msgs.map((m) => m.clientId).toSet(),
+    };
+    var max = 0;
+    for (final entry in ambitos.entries) {
+      if (entry.value.isEmpty) continue;
+      final jobs = await _outbox.syncedJobs(entityType: entry.key);
+      for (final j in jobs) {
+        final at = j.syncedAt?.millisecondsSinceEpoch;
+        if (at != null && entry.value.contains(j.clientId) && at > max) {
+          max = at;
+        }
+      }
+    }
+    return max > 0 ? max : DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// `clientId`s del sobre que subieron en un intento que nadie cerró: su job
+  /// está `synced` pero es posterior al último `sync-complete` confirmado.
+  ///
+  /// Son exactamente las filas que el backend tiene en
+  /// `estadotransmision='pending'` y que `cleanupPendingChildren` borrará en
+  /// cuanto salga un `upsert` de este segmento. Reenviar cualquier otra cosa
+  /// duplicaría contenido: la API ya no deduplica por `client_id`.
+  Future<Set<String>> unconfirmedChildIds({
+    required String segmentoClientId,
+    required String entityType,
+    required Set<String> candidatos,
+  }) async {
+    if (candidatos.isEmpty) return const <String>{};
+    final frontera = await _segmentoStore.readSyncConfirmedAt(segmentoClientId);
+    final jobs = await _outbox.syncedJobs(entityType: entityType);
+    return {
+      for (final j in jobs)
+        if (candidatos.contains(j.clientId) &&
+            j.syncedAt != null &&
+            (frontera == null ||
+                j.syncedAt!.millisecondsSinceEpoch > frontera))
+          j.clientId,
+    };
   }
 
   /// POSTs `sync-complete` for [s]. Returns true on a 2xx response, false on

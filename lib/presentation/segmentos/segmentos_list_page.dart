@@ -458,9 +458,7 @@ class _SegmentCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        segmento.descripcion.isEmpty
-                            ? '....'
-                            : segmento.descripcion,
+                        segmento.nombre ?? '....',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
