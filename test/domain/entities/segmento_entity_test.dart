@@ -245,12 +245,10 @@ void main() {
     });
 
     test('matriz de transiciones permitidas', () {
-      expect(EstadoActividad.contratista.transicionesPermitidas,
-          {EstadoActividad.ejecucion});
+      expect(EstadoActividad.contratista.transicionesPermitidas, isEmpty);
       expect(EstadoActividad.ejecucion.transicionesPermitidas,
           {EstadoActividad.finalizada});
-      expect(EstadoActividad.finalizada.transicionesPermitidas,
-          {EstadoActividad.cerrada, EstadoActividad.ejecucion});
+      expect(EstadoActividad.finalizada.transicionesPermitidas, isEmpty);
       expect(EstadoActividad.propuesta.transicionesPermitidas, {
         EstadoActividad.contratista,
         EstadoActividad.ejecucion,
@@ -262,10 +260,12 @@ void main() {
     });
 
     test('transiciones válidas e inválidas', () {
-      expect(
-          EstadoActividad.finalizada.puedeIrA(EstadoActividad.cerrada), isTrue);
+      expect(EstadoActividad.finalizada.puedeIrA(EstadoActividad.cerrada),
+          isFalse);
       expect(EstadoActividad.finalizada.puedeIrA(EstadoActividad.ejecucion),
-          isTrue);
+          isFalse);
+      expect(EstadoActividad.contratista.puedeIrA(EstadoActividad.ejecucion),
+          isFalse);
       expect(EstadoActividad.contratista.puedeIrA(EstadoActividad.finalizada),
           isFalse);
       expect(EstadoActividad.propuesta.puedeIrA(EstadoActividad.contratista),
@@ -281,9 +281,9 @@ void main() {
     });
 
     test('esEditableDesdeApp', () {
-      expect(EstadoActividad.contratista.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.contratista.esEditableDesdeApp, isFalse);
       expect(EstadoActividad.ejecucion.esEditableDesdeApp, isTrue);
-      expect(EstadoActividad.finalizada.esEditableDesdeApp, isTrue);
+      expect(EstadoActividad.finalizada.esEditableDesdeApp, isFalse);
       expect(EstadoActividad.propuesta.esEditableDesdeApp, isTrue);
       expect(EstadoActividad.validada.esEditableDesdeApp, isTrue);
       expect(EstadoActividad.cerrada.esEditableDesdeApp, isFalse);

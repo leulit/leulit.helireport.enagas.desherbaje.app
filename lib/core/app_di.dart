@@ -17,6 +17,7 @@ import '../data/sync/traza_remote_adapter.dart';
 import '../data/sync/traza_local_store.dart';
 import '../data/sync/posicion_fija_local_store.dart';
 import '../data/sync/posicion_fija_remote_fetcher.dart';
+import '../data/sync/segmento_conflict_resolver.dart';
 import '../data/sync/segmento_local_store.dart';
 import '../data/sync/segmento_remote_adapter.dart';
 import '../data/sync/segmento_remote_fetcher.dart';
@@ -173,7 +174,7 @@ class AppDI {
       store: segmentoStore,
       adapter: SegmentoRemoteAdapter(network),
       fetcher: SegmentoRemoteFetcher(network),
-      conflictResolver: const InteractiveConflictResolver<SegmentoEntity>(),
+      conflictResolver: const SegmentoConflictResolver(),
       fromJson: SegmentoEntity.fromJson,
       formatForDisplay: _formatSegmentoForDisplay,
     );

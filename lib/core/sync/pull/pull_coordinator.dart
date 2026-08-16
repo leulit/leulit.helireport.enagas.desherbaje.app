@@ -12,6 +12,7 @@ import 'cancel_token.dart';
 import 'pull_context.dart';
 import 'pull_outcome.dart';
 import 'pull_progress.dart';
+import 'tasks/apply_resolver_task.dart';
 import 'tasks/detect_conflicts_task.dart';
 import 'tasks/dispatch_pull_completed_task.dart';
 import 'tasks/enqueue_conflicts_task.dart';
@@ -64,12 +65,10 @@ class PullCoordinator<T extends Syncable> {
   final Database _db;
 
   PullCoordinator({
-    required TypeRegistration<T> registration,
-    required OutboxQueue outbox,
-    required Database db,
-  })  : _registration = registration,
-        _outbox = outbox,
-        _db = db;
+    required this._registration,
+    required this._outbox,
+    required this._db,
+  });
 
   Future<PullSummary> pullNow({
     CancelToken? token,
@@ -80,6 +79,7 @@ class PullCoordinator<T extends Syncable> {
     final tasks = <PipelineTask<PullContext<T>>>[
       InvokeRemoteFetcherTask<T>(),
       DetectConflictsTask<T>(outbox: _outbox),
+      ApplyResolverTask<T>(),
       UpsertNonConflictingTask<T>(),
       EnqueueConflictsTask<T>(db: _db),
       UpdatePullStateTask<T>(db: _db),
@@ -159,6 +159,8 @@ class PullCoordinator<T extends Syncable> {
         return 'Descargando…';
       case 'DetectConflicts':
         return 'Comprobando cambios…';
+      case 'ApplyResolver':
+        return 'Resolviendo cambios…';
       case 'UpsertNonConflicting':
         return 'Guardando…';
       case 'EnqueueConflicts':

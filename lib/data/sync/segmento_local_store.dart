@@ -137,6 +137,32 @@ class SegmentoLocalStore implements LocalStore<SegmentoEntity> {
     }
   }
 
+  /// Refresca solo el snapshot embebido (`imagenes_json`/`mensajes_json`) de
+  /// la fila, sin tocar el resto de columnas — ni siquiera `synced_at`/
+  /// `sync_confirmed_at`, que tienen sus propios setters.
+  ///
+  /// Usado por [PurgeSyncedSegmentoUseCase] para fundir en el snapshot los
+  /// hijos locales que ya están confirmados en nube justo ANTES de borrar sus
+  /// filas: así Antes/Después y Mensajes siguen viéndolos aunque la fila hija
+  /// ya no exista, sin esperar al siguiente pull manual.
+  Future<void> updateEmbeddedMedia(
+    String clientId, {
+    required List<ImagenSegmentoEntity> imagenes,
+    required List<MensajeSegmentoEntity> mensajes,
+    DatabaseExecutor? txn,
+  }) async {
+    final executor = txn ?? _db;
+    await executor.update(
+      _table,
+      {
+        'imagenes_json': jsonEncode(imagenes.map((i) => i.toJson()).toList()),
+        'mensajes_json': jsonEncode(mensajes.map((m) => m.toJson()).toList()),
+      },
+      where: 'client_id = ?',
+      whereArgs: [clientId],
+    );
+  }
+
   @override
   Future<void> delete(String clientId, {DatabaseExecutor? txn}) async {
     final executor = txn ?? _db;

@@ -97,13 +97,15 @@ Future<Database> _openTestDb() async {
 
 TypeRegistration<SegmentoEntity> _reg(
   MockLocalStore store,
-  MockRemoteFetcher fetcher,
-) =>
+  MockRemoteFetcher fetcher, {
+  ConflictResolver<SegmentoEntity> resolver =
+      const ServerWinsResolver<SegmentoEntity>(),
+}) =>
     TypeRegistration<SegmentoEntity>(
       entityType: 'segmento',
       store: store,
       fetcher: fetcher,
-      conflictResolver: const ServerWinsResolver<SegmentoEntity>(),
+      conflictResolver: resolver,
       fromJson: SegmentoEntity.fromJson,
     );
 
@@ -255,6 +257,22 @@ void main() {
   // ─── NF-3: enqueue_conflicts DB failure ─────────────────────────────────────
   group('NF-3 — conflict DB insert fails', () {
     test('outcome==partial, partialErrors from EnqueueConflicts', () async {
+      // InteractiveConflictResolver: ApplyResolverTask must leave this
+      // conflict unresolved (defers to the user) so it actually reaches
+      // EnqueueConflictsTask — a resolver that decides deterministically
+      // (e.g. ServerWinsResolver) would reclassify it into safeToUpsert
+      // before EnqueueConflictsTask ever runs, and this test would no
+      // longer exercise the failure path it targets.
+      coordinator = PullCoordinator<SegmentoEntity>(
+        registration: _reg(
+          mockStore,
+          mockFetcher,
+          resolver: const InteractiveConflictResolver<SegmentoEntity>(),
+        ),
+        outbox: outbox,
+        db: db,
+      );
+
       // Make a remote item that will be detected as a conflict by having
       // an outbox pending job for it.
       final localSeg = _seg(
@@ -309,6 +327,19 @@ void main() {
     });
 
     test('with conflicts → outcome==okWithConflicts, last_error==null', () async {
+      // Same reason as NF-3: need a resolver that defers (returns null) so
+      // the conflict survives ApplyResolverTask instead of being resolved
+      // into safeToUpsert.
+      coordinator = PullCoordinator<SegmentoEntity>(
+        registration: _reg(
+          mockStore,
+          mockFetcher,
+          resolver: const InteractiveConflictResolver<SegmentoEntity>(),
+        ),
+        outbox: outbox,
+        db: db,
+      );
+
       final localSeg =
           _seg(clientId: 'c1', id: 10, updatedAt: DateTime(2025, 1, 1));
       final remoteSeg =

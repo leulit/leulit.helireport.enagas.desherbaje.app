@@ -247,7 +247,70 @@ class PurgeSyncedSegmentoUseCase {
     );
 
     if (!estadosQuePurgan.contains(s.estado)) {
-      return const PurgeOutcome(status: PurgeStatus.finalizedKept);
+      // El segmento se queda, pero sus hijos ya confirmados NO tienen por qué
+      // seguir ocupando disco indefinidamente (puede tardar semanas en llegar
+      // a un estado terminal). isFullySynced ya garantizó que TODOS los `imgs`/
+      // `msgs` leídos arriba están subidos — sin outbox pendiente/syncing/
+      // rejected — así que es seguro fundirlos en el snapshot embebido y
+      // borrar sus filas locales.
+      //
+      // Orden obligatorio: 1) refrescar imagenes_json/mensajes_json con la
+      // unión remoto+local (mismo patrón de merge por id que
+      // SegmentoDetalleController._loadImagenes/_loadMensajes), 2) SOLO
+      // DESPUÉS de que ese UPDATE haya comprometido, borrar fila+fichero. Si
+      // se hiciera al revés, un crash entre medias perdería la foto: ni está
+      // en el snapshot ni en su propia fila.
+      final mergedImagenes =
+          _mergeById<ImagenSegmentoEntity>(s.imagenes, imgs, (e) => e.id);
+      final mergedMensajes =
+          _mergeById<MensajeSegmentoEntity>(s.mensajes, msgs, (e) => e.id);
+
+      await _segmentoStore.updateEmbeddedMedia(
+        s.clientId,
+        imagenes: mergedImagenes,
+        mensajes: mergedMensajes,
+      );
+
+      // Vídeos: NO se purgan aquí — limitación deliberada, no un olvido.
+      // `SegmentoEntity.imagenes` es `List<ImagenSegmentoEntity>` (tipo
+      // único); un `VideoSegmentoEntity` local confirmado no tiene la `url`
+      // canónica que serviría el backend, así que no hay forma segura de
+      // fabricar una entrada de `imagenes_json` equivalente sin arriesgar que
+      // el snapshot mienta. `vids` se deja intacto; sus filas se purgan
+      // cuando el segmento llegue a un estado terminal (rama `purged`).
+      await _db.transaction((txn) async {
+        for (final i in imgs) {
+          await _imagenStore.delete(i.clientId, txn: txn);
+          await _outbox.removeForEntity(
+            entityType: 'imagen',
+            clientId: i.clientId,
+            txn: txn,
+          );
+        }
+        for (final m in msgs) {
+          await _mensajeStore.delete(m.clientId, txn: txn);
+          await _outbox.removeForEntity(
+            entityType: 'mensaje',
+            clientId: m.clientId,
+            txn: txn,
+          );
+        }
+      });
+
+      final deletedFinalizedKept = <String>[];
+      for (final i in imgs) {
+        if (i.ruta.isNotEmpty) {
+          await _deleteFile(i.ruta);
+          deletedFinalizedKept.add(i.ruta);
+        }
+      }
+
+      return PurgeOutcome(
+        status: PurgeStatus.finalizedKept,
+        imagenes: imgs.length,
+        mensajes: msgs.length,
+        filesDeleted: deletedFinalizedKept,
+      );
     }
 
     // Atomic cascade: any failure rolls the whole thing back — never a
@@ -409,5 +472,23 @@ class PurgeSyncedSegmentoUseCase {
       outcomes.add(await purgeIfFullySynced(s));
     }
     return outcomes;
+  }
+
+  /// Une snapshot remoto (`remote`, ya embebido en el segmento) + hijos
+  /// locales (`local`), deduplicado por id remoto. Mismo patrón de merge que
+  /// `SegmentoDetalleController._loadImagenes`/`_loadMensajes` (remoto primero,
+  /// local solo si su id no está ya en remoto); no se extrajo a un sitio
+  /// compartido porque son 2 líneas y el controller vive en la capa de
+  /// presentación — ver decisión documentada en el informe de la tarea.
+  static List<X> _mergeById<X>(
+    List<X> remote,
+    List<X> local,
+    int? Function(X) idOf,
+  ) {
+    final remoteIds = remote.map(idOf).whereType<int>().toSet();
+    return [
+      ...remote,
+      ...local.where((l) => idOf(l) == null || !remoteIds.contains(idOf(l))),
+    ];
   }
 }

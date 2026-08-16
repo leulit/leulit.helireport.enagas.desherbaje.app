@@ -65,14 +65,16 @@ enum EstadoActividad {
   const EstadoActividad(this.descripcion, this.etiqueta);
 
   /// Estados destino permitidos desde este estado — matriz SSOT (regla de
-  /// negocio desherbaje para la app de campo). Solo el estado terminal
-  /// `cerrada` no admite transición ni edición desde la app móvil.
+  /// negocio desherbaje para la app de campo). `contratista` y `finalizada`
+  /// quedan bloqueados en el móvil igual que `cerrada`: el operario no puede
+  /// saltarse la validación de Enagas ni cerrar o reabrir una zona desde la
+  /// app — esas transiciones las hace Enagas desde la web.
   Set<EstadoActividad> get transicionesPermitidas => switch (this) {
         propuesta => const {contratista, ejecucion, finalizada},
         validada => const {ejecucion, finalizada},
-        contratista => const {ejecucion},
+        contratista => const <EstadoActividad>{},
         ejecucion => const {finalizada},
-        finalizada => const {cerrada, ejecucion},
+        finalizada => const <EstadoActividad>{},
         cerrada => const <EstadoActividad>{},
       };
 

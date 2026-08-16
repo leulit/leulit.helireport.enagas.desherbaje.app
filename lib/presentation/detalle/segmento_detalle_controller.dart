@@ -665,9 +665,9 @@ class SegmentoDetalleController extends MyGetxController {
   ///
   /// Valida la transición de estado contra la matriz SSOT
   /// (`EstadoActividad.puedeIrA`) antes de persistir. Los estados sin
-  /// transición de salida (`propuesta`, `validada`, `cerrada`) son de solo
-  /// lectura desde la app de campo. Si la transición no procede, muestra un
-  /// diálogo informativo y aborta el guardado.
+  /// transición de salida (`contratista`, `finalizada`, `cerrada`) son de
+  /// solo lectura desde la app de campo. Si la transición no procede, muestra
+  /// un diálogo informativo y aborta el guardado.
   Future<void> guardar() async {
     if (!_validateEstado()) return;
 
@@ -770,9 +770,16 @@ class SegmentoDetalleController extends MyGetxController {
   }
 
   void _dialogEstadoBloqueado(EstadoActividad origen) {
-    final extra = origen == EstadoActividad.cerrada
-        ? 'La tarea está cerrada y no admite más cambios.'
-        : 'Podrás trabajar sobre la tarea cuando el gestor la pase a "Contratista".';
+    final extra = switch (origen) {
+      EstadoActividad.cerrada =>
+        'La tarea está cerrada y no admite más cambios.',
+      EstadoActividad.contratista =>
+        'Has propuesto un cambio. Podrás seguir editando cuando el gestor la pase a "Validada".',
+      EstadoActividad.finalizada =>
+        'El trabajo está finalizado. El cierre de la zona lo hace el gestor desde la web.',
+      _ =>
+        'Podrás trabajar sobre la tarea cuando el gestor la pase a "Contratista".',
+    };
     Get.dialog<void>(
       AlertDialog(
         title: Row(

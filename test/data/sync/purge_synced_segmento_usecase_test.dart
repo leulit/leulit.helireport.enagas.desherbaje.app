@@ -359,15 +359,23 @@ void main() {
     // el próximo upsert no las borre) pero NO se purga: el operario sigue
     // trabajándolo y `GET /segmentos/contratista` no lo devuelve, así que el
     // móvil es la única copia.
-    test('estado no terminal → finalizedKept: cierra en nube, no borra local',
+    test(
+        'estado no terminal → finalizedKept: cierra en nube, segmento se '
+        'queda, hijos confirmados se funden en el snapshot y se purgan',
         () async {
       final seg = _seg(clientId: 'seg-1', id: 42);
       seg.estado = EstadoActividad.ejecucion;
       await segStore.upsert(seg);
       await imgStore.upsert(_img(
           clientId: 'img-1', segmentoClientId: 'seg-1', ruta: '/tmp/i.jpg'));
+      await msgStore.upsert(
+          _msg(clientId: 'msg-1', segmentoId: 42, segmentoClientId: 'seg-1'));
+      await vidStore.upsert(_vid(
+          clientId: 'vid-1', segmentoClientId: 'seg-1', ruta: '/tmp/v.mp4'));
       await seedJob('segmento', 'seg-1');
       await seedJob('imagen', 'img-1');
+      await seedJob('mensaje', 'msg-1');
+      await seedJob('video', 'vid-1');
 
       final outcome = await buildUseCase().purgeIfFullySynced(seg);
 
@@ -375,11 +383,24 @@ void main() {
       // El cierre SÍ se pidió: es lo que blinda la foto ya subida.
       verify(() => network.post(any(),
           body: any(named: 'body'), headers: any(named: 'headers'))).called(1);
+      // El segmento se queda — NUNCA se borra en esta rama.
       expect(await segStore.findByClientId('seg-1'), isNotNull);
-      expect(await imgStore.findByClientId('img-1'), isNotNull);
-      expect(deletedPaths, isEmpty);
+      // Imagen y mensaje confirmados: fila borrada, fichero de la imagen
+      // borrado (el mensaje no tiene fichero).
+      expect(await imgStore.findByClientId('img-1'), isNull);
+      expect(await msgStore.findBySegmento(42), isEmpty);
+      expect(deletedPaths, ['/tmp/i.jpg']);
+      // Vídeo: limitación deliberada — NO se purga en esta rama.
+      expect(await vidStore.findByClientId('vid-1'), isNotNull);
+      expect(outcome.imagenes, 1);
+      expect(outcome.mensajes, 1);
+      expect(outcome.videos, 0);
       // Y la frontera de cierre queda grabada.
       expect(await segStore.readSyncConfirmedAt('seg-1'), isNotNull);
+      // El snapshot embebido refleja la unión antes de borrar.
+      final reloaded = await segStore.findByClientId('seg-1');
+      expect(reloaded!.imagenes.map((i) => i.clientId), contains('img-1'));
+      expect(reloaded.mensajes.map((m) => m.clientId), contains('msg-1'));
     });
 
     test('segment with no remote id → skipped, nothing deleted', () async {
