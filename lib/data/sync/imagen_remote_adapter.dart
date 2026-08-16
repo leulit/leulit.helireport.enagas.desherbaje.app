@@ -38,8 +38,8 @@ class ImagenRemoteAdapter extends RemoteAdapter<ImagenSegmentoEntity> {
 
   ImagenRemoteAdapter(
     this._network, {
-    File Function(String path) fileFactory = File.new,
-  }) : _fileFactory = fileFactory;
+    this._fileFactory = File.new,
+  });
 
   @override
   Future<SyncOutcome<ImagenSegmentoEntity>> push({

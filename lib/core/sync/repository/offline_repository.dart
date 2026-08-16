@@ -20,12 +20,10 @@ class OfflineRepository<T extends Syncable> {
 
   OfflineRepository({
     required this.entityType,
-    required Database db,
-    required LocalStore<T> store,
-    required OutboxQueue outbox,
-  })  : _db = db,
-        _store = store,
-        _outbox = outbox;
+    required this._db,
+    required this._store,
+    required this._outbox,
+  });
 
   Future<void> create(T entity) =>
       _persistAndEnqueue(entity, SyncOperation.create);

@@ -190,7 +190,7 @@ class MediaGisLayer extends GetView<MediaGisLayerController> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<MediaGisGeometry>(
       valueListenable: controller.geometry,
-      builder: (_, g, __) => Stack(
+      builder: (_, g, _) => Stack(
         children: [
           PolygonLayer(polygons: g.polygons),
           PolylineLayer(polylines: g.polylines),

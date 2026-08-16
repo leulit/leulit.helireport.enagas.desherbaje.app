@@ -14,7 +14,7 @@ class PksMapLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<PkEntity>>(
       valueListenable: AppDI.pksService.pks,
-      builder: (_, points, __) => ClusteredMarkerLayer<PkEntity>(
+      builder: (_, points, _) => ClusteredMarkerLayer<PkEntity>(
         points: points,
         getPosition: (p) => p.point,
         markerWidth: (p) => PointLabelMarker.widthFor(p.label),

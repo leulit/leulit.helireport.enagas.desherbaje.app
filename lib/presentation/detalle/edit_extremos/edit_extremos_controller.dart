@@ -26,10 +26,9 @@ class EditExtremosController extends GetxController {
     required this.original,
     SegmentoRepositoryImpl? segmentoRepo,
     GasoductosService? gasoductos,
-    double snapMaxMeters = 25,
+    this._snapMaxMeters = 25,
   })  : _repo = segmentoRepo ?? SegmentoRepositoryImpl(),
-        _gasoductos = gasoductos ?? AppDI.gasoductosService,
-        _snapMaxMeters = snapMaxMeters;
+        _gasoductos = gasoductos ?? AppDI.gasoductosService;
 
   final SegmentoEntity original;
   final SegmentoRepositoryImpl _repo;

@@ -72,12 +72,10 @@ class SyncEngine {
   bool _isDraining = false;
 
   SyncEngine({
-    required OutboxQueue outbox,
-    required TypeRegistry registry,
-    required Database db,
-  })  : _outbox = outbox,
-        _registry = registry,
-        _db = db;
+    required this._outbox,
+    required this._registry,
+    required this._db,
+  });
 
   bool get isDraining => _isDraining;
 

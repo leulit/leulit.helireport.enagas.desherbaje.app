@@ -121,15 +121,15 @@ class _FakeAdapter extends RemoteAdapter<_TestEntity> {
   _FakeAdapter(this._fn);
 
   factory _FakeAdapter.success() =>
-      _FakeAdapter((_, __) async => const SyncSuccess());
+      _FakeAdapter((_, _) async => const SyncSuccess());
 
   factory _FakeAdapter.retryable() =>
-      _FakeAdapter((_, __) async => SyncRetryable('network'));
+      _FakeAdapter((_, _) async => SyncRetryable('network'));
 
   /// Throws [AuthExpiredException] on the Nth call (1-indexed); succeeds otherwise.
   factory _FakeAdapter.authOnCall(int n) {
     int calls = 0;
-    return _FakeAdapter((_, __) async {
+    return _FakeAdapter((_, _) async {
       calls++;
       if (calls == n) throw const AuthExpiredException();
       return const SyncSuccess();
@@ -140,7 +140,7 @@ class _FakeAdapter extends RemoteAdapter<_TestEntity> {
   /// adaptador de vídeo entre chunks; el resto de llamadas van bien.
   factory _FakeAdapter.cancelOnCall(int n, CancelToken token) {
     int calls = 0;
-    return _FakeAdapter((_, __) async {
+    return _FakeAdapter((_, _) async {
       calls++;
       if (calls == n) {
         token.cancel();

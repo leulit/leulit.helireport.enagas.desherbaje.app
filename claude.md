@@ -92,8 +92,8 @@ These apply to every line of code in this project, no exceptions:
 App móvil para operadores de campo — módulo **Desherbaje** de Enagas.
 Permite gestionar actividades de desherbaje sobre segmentos de gasoducto: consultar el listado, cambiar estado, capturar fotos georeferenciadas (antes/después) y sincronizarlas con el backend cuando hay conectividad.
 
-- **Versión:** `1.0.0+1`
-- **SDK Flutter:** `>=3.11.0` | **SDK Dart:** `>=3.3.0 <4.0.0`
+- **Versión:** `1.1.5+115`
+- **SDK Flutter:** `>=3.27.0` | **SDK Dart:** `^3.12.1`
 - **Backend:** `https://enagastool.helireport.com` (autenticación HMAC-SHA256)
 - **Plataformas objetivo:** Android, iOS (no web actualmente)
 

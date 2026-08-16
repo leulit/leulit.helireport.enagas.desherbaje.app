@@ -23,7 +23,7 @@ T _guarded<T>(T Function() body) {
   late T result;
   runZonedGuarded(() {
     result = body();
-  }, (_, __) {
+  }, (_, _) {
     // absorber MissingPluginException y similares
   });
   return result;

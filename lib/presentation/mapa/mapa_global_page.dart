@@ -105,7 +105,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               const PosicionesFijasMapLayer(),
               ValueListenableBuilder<bool>(
                 valueListenable: controller.followHeading,
-                builder: (_, follow, __) => MyCurrentLocationLayer(
+                builder: (_, follow, _) => MyCurrentLocationLayer(
                   alignDirectionOnUpdate:
                       follow ? AlignOnUpdate.always : AlignOnUpdate.never,
                   // once: centra en el primer fix GPS al abrir el mapa;
@@ -118,7 +118,7 @@ class MapaGlobalPage extends GetView<MapaGlobalController> {
               ...buildLinesCutMapLayers(controller.linesCut),
               ValueListenableBuilder<bool>(
                 valueListenable: controller.followHeading,
-                builder: (_, follow, __) => MapCompass(
+                builder: (_, follow, _) => MapCompass(
                   // -45: el icono cupertino ya viene rotado en el asset.
                   rotationOffset: -45,
                   icon: _CompassIcon(followHeading: follow),

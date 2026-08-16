@@ -839,9 +839,9 @@ class _CarouselSlide extends StatelessWidget {
             Uri.parse(fullUrl).path,
           ),
           fit: BoxFit.contain,
-          placeholder: (_, __) =>
+          placeholder: (_, _) =>
               const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          errorWidget: (_, __, ___) =>
+          errorWidget: (_, _, _) =>
               const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
         ),
       );

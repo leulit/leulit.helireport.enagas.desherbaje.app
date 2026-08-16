@@ -26,7 +26,7 @@ class SegmentosMapLayer extends GetView<SegmentosMapController> {
           // que solo leía `rxEstado`/`rxTipo` y el cambio de CT no repintaba
           // las polilíneas.
           valueListenable: controller.filterVersion,
-          builder: (context, _, __) {
+          builder: (context, _, _) {
             return GestureDetector(
               onTap: controller.onPolylineTap,
               child: PolylineLayer<SegmentoEntity>(
@@ -51,7 +51,7 @@ class SegmentosMapLayer extends GetView<SegmentosMapController> {
             if (!mostrar) return const SizedBox.shrink();
             return ValueListenableBuilder<int>(
               valueListenable: controller.filterVersion,
-              builder: (context, _, __) {
+              builder: (context, _, _) {
                 return MarkerLayer(
                   markers: controller.filteredSegmentos
                       .map((s) => Marker(

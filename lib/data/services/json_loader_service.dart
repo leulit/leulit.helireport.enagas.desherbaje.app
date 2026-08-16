@@ -143,7 +143,7 @@ class JsonLoaderService extends GetxService {
 
     result.fold(
       onSuccess: (_) => AppTypedActions.geoJsonLoadCompleted.dispatch(),
-      onFailure: (_, __) => AppTypedActions.geoJsonLoadCompleted.dispatch(),
+      onFailure: (_, _) => AppTypedActions.geoJsonLoadCompleted.dispatch(),
     );
 
     pipeline.dispose();

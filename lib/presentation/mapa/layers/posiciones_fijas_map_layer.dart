@@ -17,7 +17,7 @@ class PosicionesFijasMapLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<PosicionFijaMarkerInfo>>(
       valueListenable: Get.find<PosicionesFijasMapController>().marcadores,
-      builder: (_, points, __) => ClusteredMarkerLayer<PosicionFijaMarkerInfo>(
+      builder: (_, points, _) => ClusteredMarkerLayer<PosicionFijaMarkerInfo>(
         points: points,
         getPosition: (p) => p.point,
         markerWidth: (p) => PointLabelMarker.widthFor(p.label),

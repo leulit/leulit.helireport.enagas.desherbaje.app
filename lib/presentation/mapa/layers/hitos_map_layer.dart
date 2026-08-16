@@ -14,7 +14,7 @@ class HitosMapLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<HitoEntity>>(
       valueListenable: AppDI.hitosService.hitos,
-      builder: (_, points, __) => ClusteredMarkerLayer<HitoEntity>(
+      builder: (_, points, _) => ClusteredMarkerLayer<HitoEntity>(
         points: points,
         getPosition: (h) => h.point,
         markerWidth: (h) => PointLabelMarker.widthFor(h.label),
