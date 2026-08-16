@@ -37,7 +37,7 @@
   p.intro { color: #555; font-size: 10.5pt; line-height: 1.45; margin: 0 0 4mm 0; }
   p.body  { font-size: 10.3pt; line-height: 1.5; margin: 0 0 3mm 0; }
 
-  ul { margin: 0 0 3mm 0; padding-left: 6mm; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 6mm; }
   li { font-size: 10.2pt; line-height: 1.48; margin-bottom: 1.6mm; }
   li::marker { color: #388E3C; }
 
@@ -269,7 +269,7 @@
     <p class="note">Regla de oro: <b>tú propones, Enagas aprueba.</b> Mientras una zona esté en <span class="chip e-cont">Contratista</span>, está pendiente de que Enagas la valide. Nada se da por aprobado hasta que pasa a <span class="chip e-vali">Validada</span>.</p>
 
     <div class="warn" style="margin-top:5mm">
-      ⚠ La app <b>sí te deja</b> pasar de <span class="chip e-cont">Contratista</span> a <span class="chip e-ejec">En Ejecución</span> sin esperar la validación. Que puedas no significa que debas: si empiezas antes de que Enagas valide, asumes tú el riesgo de que la zona se devuelva.
+      ⚠ Una vez pasas la zona a <span class="chip e-cont">Contratista</span>, queda <b>bloqueada en el móvil</b> hasta que Enagas la valide: no puedes tocarla ni pasarla a <span class="chip e-ejec">En Ejecución</span> antes de que te la devuelvan como <span class="chip e-vali">Validada</span>.
     </div>
   </div>
   <footer><span>Enagas · Módulo Desherbaje</span><span>Verificar y proponer · B</span></footer>
@@ -282,10 +282,21 @@
     <h2>Los estados y qué hago yo</h2>
     <p class="intro">Cada zona tiene un <b>estado</b> con un color. Es el idioma común entre tú y Enagas. Son los mismos colores que ves en las tarjetas de la app.</p>
 
+    <p class="body">No todas las zonas pasan por los mismos estados: depende de si <b>hay que proponer un cambio</b> o no.</p>
+
+    <p class="body"><b>1) Si propones un cambio o una zona nueva</b> — pasa por la revisión de Enagas:</p>
     <div class="flowline">
       <span class="chip e-prop">Propuesta</span><span class="arr">➜</span>
       <span class="chip e-cont">Contratista</span><span class="arr">➜</span>
       <span class="chip e-vali">Validada</span><span class="arr">➜</span>
+      <span class="chip e-ejec">En Ejecución</span><span class="arr">➜</span>
+      <span class="chip e-fin">Finalizada</span><span class="arr">➜</span>
+      <span class="chip e-cer">Cerrada</span>
+    </div>
+
+    <p class="body"><b>2) Si la zona ya está bien tal como te la han asignado</b> — vas directa a ejecutar, sin pasar por Contratista ni Validada:</p>
+    <div class="flowline">
+      <span class="chip e-prop">Propuesta</span><span class="arr">➜</span>
       <span class="chip e-ejec">En Ejecución</span><span class="arr">➜</span>
       <span class="chip e-fin">Finalizada</span><span class="arr">➜</span>
       <span class="chip e-cer">Cerrada</span>
@@ -306,19 +317,60 @@
     <table>
       <tr><th style="width:38mm">Estando en…</th><th>…puedes pasar a</th></tr>
       <tr><td><span class="chip e-prop">Propuesta</span></td><td><span class="chip e-cont">Contratista</span> &nbsp; <span class="chip e-ejec">En Ejecución</span> &nbsp; <span class="chip e-fin">Finalizada</span></td></tr>
-      <tr><td><span class="chip e-cont">Contratista</span></td><td><span class="chip e-ejec">En Ejecución</span></td></tr>
+      <tr><td><span class="chip e-cont">Contratista</span></td><td style="color:#757575">— nada. Espera a que Enagas la pase a Validada.</td></tr>
       <tr><td><span class="chip e-vali">Validada</span></td><td><span class="chip e-ejec">En Ejecución</span> &nbsp; <span class="chip e-fin">Finalizada</span></td></tr>
       <tr><td><span class="chip e-ejec">En Ejecución</span></td><td><span class="chip e-fin">Finalizada</span></td></tr>
-      <tr><td><span class="chip e-fin">Finalizada</span></td><td><span class="chip e-cer">Cerrada</span> &nbsp; <span class="chip e-ejec">En Ejecución</span> <span style="color:#757575;font-size:8.6pt">(reabrir)</span></td></tr>
+      <tr><td><span class="chip e-fin">Finalizada</span></td><td style="color:#757575">— nada. Enagas se encarga de pasarla a Cerrada.</td></tr>
       <tr><td><span class="chip e-cer">Cerrada</span></td><td style="color:#757575">— nada. Estado final, bloqueado.</td></tr>
     </table>
 
     <p class="note">Los estados que <b>tú</b> pones habitualmente son <span class="chip e-cont">Contratista</span> (propongo un cambio), <span class="chip e-ejec">En Ejecución</span> (empiezo los trabajos) y <span class="chip e-fin">Finalizada</span> (he terminado).</p>
     <div class="warn">
-      ⚠ La app te permite pasar de <span class="chip e-fin">Finalizada</span> a <span class="chip e-cer">Cerrada</span>. <b>El cierre lo decide Enagas</b>, no tú: no cierres una zona salvo que te lo indiquen. Una vez cerrada no se puede reabrir desde el móvil.
+      ⚠ Desde el móvil, <span class="chip e-fin">Finalizada</span> es un estado de <b>solo lectura</b>: no puedes pasarla a <span class="chip e-cer">Cerrada</span> ni reabrirla a <span class="chip e-ejec">En Ejecución</span>. El cierre de la zona lo hace Enagas desde la web.
     </div>
   </div>
   <footer><span>Enagas · Módulo Desherbaje</span><span>Estados · C</span></footer>
+</div>
+
+<!-- ═══════════════════════════ D · PROCEDIMIENTOS DEL DÍA A DÍA ══════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <h2>Procedimientos del día a día</h2>
+    <p class="intro">Estas son las rutinas que evitan los problemas más habituales: trabajo que no llega a Enagas, zonas que se ejecutan sin validar y actividades cerradas con el tipo equivocado.</p>
+
+    <h3>Al empezar la jornada</h3>
+    <ul>
+      <li>Nada más entrar, <b>sincroniza</b>: <b>Sincronización → Descargar todo</b>, con cobertura o WiFi, antes de salir a campo.</li>
+      <li>Comprueba que la tarjeta dice <b>«✓ Listo para trabajar en campo»</b>. Si dice «Faltan N descargas», descarga otra vez antes de irte.</li>
+    </ul>
+
+    <h3>Antes de dar una actividad por finalizada</h3>
+    <ul>
+      <li><b>Verifica que el tipo de actividad asignado al segmento es el correcto</b> (pestaña Datos → desplegable Tipo). Compáralo con el trabajo que realmente has hecho en el terreno.</li>
+      <li>Si no coincide, corrígelo <b>antes</b> de pasar el estado a <span class="chip e-fin">Finalizada</span>: una vez enviada, cambiar el tipo implica que Enagas tenga que reabrir la actividad.</li>
+    </ul>
+    <div class="warn">
+      ⚠ Cada tipo de actividad (desbroce manual, desbroce mecánico, tala, resiembra, tratamiento de avispas / arañas / reptiles…) se reporta y se factura de forma distinta. Un tipo equivocado <b>no da error en la app</b>: el dato queda mal aunque el trabajo esté bien hecho.
+    </div>
+
+    <h3>Si das de alta un segmento nuevo o modificas uno existente</h3>
+    <ul>
+      <li>Ponlo en estado <span class="chip e-cont">Contratista</span>.</li>
+      <li>Envíalo: <b>Forzar envío → Enviar todos</b>.</li>
+      <li><b>Espera a que el gestor te lo devuelva como</b> <span class="chip e-vali">Validada</span>. Hasta entonces la propuesta no está aprobada (ver pág. B).</li>
+    </ul>
+
+    <h3>Al terminar la jornada</h3>
+    <ul>
+      <li><b>Sube todo</b>: Forzar envío → Enviar todos.</li>
+      <li>Comprueba que la lista de pendientes se queda <b>vacía</b>. <b>Pendientes a 0 = jornada cerrada</b>, para que no quede nada colgado de un día para otro.</li>
+      <li>Si algo sale Rechazado o en Conflicto, léelo y avisa a la oficina (ver pág. 15) — no lo dejes para el día siguiente.</li>
+    </ul>
+
+    <p class="note">Sincronizar al empezar, tipo correcto antes de finalizar, esperar la validación de lo propuesto y subir todo al terminar: son las cuatro rutinas que evitan que un trabajo bien hecho en campo se pierda o quede mal registrado en la oficina.</p>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Procedimientos · D</span></footer>
 </div>
 
 <!-- ═══════════════════════════ 1 · PERMISOS ══════════════════════════════ -->
@@ -542,9 +594,9 @@
         <table>
           <tr><th style="width:30mm">Botón</th><th>Qué hace</th></tr>
           <tr><td><b>Guardar</b></td><td>Guarda en el móvil y deja el segmento listo para enviar.</td></tr>
-          <tr><td><b>Editar extremos</b></td><td>Ajusta la geometría del segmento sobre el mapa (pág. 11).</td></tr>
+          <tr><td><b>Editar extremos</b></td><td>Ajusta la geometría del segmento sobre el mapa (pág. 12).</td></tr>
           <tr><td><b>Foto/vídeo</b></td><td>Abre la cámara para la pestaña en la que estés (pág. 7).</td></tr>
-          <tr><td><b>Eliminar</b></td><td>Solo aparece en zonas que creaste tú y aún no has enviado. Ver pág. 15.</td></tr>
+          <tr><td><b>Eliminar</b></td><td>Solo aparece en zonas que creaste tú y aún no has enviado. Ver pág. 17.</td></tr>
         </table>
 
         <div class="warn">
@@ -754,37 +806,65 @@
   <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 9</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 10 · LÍNEAS DE CORTE ══════════════════════ -->
+<!-- ═══════════════════════════ 10 · ZONA NUEVA · QUÉ ES ══════════════════ -->
+<div class="page">
+  <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
+  <div class="content">
+    <div>
+      <div>
+        <h2>10. Proponer una zona nueva — qué es</h2>
+        <p class="intro">A veces, en campo, ves un tramo de gasoducto que necesita desherbaje y que Enagas <b>no te ha asignado</b> como zona de trabajo. Para esos casos existe esta función: tú marcas el tramo sobre el mapa y la app crea automáticamente un segmento nuevo, listo para que Enagas lo revise.</p>
+
+        <h3>La idea, en corto</h3>
+        <p class="body">Es como recortar un trozo de cinta con unas tijeras. Sobre el mapa marcas <b>dónde empieza</b> el tramo (dos puntos: la <b>Línea 1</b>) y <b>dónde termina</b> (otros dos puntos: la <b>Línea 2</b>). Todo lo que queda <b>entre</b> esas dos líneas se convierte en el segmento nuevo.</p>
+
+        <h3>Antes de empezar</h3>
+        <ul>
+          <li>Tienes que estar en el <b>Mapa global</b>, no en el detalle de un segmento.</li>
+          <li>Acércate con el zoom hasta pasar de <b>zoom 14</b>. Si estás muy alejado, <b>el botón de corte ni siquiera aparece</b> — no es que esté oculto, es que a esa escala la app no lo muestra.</li>
+          <li>Localiza sobre el mapa, con calma, el tramo exacto donde hace falta actuar. Es más fácil marcar los puntos con precisión si antes tienes claro dónde empieza y dónde acaba el tramo.</li>
+        </ul>
+
+        <div class="warn">
+          ⚠ Esto es una <b>propuesta</b>, no una zona aprobada. La zona nueva nace en estado <span class="chip e-cont">Contratista</span> y hay que <b>esperar a que Enagas la valide</b> antes de darla por buena (ver pág. D).
+        </div>
+
+        <p class="note">El paso a paso completo, con cada botón y cada pantalla, está en la página siguiente.</p>
+      </div>
+    </div>
+  </div>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 10</span></footer>
+</div>
+
+<!-- ═══════════════════════════ 11 · ZONA NUEVA · PASO A PASO ═════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div class="screen">
       <div class="txt">
-        <h2>10. Proponer una zona nueva (líneas de corte)</h2>
-        <p class="intro">Cuando hace falta actuar en un tramo que Enagas no te ha asignado, lo propones tú: recortas un trozo de la traza del gasoducto y se convierte en un segmento nuevo.</p>
+        <h2>11. Proponer una zona nueva — paso a paso</h2>
+        <p class="intro">Sigue estos pasos <b>en orden</b>. Si te pierdes en algún punto, puedes arrastrar los puntos ya marcados para corregirlos — no hace falta empezar de nuevo.</p>
 
-        <h3>Paso a paso</h3>
-        <ul>
-          <li>Abre el <b>Mapa global</b> y <b>acércate hasta pasar de zoom 14</b>. Por debajo, el botón no aparece.</li>
-          <li>Pulsa el botón redondo <b>verde con la tijera ✂</b>.</li>
-          <li>Marca <b>dos puntos</b> sobre el mapa: es la <b>Línea 1</b>, el corte de un extremo.</li>
-          <li>Marca <b>otros dos</b>: la <b>Línea 2</b>, el corte del otro extremo.</li>
-          <li>Puedes <b>arrastrar</b> cualquiera de los cuatro puntos para afinar.</li>
-          <li>El panel de abajo te va diciendo qué toca: <i>“Marca el segundo punto de la Línea 1”</i>, y al final <i>“✓ Líneas listas para cortar”</i>.</li>
-          <li>El botón pasa a <b>azul con un ✓</b>. Púlsalo.</li>
-          <li>Rellena <b>Descripción</b> y <b>Tipo de actividad</b> y pulsa <b>Aplicar</b>.</li>
-        </ul>
-
-        <p class="note">El diálogo te enseña antes de aceptar los <b>metros totales</b> y los <b>m² de superficie</b> del trozo que vas a crear. Comprueba que cuadra con lo que has visto en campo.</p>
+        <ol>
+          <li>Abre el <b>Mapa global</b> y acércate con el zoom hasta ver el tramo con detalle (por encima de <b>zoom 14</b>).</li>
+          <li>Abajo a la derecha aparece un botón redondo <b>verde con una tijera ✂</b>. Púlsalo para activar el modo corte.</li>
+          <li>Toca sobre el mapa el <b>primer punto</b> de un extremo del tramo. Es el primer punto de la <b>Línea 1</b>.</li>
+          <li>Toca un <b>segundo punto</b>, muy cerca del primero, para completar la Línea 1. El panel de abajo te va guiando: te dice qué punto toca marcar en cada momento.</li>
+          <li>Repite lo mismo en el <b>otro extremo</b> del tramo: dos puntos más, que forman la <b>Línea 2</b>.</li>
+          <li>¿Algún punto no quedó bien? <b>Arrástralo</b> con el dedo hasta la posición correcta.</li>
+          <li>Cuando los cuatro puntos estén bien marcados, el panel de abajo dirá <i>“✓ Líneas listas para cortar”</i> y el botón redondo pasa de <b>verde ✂ a azul ✓</b>.</li>
+          <li>Pulsa el botón <b>azul ✓</b> para aplicar el corte.</li>
+          <li>Se abre un formulario. <b>Antes de aceptar</b>, la app te enseña los <b>metros totales</b> y los <b>m² de superficie</b> del tramo — comprueba que cuadra con lo que has visto en campo.</li>
+          <li>Rellena la <b>Descripción</b> del trabajo y elige el <b>Tipo de actividad</b> correcto.</li>
+          <li>Pulsa <b>Aplicar</b>. La zona nueva se crea en estado <span class="chip e-cont">Contratista</span> y queda lista para enviar (ver pág. D).</li>
+        </ol>
 
         <div class="warn">
-          ⚠ Si el panel dice <b>“⚠ Las líneas se intersectan”</b>, las dos líneas se cruzan entre sí y el corte no es válido. Pulsa <span class="kbd">Limpiar</span> y vuelve a marcarlas separadas.
+          ⚠ Si el panel dice <b>“⚠ Las líneas se intersectan”</b>, las dos líneas se cruzan entre sí y el corte no es válido. Pulsa <span class="kbd">Limpiar</span> y vuelve a marcar los cuatro puntos, esta vez bien separados.
         </div>
 
-        <p class="body">La zona nueva nace siempre en estado <span class="chip e-cont">Contratista</span>: es una <b>propuesta</b>. Enagas la valida desde la web.</p>
-
         <div class="warn">
-          ⚠ El botón de corte <b>solo muestra el icono, sin texto</b>. Guíate por el color: <b>verde ✂</b> = empezar · <b>azul ✓</b> = aplicar el corte · <b>morado ✕</b> = salir sin cortar.
+          ⚠ El botón redondo <b>solo muestra el icono, sin texto</b>. Guíate por el color: <b>verde ✂</b> = empezar a marcar puntos · <b>azul ✓</b> = aplicar el corte · <b>morado ✕</b> = salir sin cortar (no se guarda nada, puedes empezar de nuevo cuando quieras).
         </div>
       </div>
       <div class="cap">
@@ -799,16 +879,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 10</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 11</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 11 · EDITAR EXTREMOS ══════════════════════ -->
+<!-- ═══════════════════════════ 12 · EDITAR EXTREMOS ══════════════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div class="screen">
       <div class="txt">
-        <h2>11. Ajustar la zona (editar extremos)</h2>
+        <h2>12. Ajustar la zona (editar extremos)</h2>
         <p class="intro">Si la zona que te han asignado es más larga, más corta o empieza en otro sitio, la ajustas tú sobre el mapa. No hace falta crear una zona nueva: se corrige la que ya tienes.</p>
 
         <h3>Paso a paso</h3>
@@ -838,16 +918,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 11</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 12</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 12 · SINCRONIZACIÓN ═══════════════════════ -->
+<!-- ═══════════════════════════ 13 · SINCRONIZACIÓN ═══════════════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div class="screen">
       <div class="txt">
-        <h2>12. Sincronización — descargar</h2>
+        <h2>13. Sincronización — descargar</h2>
         <p class="intro">Descarga al móvil todo lo necesario para trabajar sin conexión. <b>Esta pantalla solo baja datos; no sube nada.</b></p>
 
         <h3>La tarjeta de arriba te lo resume</h3>
@@ -888,16 +968,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 12</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 13</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 13 · FORZAR ENVÍO ═════════════════════════ -->
+<!-- ═══════════════════════════ 14 · FORZAR ENVÍO ═════════════════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div class="screen">
       <div class="txt">
-        <h2>13. Forzar envío — subir tu trabajo</h2>
+        <h2>14. Forzar envío — subir tu trabajo</h2>
         <p class="intro">Envía a Enagas los segmentos con cambios pendientes: estados, descripciones, fotos, vídeos, mensajes y trazas. <b>Esta pantalla solo sube; no baja nada.</b></p>
         <ul>
           <li>Ves la lista de segmentos con cambios sin enviar.</li>
@@ -931,24 +1011,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 13</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 14</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 14 · RESULTADO DEL ENVÍO ══════════════════ -->
+<!-- ═══════════════════════════ 15 · RESULTADO DEL ENVÍO ══════════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div>
       <div>
-        <div class="shot floatr">
-          <div class="ph">
-            <div>Captura pendiente</div>
-            <div class="fn">16_envio_resultado.png</div>
-            <div class="what">El banner de resultado tras un envío, con la línea de contadores y —si se puede provocar— algún motivo de rechazo debajo.</div>
-          </div>
-          <img src="capturas/16_envio_resultado.png" alt="" onerror="this.style.display='none'">
-        </div>
-        <h2>14. Qué te dice el envío al terminar</h2>
+        <h2>15. Qué te dice el envío al terminar</h2>
         <p class="intro">Al acabar aparece un aviso con el resultado y una línea de contadores. <b>Léela siempre</b>: es la única forma de saber si tu jornada ha llegado entera.</p>
 
         <p class="body" style="font-family:'SF Mono',Menlo,monospace;font-size:9pt;background:#F5F5F5;padding:2.5mm;border-radius:4px;overflow:hidden;">
@@ -971,16 +1043,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 14</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 15</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 15 · SIN CONEXIÓN / PROBLEMAS ═════════════ -->
+<!-- ═══════════════════════════ 16 · SIN CONEXIÓN / PROBLEMAS ═════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div>
       <div>
-        <h2>15. Sin conexión y si algo va mal</h2>
+        <h2>16. Sin conexión y si algo va mal</h2>
         <p class="intro">La app está pensada para el campo, donde a menudo no hay cobertura.</p>
         <ul>
           <li>Todo lo que ves está guardado en el móvil: puedes consultar y editar sin red.</li>
@@ -1013,16 +1085,16 @@
       </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 15</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 16</span></footer>
 </div>
 
-<!-- ═══════════════════════════ 16 · DESTRUCTIVAS ═════════════════════════ -->
+<!-- ═══════════════════════════ 17 · DESTRUCTIVAS ═════════════════════════ -->
 <div class="page">
   <div class="band"><span class="l">Helireport Desherbaje</span><span class="r">Manual de operario de campo</span></div>
   <div class="content">
     <div class="screen">
       <div class="txt">
-        <h2>16. Dos botones que borran cosas</h2>
+        <h2>17. Dos botones que borran cosas</h2>
         <p class="intro">Existen y los vas a ver. Léelos antes de tocarlos: uno de los dos no tiene vuelta atrás.</p>
 
         <div class="danger">
@@ -1048,19 +1120,9 @@
         </div>
         <p class="note">Una zona que ya subió a Enagas <b>no se borra desde el móvil</b>. Si hay que anularla, escríbelo en un <b>Mensaje</b> y que lo hagan desde la web.</p>
       </div>
-      <div class="cap">
-        <div class="shot">
-          <div class="ph">
-            <div>Captura pendiente</div>
-            <div class="fn">17_reset.png</div>
-            <div class="what">El diálogo de confirmación “Reset de datos locales”, con el texto de aviso y el botón rojo “Borrar todo”.</div>
-          </div>
-          <img src="capturas/17_reset.png" alt="" onerror="this.style.display='none'">
-        </div>
-      </div>
     </div>
   </div>
-  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 16</span></footer>
+  <footer><span>Enagas · Módulo Desherbaje</span><span>Pág. 17</span></footer>
 </div>
 
 <script>
