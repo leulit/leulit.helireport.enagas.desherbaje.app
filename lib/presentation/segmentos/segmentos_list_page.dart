@@ -109,7 +109,7 @@ class _FiltrosBar extends StatelessWidget {
             controller: controller.descripcionCtrl,
             onChanged: (v) => controller.filterDescripcion.value = v,
             decoration: InputDecoration(
-              hintText: 'Buscar por descripción…',
+              hintText: 'Buscar por id o descripción…',
               hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
               prefixIcon: const Icon(Icons.search,
                   color: AppColors.moduleGreen, size: 20),

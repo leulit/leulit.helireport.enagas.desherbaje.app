@@ -171,18 +171,12 @@ class _DatosTab extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.straighten,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
                     const Text('Long: ',
                         style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                     Text(lengthText, style: const TextStyle(fontSize: 13)),
                     const Text('  -  ',
                         style: TextStyle(fontSize: 13, color: Colors.grey)),
-                    Icon(Icons.square_foot,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
                     const Text('Sup: ',
                         style: TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
@@ -191,6 +185,16 @@ class _DatosTab extends StatelessWidget {
                         superficieText,
                         style: const TextStyle(fontSize: 13),
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Mismo formato que la tarjeta de /forzar-envio.
+                    Text(
+                      s.id != null ? '#${s.id}' : 'Sin ID',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade400,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],

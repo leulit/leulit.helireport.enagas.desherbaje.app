@@ -196,7 +196,10 @@ class SegmentosListController extends MyGetxController {
   }
 
   void _applyFilter() {
-    final query = filterDescripcion.value.trim().toLowerCase();
+    // El '#' es cómo se muestra el id en la tarjeta y en el detalle, así que
+    // se acepta escrito tal cual.
+    final query =
+        filterDescripcion.value.trim().toLowerCase().replaceFirst('#', '');
     final estado = selectedEstado.value;
     final tipo = selectedTipo.value;
     final ct = selectedCt.value;
@@ -208,7 +211,9 @@ class SegmentosListController extends MyGetxController {
       if (estado != null && s.estado != estado) return false;
       if (tipo != null && s.tipoActividad != tipo) return false;
       if (ct != null && s.ctname != ct) return false;
-      if (query.isNotEmpty && !s.descripcion.toLowerCase().contains(query)) {
+      if (query.isNotEmpty &&
+          !s.descripcion.toLowerCase().contains(query) &&
+          !(s.id != null && '${s.id}'.contains(query))) {
         return false;
       }
       return true;
