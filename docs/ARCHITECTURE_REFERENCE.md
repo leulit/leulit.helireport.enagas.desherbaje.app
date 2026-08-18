@@ -20,6 +20,7 @@ lib/
 │   ├── app_typed_actions.dart                     # TypedActions globales del proyecto
 │   ├── api_endpoints.dart                         # URLs externas y endpoints del backend
 │   ├── my_getx_controller.dart                    # Base controller con TypedAction lifecycle
+│   ├── screen_controller.dart                     # putScreenController<T>: registro de controllers de pantalla en los bindings (arma el lateRemove de GetX; ver Lecciones aprendidas)
 │   ├── result/data_result.dart                    # Either<Failure, T> del proyecto
 │   ├── gis/                                        # GIS de captura de media (foto/vídeo)
 │   │   ├── media_gis_recorder.dart                # MediaGisSample + MediaGisRecorder (streams propios geolocator 1s + flutter_rotation_sensor); independiente del GpsBackgroundService

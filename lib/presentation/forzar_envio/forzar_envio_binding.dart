@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
 
+import '../../core/screen_controller.dart';
+
 import '../../core/app_di.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/repository/segmento_repository.dart';
@@ -19,7 +21,7 @@ class ForzarEnvioBinding extends Bindings {
     }
     // SyncEngine y ConnectivityService son GetxServices permanentes registrados
     // en AppDI (app_di.dart). El binding solo los resuelve via Get.find.
-    Get.lazyPut<ForzarEnvioController>(
+    putScreenController<ForzarEnvioController>(
       () => ForzarEnvioController(
         Get.find<GetSegmentosUseCase>(),
         AppDI.syncEngine,

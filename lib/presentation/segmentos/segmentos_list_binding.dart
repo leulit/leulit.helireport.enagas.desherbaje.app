@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+
+import '../../core/screen_controller.dart';
 import '../../data/repository/segmento_repository_impl.dart';
 import '../../domain/repository/segmento_repository.dart';
 import '../../domain/usecases/get_segmentos_usecase.dart';
@@ -11,7 +13,7 @@ class SegmentosListBinding extends Bindings {
     Get.lazyPut<GetSegmentosUseCase>(
       () => GetSegmentosUseCase(Get.find<SegmentoRepository>()),
     );
-    Get.lazyPut<SegmentosListController>(
+    putScreenController<SegmentosListController>(
       () => SegmentosListController(Get.find<GetSegmentosUseCase>()),
     );
   }
