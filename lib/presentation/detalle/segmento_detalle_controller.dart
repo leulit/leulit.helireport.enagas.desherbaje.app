@@ -90,7 +90,15 @@ class SegmentoDetalleController extends MyGetxController {
   /// Encuadre inicial del mapa embebido. Si la traza tiene ≥2 puntos usa
   /// `CameraFit.bounds` para garantizar que todo el segmento quepa con
   /// padding; si no, se cae a `initialCenter`/`initialZoom`.
-  CameraFit? get initialCameraFit {
+  ///
+  /// `late final`, NO getter: `CameraFit` no implementa `operator ==`, así que
+  /// una instancia nueva por build hace que `MapOptions !=` la anterior y
+  /// `FlutterMap.didUpdateWidget` reasigne `mapController.options` en cada
+  /// rebuild. Eso notifica al `MapInteractiveViewer` durante el build del
+  /// padre => "setState() called during build".
+  late final CameraFit? initialCameraFit = _buildInitialCameraFit();
+
+  CameraFit? _buildInitialCameraFit() {
     final pts = segmento.ubicacionGis;
     if (pts.length < 2) return null;
     return CameraFit.bounds(
