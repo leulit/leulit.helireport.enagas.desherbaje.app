@@ -110,3 +110,22 @@ List<LatLng> _keepHalfTowardOther(
     return [...pts.sublist(0, ixSeg + 1), ix];
   }
 }
+
+/// `true` si el segmento [a]-[b] cruza alguna de las [polylines].
+///
+/// Es la precondición de una línea de corte: si no cruza ninguna traza, el
+/// motor no puede extraer nada de ella — y peor, por la regla "cruza solo una
+/// línea" devolvería media polyline entera como si fuera un segmento válido.
+bool segmentCrossesAnyPolyline(
+  LatLng a,
+  LatLng b,
+  List<Polyline> polylines,
+) {
+  for (final polyline in polylines) {
+    final pts = polyline.points;
+    for (var i = 0; i < pts.length - 1; i++) {
+      if (doSegmentsIntersect(pts[i], pts[i + 1], a, b)) return true;
+    }
+  }
+  return false;
+}

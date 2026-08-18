@@ -53,6 +53,12 @@ class LinesCutController extends GetxController {
   /// L1 y L2 completas y se cruzan entre sí → estado inválido.
   final hasIntersectionError = false.obs;
 
+  /// Cada línea completa debe cruzar al menos una polyline de gasoducto
+  /// visible. Se recalculan en `_revalidate()`; `false` mientras la línea
+  /// tenga menos de 2 puntos.
+  final line1CrossesTraza = false.obs;
+  final line2CrossesTraza = false.obs;
+
   /// Lista de segmentos resultantes tras aplicar el corte. La capa que los
   /// persista los consume desde aquí y los limpia al terminar.
   final extractedSegments = <PolylineSegment>[].obs;
@@ -62,13 +68,27 @@ class LinesCutController extends GetxController {
   bool get areLinesCutReady =>
       line1Points.length == 2 &&
       line2Points.length == 2 &&
+      line1CrossesTraza.value &&
+      line2CrossesTraza.value &&
       !hasIntersectionError.value;
+
+  /// Cualquier condición que invalida el estado actual (pinta el panel en rojo).
+  bool get hasValidationError =>
+      hasIntersectionError.value ||
+      (line1Points.length == 2 && !line1CrossesTraza.value) ||
+      (line2Points.length == 2 && !line2CrossesTraza.value);
 
   String get statusMessage {
     if (line1Points.isEmpty) return 'Marca el primer punto de la Línea 1';
     if (line1Points.length == 1) return 'Marca el segundo punto de la Línea 1';
+    if (!line1CrossesTraza.value) {
+      return '⚠ La Línea 1 no cruza ningún gasoducto';
+    }
     if (line2Points.isEmpty) return 'Marca el primer punto de la Línea 2';
     if (line2Points.length == 1) return 'Marca el segundo punto de la Línea 2';
+    if (!line2CrossesTraza.value) {
+      return '⚠ La Línea 2 no cruza ningún gasoducto';
+    }
     if (hasIntersectionError.value) return '⚠ Las líneas se intersectan';
     return '✓ Líneas listas para cortar';
   }
@@ -135,6 +155,8 @@ class LinesCutController extends GetxController {
     line2Points.clear();
     activeLine.value = 1;
     hasIntersectionError.value = false;
+    line1CrossesTraza.value = false;
+    line2CrossesTraza.value = false;
   }
 
   void updateZoom(double zoom) {
@@ -142,6 +164,12 @@ class LinesCutController extends GetxController {
   }
 
   void _revalidate() {
+    final visibles = visiblePolylinesProvider();
+    line1CrossesTraza.value = line1Points.length == 2 &&
+        segmentCrossesAnyPolyline(line1Points[0], line1Points[1], visibles);
+    line2CrossesTraza.value = line2Points.length == 2 &&
+        segmentCrossesAnyPolyline(line2Points[0], line2Points[1], visibles);
+
     if (line1Points.length == 2 && line2Points.length == 2) {
       hasIntersectionError.value = doSegmentsIntersect(
         line1Points[0],

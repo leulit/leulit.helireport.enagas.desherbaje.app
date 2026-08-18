@@ -317,7 +317,7 @@ class LinesCutControlPanel extends StatelessWidget {
       if (!controller.cutStateOn.value || !controller.canCut.value) {
         return const SizedBox.shrink();
       }
-      final hasError = controller.hasIntersectionError.value;
+      final hasError = controller.hasValidationError;
 
       return Material(
         elevation: 4,
