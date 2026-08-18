@@ -14,7 +14,9 @@ val keyProperties = Properties().apply {
 
 android {
     namespace = "com.leulit.enagas"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage y permission_handler_android compilan contra SDK 37;
+    // flutter.compileSdkVersion todavia resuelve a 36. Fijado hasta que suba.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
