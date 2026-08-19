@@ -1,5 +1,10 @@
 # Sincronización offline de segmentos — API para el cliente
 
+> Estado: **vigente**. Última actualización: 2026-08-19. Fuente única para segmento e hijos
+> (imagen/mensaje/vídeo) — sustituye a `docs/historico/BACKEND_SPEC_SEGMENTOS.md`,
+> `docs/historico/BACKEND_VIDEO_CONTRACT.md` y `docs/historico/BACKEND_SEGMENTOS_CONTRATISTA.md`,
+> archivados por desactualizados.
+
 Apps: **desherbaje** (móvil) y **webapp** (Flutter web).
 
 Base URL: `https://<host>/api/enagas/v1`
@@ -54,6 +59,29 @@ Tres reglas que condicionan cómo se invoca:
    distintas (el cliente purga solo con `estado ∈ {finalizada, contratista}`).
 5. **Un `upsert` entregado obliga a reenviar lo que subiste sin cerrar** — y solo eso.
    Reenviar lo ya `complete` lo duplica: no hay deduplicación por `client_id`.
+
+### Por qué `id` entero y no `client_id`
+
+Segmento, imagen, mensaje y vídeo se identifican por `id` entero (`0`/`null`/ausente = insert,
+`>0` = update), **no** por el modelo genérico de `client_id` que describe
+`docs/BACKEND_SYNC_CONTRACT.md` para otras entidades. Tres razones:
+
+- **Reenvío tras fallo parcial.** Si el segmento y las fotos suben pero el vídeo falla, el
+  reenvío manda las entidades ya subidas con su `id` de servidor → el backend hace **UPDATE**,
+  no duplica; solo el vídeo (sin `id` todavía) se reintenta como insert.
+- **Dedup en re-descarga.** Local y nube casan por `id`. Un hijo que puede volver a
+  descargarse ya tiene el mismo `id` en ambos lados (el cliente lo persistió al subirlo), así
+  que no hace falta una clave adicional como `client_id` para evitar duplicarlo.
+- **Visibilidad condicionada por `sync-complete`.** El segmento no se sirve a otros clientes
+  hasta el `200` de `sync-complete` (regla 3 de arriba); un envío a medias no es visible, así
+  que no hace falta idempotencia por `client_id` para blindar ese hueco.
+
+> **Estado real del cliente (2026-08-19):** este modelo `id` está especificado para el
+> backend, pero la app móvil hoy **solo hace INSERT** de imagen, mensaje y vídeo — nunca manda
+> un `id` > 0 en el payload de estas tres entidades hijas (ver `imagen_remote_adapter.dart`,
+> `mensaje_remote_adapter.dart`, `video_remote_adapter.dart`). El **UPDATE de hijos no está
+> implementado en la app**; el reenvío tras fallo parcial hoy se apoya en el borrado de
+> `pending` que hace `upsert` (regla 2), no en un UPDATE explícito del hijo.
 
 ---
 
@@ -249,6 +277,32 @@ El vídeo aún se está convirtiendo: no es reproducible hasta `status: "disponi
 
 > La app guarda el `uploadId` para reanudar. Si se pierde la respuesta del init, el vídeo se
 > sube de cero.
+
+### 6.5 Comportamiento del cliente
+
+- **Tamaño de chunk**: 5 MB (constante `VideoRemoteAdapter._chunkSize`), por debajo del límite
+  de 10 MB de §6.2.
+- **Timeout por chunk**: 4 minutos (Dio dedicado a vídeo, `NetworkService._videoDio`). Tolera
+  redes 3G lentas en campo y cubre de sobra la ventana HMAC de ±5 min de cada intento.
+- **Reintentos**: máx. 3 por chunk, solo si el error es retryable (408/429/5xx/timeout/sin
+  red). Backoff 200 ms × intento. Antes de cada reintento el cliente vuelve a pedir el estado
+  (§6.3) para resincronizar el offset con el servidor — nunca reintenta a ciegas desde el
+  offset que tenía en memoria.
+- **Remux `.mov→.mp4`**: si `mimeType == video/quicktime` (iOS), el backend remuxea con
+  `ffmpeg -c copy` (sin recodificar) al recibir el `complete`. El fichero que sirve `thumbdb`
+  (§9) es siempre `.mp4`, sea cual sea el formato de origen.
+- **Re-init por sesión perdida**: `404` en el `GET` de estado (§6.3) → el cliente repite el
+  init (§6.1) y reanuda la subida desde el byte 0.
+
+**Mapeo de errores → comportamiento del cliente:**
+
+| HTTP | Categoría | Comportamiento |
+|---|---|---|
+| `200`–`299` | éxito | Job → `synced`. |
+| `401`, `403` | fallo de firma HMAC | `SyncUnrecoverable`. **No** dispara `AuthExpiredException` ni logout: en vídeo (como en el resto de la API desde 2026-06-30) un 401/403 es firma rechazada, nunca sesión expirada. |
+| `408`, `429`, `5xx`, timeout / sin red | retryable | Reintenta (outbox / retry de chunk de arriba); reanuda desde el offset persistido. |
+| `400`, `404`, `422` | rechazo | `SyncUnrecoverable` — el job se marca muerto y se muestra al operario. |
+| `409` en chunk o en `complete`, **sin** clave `error` en el cuerpo | reanudar, no es fallo | El cliente reenvía desde el `offset` (o `offset`/`totalBytes`) que trae el cuerpo — ver §6.2 y §6.4. |
 
 ---
 

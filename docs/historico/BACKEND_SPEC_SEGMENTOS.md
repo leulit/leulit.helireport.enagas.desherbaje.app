@@ -1,3 +1,8 @@
+> **ARCHIVADO 2026-08-19.** Superado por `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` (fuente
+> única y vigente). Incorrecto en al menos: `sync-complete` (§"POST /segmentos/{id}/sync-complete")
+> dice que el body lleva `{ "client_id": "…" }` — el `NetworkService` real manda `{}` sin body
+> para no disparar `FST_ERR_CTP_EMPTY_JSON_BODY`, el `client_id` no viaja ahí.
+
 # Backend spec — segmentos + hijos (desherbaje)
 
 Base URL: `https://<host>/api/enagas/v1` · Auth: HMAC en todos los endpoints.

@@ -1,3 +1,5 @@
+> **Archivado el 2026-08-19.** Spec ejecutado (`lib/core/gis/`: `capture_meta.dart`, `media_gis_recorder.dart`, `media_gis_geojson.dart`). El contrato de `gis_json` que resultó de este diseño vive en `docs/BACKEND_SYNC_CONTRACT.md` §4.3 y `docs/WEB_GIS_JSON_RENDERING.md`.
+
 # GIS en captura de foto/vídeo — Diseño
 
 **Fecha:** 2026-07-10

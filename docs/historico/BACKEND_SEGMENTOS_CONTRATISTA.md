@@ -1,3 +1,11 @@
+> **ARCHIVADO 2026-08-19.** Superado por `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` (fuente
+> única y vigente). Incorrecto en al menos: la afirmación de la línea 4, "la app ya está
+> adaptada" al modelo de identidad por `id`, es **falsa** —
+> `imagen_remote_adapter.dart:51`, `mensaje_remote_adapter.dart:26` y
+> `video_remote_adapter.dart:68` rechazan toda operación que no sea `create` y ninguno envía
+> `id` en el payload; el cliente móvil hoy solo hace INSERT de imagen/mensaje/vídeo, el UPDATE
+> no está implementado.
+
 # Backend — descarga contratista + identidad de entidades hijas por `id`
 
 > Instrucciones para el equipo backend. App **desherbaje** (Flutter offline-first).

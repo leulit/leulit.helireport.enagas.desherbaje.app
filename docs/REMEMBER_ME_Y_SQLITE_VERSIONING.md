@@ -316,6 +316,8 @@ El patrón del flujo no cambia, solo el backing store.
 
 ## 2. Versionado de tablas SQLite mediante clases
 
+> **Aviso (2026-08-19):** este apartado NO refleja la arquitectura de este repo desde el rediseño del patrón outbox (2026-06). Hoy el esquema es modular por entidad (`_entity_schema_version` + `LocalStore<T>.migrate(DatabaseExecutor, from, to)` + `OfflineDatabase.migrateEntity` transaccional — ver CLAUDE.md §"Schema modular"); el fichero `outbox_schema.dart` que se cita más abajo ya no existe en el repo. El §1 (Remember-Me) de este documento sigue vigente.
+
 ### 2.1 Idea central
 
 Cada tabla vive en su **propio método `_create…Table(Database db)`** de la clase `LocalDatabase`. `onCreate` llama a todos; `onUpgrade` llama solo a los afectados por cada salto de versión. Así:

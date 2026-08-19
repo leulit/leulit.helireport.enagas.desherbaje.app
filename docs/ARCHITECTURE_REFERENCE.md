@@ -28,13 +28,18 @@ lib/
 │   │   ├── capture_meta.dart                       # CaptureMeta (device_info_plus + package_info_plus); captureMeta() memoizado
 │   │   └── media_gis_map_geometry.dart             # Puro/sin IO: parsePhotoGis/parseVideoGis (lee gis_json) + destinationPoint/arrowGeometry (flecha) + VideoVertex/parseVideoTrack (rumbo por vértice)/directionBandPolygon (banda de dirección de cámara del vídeo) para pintar en el mapa
 │   ├── services/
-│   │   ├── api_security_service.dart              # Generación headers HMAC — dos esquemas: legacy (x-flutter-*, segundos, nonce) y vídeo (X-HMAC-Signature, ms, sin nonce)
+│   │   ├── api_security_service.dart              # Generación headers HMAC — esquema único (X-HMAC-Signature/X-Timestamp ms, sin nonce) para toda /api/enagas/v1; buildHmacHeaders() (cabeceras) + buildSignedMediaUrl() (query ts/sig, ventana 2h, para <video>/<img>)
 │   │   ├── auth_expiration_handler.dart           # Listener global de SyncActions.authExpired
 │   │   ├── connectivity_service.dart              # GetxService: monitoriza red
 │   │   ├── gasoductos_service.dart                # Master data legacy (no integrado al motor)
 │   │   ├── gps_background_service.dart            # Grabación manual de "traza" (GpsTrackingState vía ValueNotifier); buffer 500/30s; start()/finish(name)/openTrazaFor()/finalizeOpen()
 │   │   ├── pks_service.dart                       # Master data PK legacy
-│   │   └── hitos_service.dart                     # Master data hitos legacy (réplica de PksService)
+│   │   ├── hitos_service.dart                     # Master data hitos legacy (réplica de PksService)
+│   │   └── session_state.dart                     # GetxService: flag in-memory hasSession, leído síncronamente por AuthMiddleware (no puede await a secure_storage)
+│   ├── widgets/                                    # Widgets/capas compartidos entre pantallas de mapa
+│   │   ├── orto_tile_layers.dart                  # buildOrtoTileLayers(): par de TileLayer (respaldo ArcGIS + PNOA) usado por los 3 mapas; configureMapTileCache()/resetMapTileCache()
+│   │   ├── filtros_segmentos_bar.dart             # Barra de filtros de segmentos (mapa/listado)
+│   │   └── my_current_location_layer.dart         # Capa de ubicación actual del dispositivo
 │   └── sync/                                      # Motor offline-first (extraíble a paquete)
 │       ├── sync.dart                              # Barrel export público
 │       ├── sync_actions.dart                      # TypedActions del motor
@@ -85,7 +90,8 @@ lib/
 │   │   ├── gasoducto_entity.dart
 │   │   ├── pk_entity.dart                         # Punto kilométrico (marcador mapa)
 │   │   ├── hito_entity.dart                       # Hito (marcador mapa — misma forma que PkEntity)
-│   │   └── user_entity.dart
+│   │   ├── user_entity.dart
+│   │   └── user_role.dart                         # UserRole enum (usado por isSuperadmin en SincronizacionController)
 │   ├── repository/
 │   │   ├── segmento_repository.dart               # Interface
 │   │   └── auth_repository.dart                   # Interface
@@ -96,9 +102,11 @@ lib/
 │   ├── local/
 │   │   └── local_database.dart                    # Wrapper sobre OfflineDatabase + tablas master
 │   ├── network/
-│   │   ├── network_service.dart                   # Dio + interceptor HMAC legacy + retry transporte; _videoDio separado (4 min, sin interceptors) con 4 métodos de vídeo
+│   │   ├── network_service.dart                   # Dio + `_HmacInterceptor` (esquema HMAC único) + retry transporte; _videoDio separado (4 min, sin interceptors) con 4 métodos de vídeo
 │   │   ├── network_error.dart                     # NetworkErrorCategory + NetworkError
 │   │   └── sync_outcome_from_network_error.dart   # Mapper + 401 → AuthExpiredException
+│   ├── services/
+│   │   └── json_loader_service.dart               # JsonLoaderService (GetxService): descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs)
 │   ├── model/
 │   │   ├── mensaje_entity.dart                    # MensajeSegmentoEntity (Syncable)
 │   │   └── ...
@@ -118,7 +126,7 @@ lib/
 │       ├── imagen_local_store.dart
 │       ├── imagen_remote_adapter.dart
 │       ├── video_local_store.dart                 # tabla videos_segmento + saveUploadOffset() + saveUploadId()
-│       ├── video_remote_adapter.dart              # TUS-like adapter: Init→Chunk(PATCH)→Status(GET)→Complete; retry por chunk; 401/403=SyncUnrecoverable(no logout)
+│       ├── video_remote_adapter.dart              # TUS-like adapter: Init(POST)→Chunk(POST)→Status(GET)→Complete(POST); retry por chunk; 401/403=SyncUnrecoverable(no logout)
 │       ├── mensaje_local_store.dart
 │       ├── mensaje_remote_adapter.dart
 │       ├── traza_local_store.dart                 # tablas trazas + trazas_puntos; appendPoints/findOpen/findAnyOpen/finalize/deleteSynced además del contrato LocalStore
@@ -155,12 +163,14 @@ lib/
     │   ├── sincronizacion_controller.dart
     │   ├── sync_models.dart                       # DTOs UI: PendingByEntity, ConflictRow, ...
     │   └── field_work_tasks.dart                  # PipelineTasks de "Preparar trabajo de campo"
-    ├── widgets/                                   # Compartidos entre pantallas (AppBar actions, diálogos)
+    ├── widgets/                                   # Compartidos entre pantallas (AppBar actions, diálogos, cards)
     │   ├── track_record_button.dart               # AppBar action: inicia/finaliza la traza vía GpsBackgroundService; ValueListenableBuilder<GpsTrackingState>
     │   ├── logout_button.dart                     # AppBar action "cerrar sesión" compartida; bloquea logout si AppTypedActions.isTrazaRecording()
-    │   ├── orto_tile_layers.dart                   # buildOrtoTileLayers(): par de TileLayer (respaldo ArcGIS + PNOA) usado por los 3 mapas; configureMapTileCache()/resetMapTileCache() gobiernan la caché de tiles en disco
     │   ├── finalize_traza_dialog.dart              # showFinalizeTrazaDialog(): diálogo no descartable para nombrar la traza al finalizar (manual o recuperación de crash)
-    │   └── forgot_password_dialog.dart             # showForgotPasswordDialog(): pide el email para "¿Contraseña olvidada?" (login); devuelve email o null
+    │   ├── forgot_password_dialog.dart             # showForgotPasswordDialog(): pide el email para "¿Contraseña olvidada?" (login); devuelve email o null
+    │   ├── estado_badge_widget.dart                # Badge visual de EstadoActividad
+    │   ├── segmento_card_widget.dart               # Card de segmento (variante simple)
+    │   └── segmento_list_card_widget.dart          # Card de segmento para el listado
     └── mapa/
         ├── mapa_global_page.dart
         ├── mapa_global_binding.dart
@@ -175,8 +185,7 @@ lib/
         │   ├── posiciones_fijas_map_layer.dart       # Clon visual de HitosMapLayer
         │   ├── gasoductos_map_layer.dart
         │   └── pks_map_layer.dart                 # ValueListenableBuilder sobre AppDI.pksService.pks
-        ├── lines_cut/
-        └── legacy/
+        └── lines_cut/
 ```
 
 ---
@@ -185,6 +194,7 @@ lib/
 
 | Constante | Path | Página | Protegida |
 |---|---|---|---|
+| `AppRoutes.splash` | `/splash` | `SplashPage` | No — ruta inicial real del router (`app_router.dart:22,35`); `await AppDI.init()` antes de navegar |
 | `AppRoutes.login` | `/login` | `LoginPage` | No |
 | `AppRoutes.segmentos` | `/segmentos` | `SegmentosListPage` | Sí (`AuthMiddleware`) |
 | `AppRoutes.detalle` | `/segmentos/detalle` | `SegmentoDetallePage` | Sí |
@@ -213,7 +223,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 | `lat/lngInicio`, `lat/lngFin` | `double?` | |
 | `ubicacionGis` | `List<LatLng>` | Polilínea parseada de GeoJSON |
 | `tipoActividad` | `TipoActividad` | 11 tipos: desbroceManual, desbroceMecanico, tala, resiembre, posicionDesherbajeTraza (default), tratamientoAvispas/Aranas/Reptiles y sus variantes `…Otros` |
-| `estado` | `EstadoActividad` | propuesta, validada, ejecución, finalizada, cerrada |
+| `estado` | `EstadoActividad` | propuesta, contratista, validada, ejecución, finalizada, cerrada |
 | `imagenes` | `List<ImagenSegmentoEntity>` | |
 | `mensajes` | `List<MensajeSegmentoEntity>` | |
 | `createdAt`, `fechaInicio`, `fechaFin` | `DateTime?` | |
@@ -249,7 +259,7 @@ Todas las entidades sincronizables implementan `Syncable` (`clientId` UUID v4 in
 | `capturadaAt` | `DateTime` | |
 | `subidaAt`, `createdAt`, `updatedAtRemote` | `DateTime?` | |
 
-Subida TUS-like via `NetworkService` (Init→PATCH chunks→Complete; 5 MB/chunk, 4 min timeout/chunk). Esquema HMAC exclusivo de vídeo (`X-HMAC-Signature`/`X-Timestamp` ms, sin Bearer). Backend remuxea `.mov→.mp4`. Protocolo completo: `docs/BACKEND_VIDEO_CONTRACT.md`.
+Subida TUS-like via `NetworkService` (Init→Chunk(POST)→Complete; 5 MB/chunk, 4 min timeout/chunk). Mismo esquema HMAC único de toda la API (`X-HMAC-Signature`/`X-Timestamp` ms, sin Bearer), firmado a mano por cada método de `_videoDio` en vez de por interceptor. Backend remuxea `.mov→.mp4`. Protocolo histórico: `docs/historico/BACKEND_VIDEO_CONTRACT.md`; referencia viva: `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md`.
 
 ### `MensajeSegmentoEntity` — `Syncable`, push only (lectura online por ahora)
 | Campo | Tipo |
@@ -311,7 +321,6 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `SegmentosListController` | `presentation/segmentos/` | Lee local de segmentos, filtra por estado, navega a detalle |
 | `SegmentoDetalleController` | `presentation/detalle/` | Cambia estado, edita descripción, gestiona mensajes |
 | `EditExtremosController` | `presentation/detalle/edit_extremos/` | Edición de extremos del segmento sobre el mapa |
-| `CameraCaptureController` | `presentation/camera/` | Captura cámara → enqueue al outbox vía `OfflineRepository` |
 | `MapaGlobalController` | `presentation/mapa/` | Mapa global; ya NO controla el ciclo de vida de `GpsBackgroundService` (ver `TrackRecordButton`) |
 | `LinesCutController` | `presentation/mapa/lines_cut/` | Modo "líneas de corte" — segmenta gasoductos en mapa |
 | `PosicionesFijasMapController` | `presentation/mapa/layers/` | Lee `PosicionFijaLocalStore` (DI get_it) y expone marcadores válidos; solo lectura local, sin red |
@@ -325,6 +334,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | Servicio | Responsabilidad |
 |---|---|
 | `ConnectivityService` | Monitoriza red; dispatcha `SyncActions.connectionRestored/Lost` (informativo, NO dispara drain) |
+| `SessionState` | Flag in-memory `hasSession`; lo usa `AuthMiddleware` (síncrono, no puede llamar a secure_storage) para proteger rutas; lo mantienen `LoginPageController`, `AuthExpirationHandler` y `SincronizacionController` (logout manual) |
 | `NetworkService` | Cliente Dio singleton con interceptor HMAC + retry de transporte |
 | `GpsBackgroundService` | Grabación manual de traza GPS (`start()`/`finish(name)`); buffer 500 puntos/30s flush append-only; `ValueNotifier<GpsTrackingState>`; foreground service Android (`stopWithTask=false`, sobrevive swipe de recientes) / `allowBackgroundLocationUpdates` iOS; lifecycle independiente de cualquier pantalla — activado por `TrackRecordButton` |
 | `JsonLoaderService` | Descarga GeoJSON multi-archivo (pipeline para gasoductos/PKs) |
@@ -353,31 +363,39 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 
 | Paquete | Versión | Uso |
 |---|---|---|
-| `get` | `^4.7.3` | State management, navegación, DI |
-| `dio` | `^5.9.2` | HTTP client |
+| `get` | `^4.7.3` | State management, navegación, DI (legacy en retirada — ver §Skills en CLAUDE.md) |
+| `dio` | `^5.11.0` | HTTP client |
 | `flutter_map` | `^8.3.1` | Mapas. Su `NetworkTileProvider` (default de `TileLayer`) ya trae cancelación de peticiones obsoletas Y caché de tiles en disco (`BuiltInMapCachingProvider`), configurada en `lib/core/widgets/orto_tile_layers.dart` |
+| `flutter_map_location_marker` | `^10.3.0` | Capa de ubicación actual + rotación por brújula en el mapa |
+| `flutter_map_compass` | `^1.1.1` | Widget de brújula (`MapCompass`) del mapa global |
 | `supercluster` | `^3.2.0` | Clustering espacial de marcadores (PKs e hitos) |
-| `latlong2` | `^0.9.1` | Coordenadas |
-| `sqflite` | `^2.4.2` | SQLite local |
-| `image_picker` | `^1.2.1` | Galería |
+| `latlong2` | `^0.9.1` | Coordenadas — pinned: `flutter_map_location_marker` 10.3.0 exige `^0.9.1` |
+| `sqflite` | `^2.4.3` | SQLite local |
+| `image_picker` | `^1.2.3` | Galería |
+| `image_picker_android` / `image_picker_platform_interface` | `^0.8.13` / `^2.11.0` | Cotas solidarias con `image_picker`, necesarias para activar el Photo Picker de Android (ver `main.dart`) |
 | `camera` | `^0.12.0+1` | Cámara |
-| `video_player` | `^2.11.1` | Reproducción de vídeo local |
-| `gal` | `^2.3.2` | Guardar fotos/vídeos en galería del dispositivo |
-| `photo_view` | `^0.15.0` | Zoom de fotos |
+| `video_player` | `^2.13.0` | Reproducción de vídeo local |
+| `gal` | `^2.3.3` | Guardar fotos/vídeos en galería del dispositivo |
 | `cached_network_image` | `^3.4.1` | Cache de imágenes |
-| `connectivity_plus` | `^7.1.1` | Estado de red |
-| `flutter_secure_storage` | `^10.0.0` | Token seguro |
+| `chat_bubbles` | `^1.10.1` | Burbujas de chat en la lista de mensajes del segmento |
+| `connectivity_plus` | `^7.3.0` | Estado de red |
+| `flutter_secure_storage` | `^11.0.0` | Token seguro |
 | `shared_preferences` | `^2.5.5` | Preferencias ligeras |
 | `crypto` | `^3.0.7` | HMAC |
-| `uuid` | `^4.5.3` | IDs únicos locales |
+| `uuid` | `^4.6.0` | IDs únicos locales |
 | `logger` | `^2.7.0` | Logging con niveles |
-| `permission_handler` | `^12.0.1` | Permisos runtime |
-| `intl` | `^0.20.2` | Fechas/i18n |
+| `path` | `^1.9.1` | Manejo de rutas de fichero (p.ej. `local_database.dart`) |
+| `permission_handler` | `^13.0.1` | Permisos runtime |
+| `intl` | `^0.20.3` | Fechas/i18n |
 | `geolocator` | `^14.0.3` | GPS stream (foreground + iOS background) |
 | `flutter_rotation_sensor` | `^0.3.0` | Rumbo (azimuth) para GIS de captura; funciona parado |
 | `device_info_plus` | `^13.2.0` | `os`/`os_version`/`device_model` en `gis_json` (CaptureMeta) |
-| `package_info_plus` | `^10.2.0` | `app_version` en `gis_json` (CaptureMeta) |
+| `package_info_plus` | `^10.2.1` | `app_version` en `gis_json` (CaptureMeta) |
 | `flutter_foreground_task` | `^10.0.0` | Foreground service Android para grabación de traza (`stopWithTask=false`) |
-| `leulit_flutter_actionmanager` | `^5.6.0` | TypedAction bus entre capas |
+| `leulit_flutter_actionmanager` | `^5.9.0` | TypedAction bus entre capas |
+| `leulit_flutter_dependency_injection` | `^0.1.1` | `DI`/`di.get`, facade sobre get_it — singletons globales (motor de sync, servicios), separado del contenedor de GetX |
+| `leulit_flutter_fullresponsive` | `^3.0.0` | Extensiones `.w`/`.h`/`.sp` para tamaños responsive (destino MVVM, ver CLAUDE.md) |
 | `leulit_pipeline_pattern` | path | TaskPipeline para flujos secuenciales async |
+| `flutter_lints` | `^6.0.0` (dev) | Linter |
 | `mocktail` | `^1.0.5` (dev) | Tests |
+| `sqflite_common_ffi` | `^2.4.2` (dev) | SQLite en tests (sin plugin nativo) |

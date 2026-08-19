@@ -76,7 +76,7 @@ These apply to every line of code in this project, no exceptions:
 
 1. **Tras cada tarea completada**, revisa si los cambios afectan a la arquitectura, rutas, entidades, dependencias o patrones documentados aquí. Si es así, actualiza la sección correspondiente de este fichero.
 2. **Al crear nuevos archivos**, añádelos a la sección de estructura si son módulos/vistas/servicios relevantes.
-3. **Al modificar `pubspec.yaml`**, actualiza la versión y dependencias clave aquí.
+3. **Al modificar `pubspec.yaml`**, actualiza la línea de "Versión:" en la cabecera del proyecto (más abajo) aquí; el catálogo de dependencias vive SOLO en `docs/ARCHITECTURE_REFERENCE.md` (ver regla 8).
 4. **Al descubrir patrones o convenciones no documentadas**, añádelos a la sección correspondiente.
 5. **Al corregir bugs recurrentes**, documenta la solución en la sección "Lecciones aprendidas".
 6. **Al modificar rutas, roles, o entidades**, actualiza las tablas correspondientes.
@@ -92,7 +92,7 @@ These apply to every line of code in this project, no exceptions:
 App móvil para operadores de campo — módulo **Desherbaje** de Enagas.
 Permite gestionar actividades de desherbaje sobre segmentos de gasoducto: consultar el listado, cambiar estado, capturar fotos georeferenciadas (antes/después) y sincronizarlas con el backend cuando hay conectividad.
 
-- **Versión:** `1.1.5+115`
+- **Versión:** `1.1.9+119`
 - **SDK Flutter:** `>=3.27.0` | **SDK Dart:** `^3.12.1`
 - **Backend:** `https://enagastool.helireport.com` (autenticación HMAC-SHA256)
 - **Plataformas objetivo:** Android, iOS (no web actualmente)
@@ -237,7 +237,7 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 
 ## Lecciones Aprendidas
 
-> Revisión + corrección del motor offline-first (rama `fixes/outbox-review`, 2026-06). Informe: `docs/CODE_REVIEW_REDESIGN_PATRON_OUTBOX.md`; plan: `docs/PLAN_FIXES_REDESIGN_PATRON_OUTBOX.md`.
+> Revisión + corrección del motor offline-first (rama `fixes/outbox-review`, 2026-06). Informe: `docs/historico/CODE_REVIEW_REDESIGN_PATRON_OUTBOX.md`; plan: `docs/historico/PLAN_FIXES_REDESIGN_PATRON_OUTBOX.md`.
 
 - **Drain del outbox debe acotar el bucle.** Un `while(true)` que re-consulta `nextPending(status='pending')` se cuelga para siempre si un job reintentable vuelve a `pending` en la misma pasada. Usar un `Set<int>` de ids ya procesados y romper cuando el batch filtrado quede vacío. Resetear SIEMPRE `_isDraining` en `finally` (si no, queda en `true` y brickea todo drain futuro).
 - **Identidad en pull, no re-acuñar `clientId`.** Si el backend omite `client_id`, `fromJson` genera un UUID nuevo cada pull → `findByClientId` no matchea → `upsert` con `ConflictAlgorithm.replace` BORRA la fila local editada por el índice UNIQUE de `id`. Resolver identidad por `findByRemoteId` reusando el `clientId` local; nunca `ConflictAlgorithm.replace` cuando hay índice único secundario (usar update-then-insert con `abort`).
@@ -302,6 +302,7 @@ Ningún archivo del motor (`lib/core/sync/`) se modifica. Esto es la prueba de e
 - **Decidir `simplificationTolerance` de las polilíneas.** Hoy se usa el default de flutter_map (0.3 px). Subirlo a 0.5-1.0 abarata el pintado de gasoductos en cada frame, pero altera la fidelidad del trazado: es una decisión visual, requiere comparativa en pantalla y sign-off del responsable.
 - **Medir en dispositivo el efecto de la pasada de rendimiento del mapa (2026-07-28).** Timeline de DevTools (hilos UI y raster) paneando a zoom 15-18 con hitos y PKs visibles. La optimización se hizo por auditoría estática, sin baseline medido.
 - Filtro de solapamientos del corte contra segmentos existentes (`docs/LINES_CUT_MOBILE_INTEGRATION.md` §8).
+- **`visibleGasoductoPolylines` excluye trazas que cruzan pantalla sin tener ningún vértice dentro.** `MapaGlobalController.visibleGasoductoPolylines` (`lib/presentation/mapa/mapa_global_controller.dart:246`) filtra con `points.any(bounds.contains)`: una polilínea con vértices muy separados a zoom alto, cuyo tramo cruza el viewport pero cuyos extremos quedan fuera, no aparece — ni en la validación de líneas de corte (aviso "no cruza ningún gasoducto") ni en la extracción de segmentos. Arreglo: filtrar por intersección del bounding box de la polilínea con `visibleBounds`, no por pertenencia de vértices. (Anotado 2026-08-18, sigue abierto.)
 - `AppConfig.hmacSecret` ya se inyecta por `--dart-define=HMAC_SECRET` (default = placeholder que NO valida). Pendiente: cablearlo en CI/CD desde un GitHub Secret y documentar en `.vscode/launch.json` para desarrollo local.
 - Extraer `lib/core/sync/` a paquete `leulit_offline_sync` cuando madure.
 - **Vídeos de nube — verificar auth de streaming en runtime** *(2026-07-09: ya se muestran y reproducen)*: la media de nube (fotos + vídeos) se pinta en Antes/Después vía `segmento.imagenes[]` (un vídeo es una fila con `mime_type` `video/*`); `VideoPlayerPage.network` reproduce por URL. **Pendiente:** confirmar en dispositivo real que la `url` de vídeo se sirve sin HMAC (como las imágenes); si da 401, firmar/proxy el streaming.

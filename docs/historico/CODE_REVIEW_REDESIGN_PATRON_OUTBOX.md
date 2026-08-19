@@ -1,3 +1,5 @@
+> **Archivado el 2026-08-19.** El plan de correcciones derivado de este informe está ejecutado (~12 commits). El único hilo que seguía abierto (A3: `GasoductosService`/`PksService` con shim, no `LocalStore<T>` real) está recogido en `CLAUDE.md` §"Pendiente / TODO". Las lecciones estables de esta revisión viven en `CLAUDE.md` §"Lecciones Aprendidas".
+
 # Informe de revisión de código — rama `REDESIGN-PATRON-OUTBOX` (v2, verificado)
 
 **Fecha:** 2026-06-16 · **v1:** 2026-06-15 (revisión inicial) · **v2:** re-verificación adversaria contra el código real + barrido de omisiones.

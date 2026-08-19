@@ -1,3 +1,5 @@
+> **Archivado el 2026-08-19.** Este es el diario del release `1.0.3+103` (mayo 2026); la versión actual es `1.1.9+119` y este plan ya no refleja el estado del proyecto. El manual vivo de publicación es [`docs/PUBLICAR.md`](../PUBLICAR.md) (datos de cuenta, checklist de metadata y plantilla de notas para el revisor migrados allí).
+
 # Plan de publicación — App Store (iOS)
 
 **App**: Helireport Desherbaje  

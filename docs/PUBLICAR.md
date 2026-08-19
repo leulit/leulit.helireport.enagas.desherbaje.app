@@ -21,6 +21,18 @@ Si falta `.env`, el build aborta. Sin él la app se compila con un secreto falso
 
 ---
 
+## Datos de cuenta / primer alta
+
+Solo hace falta consultarlos al dar de alta la app en una cuenta nueva de App Store Connect (ya hecho, quedan aquí como referencia):
+
+| Dato | Valor |
+|---|---|
+| Bundle ID | `com.leulit.enagas.helireport-desherbaje` |
+| Team ID | `XZ784KD9U4` |
+| SKU (App Store Connect) | `helireport-desherbaje-01` |
+
+---
+
 ## Publicar en Google Play
 
 ### 1. Construir
@@ -81,6 +93,36 @@ Si el build falla con error de firma: abrir `ios/Runner.xcworkspace` en Xcode �
 5. Añadir el build al grupo de testers
 
 Para publicar en la App Store: **Distribution → + Version** → rellenar novedades → **Add Build** → **Submit for Review**.
+
+### 3. Metadata de App Store Connect (checklist, trabajo manual en cada envío a revisión)
+
+- [ ] **Screenshots** — mínimo requerido:
+  - iPhone 6.5" (iPhone 14 Plus / 15 Plus) — **1284×2778px**
+  - iPhone 5.5" (iPhone 8 Plus) — si se declara soporte a versiones antiguas
+  - iPad 12.9" — solo si la app soporta iPad
+  - Si las capturas originales salen a otra resolución (p. ej. 1170×2532), redimensionar sin distorsión (`sips`) antes de subir
+  - Subir mediante **drag & drop** en App Store Connect (el selector de archivos puede fallar)
+- [ ] **Privacidad** (obligatorio, la app recoge ubicación) — App Store Connect → **App Privacy** → **Get Started**:
+  - **Location** → Precise Location → ✅ Used → Purpose: App Functionality
+  - **Location** → Background Location → ✅ Used → Purpose: App Functionality
+  - Confirmar que no se recopilan datos vinculados al usuario más allá de los necesarios
+- [ ] **Export Compliance**: la app usa cifrado estándar (HTTPS) → responder Sí al algoritmo estándar, No a cifrado propietario
+- [ ] **App Review Information**: credenciales de prueba (usuario + contraseña), teléfono de contacto, y las notas para el revisor (plantilla abajo)
+
+**Notas para el revisor** (copiar literal en App Store Connect → Notes for Reviewer):
+
+```
+Esta app es una herramienta de campo para operadores de gasoducto de Enagas.
+Los operadores registran su ruta GPS durante jornadas de trabajo en campo
+(desherbaje de segmentos de gasoducto). La ubicación en background es necesaria
+para que el tracking continúe cuando el operador guarda el teléfono en el bolsillo
+durante la jornada.
+
+La app NO se distribuye al público general — es una herramienta B2B interna
+para empleados y contratistas de Enagas.
+```
+
+Si Apple rechaza por **background location**: responder en la misma thread con esta misma justificación de negocio.
 
 ---
 

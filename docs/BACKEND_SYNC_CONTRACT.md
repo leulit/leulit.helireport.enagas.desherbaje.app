@@ -8,6 +8,13 @@
 **Autor:** Equipo Leulit (mobile)
 **Estado:** Pendiente de implementación en backend
 
+> **ALCANCE (2026-08-19):** el modelo genérico de identidad por `client_id` y el flujo de
+> conflicto `409` de este documento **NO aplican a segmento ni a sus hijos** (imagen, mensaje,
+> vídeo) — esos van por `id` entero, especificados en
+> `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` (fuente única y vigente para esa parte de la API).
+> Este documento cubre trazas GPS (§8, ya cerrado) y las entidades futuras que se incorporen
+> al motor de sync genérico. No implementar el modelo `client_id` sobre segmentos.
+
 ---
 
 ## 1. Resumen ejecutivo
@@ -30,6 +37,9 @@ Para que esa sincronización sea **idempotente, robusta y reanudable**, el backe
 
 ## 2. Modelo de identidad
 
+> **Alcance:** no aplica a segmento/imagen/mensaje/vídeo — esos usan `id` entero, ver
+> `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md`.
+
 Cada registro sincronizable existe con dos identificadores:
 
 | Campo | Origen | Inmutabilidad | Uso |
@@ -47,6 +57,9 @@ Cada registro sincronizable existe con dos identificadores:
 ---
 
 ## 3. Idempotencia por `client_id`
+
+> **Alcance:** no aplica a segmento/imagen/mensaje/vídeo — esos usan `id` entero, ver
+> `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md`.
 
 **Requisito crítico.** Cualquier operación de creación o actualización debe ser idempotente respecto al `client_id`.
 
@@ -110,6 +123,9 @@ El backend localiza el registro por `client_id` (no por `remote_id`) y aplica la
 
 ## 4. Relaciones entre entidades por `client_id`
 
+> **Alcance:** no aplica a segmento/imagen/mensaje/vídeo — esos usan `id` entero, ver
+> `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md`.
+
 **Requisito crítico para offline.**
 
 Cuando un operador crea offline una imagen asociada a un segmento que también ha creado offline, **ninguna de las dos entidades tiene `remote_id` todavía**. Ambas tienen solo `client_id`. Por tanto, la imagen referencia al segmento mediante `segmento_client_id`, no `segmento_id`.
@@ -143,7 +159,7 @@ Pero el backend **no debe asumir orden**: si llega una imagen con `segmento_clie
 
 ### 4.3 Campo `gis_json` (GeoJSON) en foto y vídeo
 
-**Cambio 2026-07-10.** La media capturada con la cámara de la app viaja georreferenciada en un campo nuevo **`gis_json`** (string GeoJSON). Aplica al payload de **foto** (`POST /api/imagenes`) y de **vídeo** (subida TUS-like — ver `docs/BACKEND_VIDEO_CONTRACT.md`, se envía en el Init).
+**Cambio 2026-07-10.** La media capturada con la cámara de la app viaja georreferenciada en un campo nuevo **`gis_json`** (string GeoJSON). Aplica al payload de **foto** (`POST /api/imagenes`) y de **vídeo** (subida TUS-like — ver `docs/historico/BACKEND_VIDEO_CONTRACT.md`, se envía en el Init).
 
 - Top-level siempre `FeatureCollection`. Orden de coordenadas GeoJSON estándar **`[lon, lat]`** (¡no `[lat, lon]`!).
 - **Foto:** geometría `Point` `[lon, lat, alt]`; rumbo y extras (`heading`, `heading_accuracy`, `gps_heading`, `accuracy_m`, `altitude_m`, `speed_mps`, `captured_at`) en `properties` (`kind: "photo"`).
@@ -253,6 +269,9 @@ El cliente compara `updated_at` local vs remoto. Si el local es más nuevo, o ha
 ---
 
 ## 7. Conflicto (HTTP 409) en push
+
+> **Alcance:** no aplica a segmento/imagen/mensaje/vídeo — esos no tienen `409` de conflicto,
+> ver `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` §10 ("Conflictos").
 
 Caso: el cliente intenta actualizar un registro que ha cambiado en backend desde la última sync local.
 

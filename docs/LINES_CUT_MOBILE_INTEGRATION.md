@@ -1,5 +1,14 @@
 # Líneas de Corte — Guía de implementación para App Móvil
 
+> **Estado del documento (2026-08-19):** guía de portado ya EJECUTADA. Se conserva
+> como referencia de diseño (matemática, contrato de estado, flujo). La
+> implementación real vive en `lib/presentation/mapa/lines_cut/` (7 ficheros:
+> `lines_cut_math.dart`, `lines_cut_engine.dart`, `lines_cut_controller.dart`,
+> `lines_cut_dialog.dart`, `lines_cut_ui.dart`, `polyline_hit_data.dart`,
+> `polyline_segment.dart`), conectada desde `lib/presentation/mapa/mapa_global_controller.dart`.
+> Lo único pendiente es **§8 — Filtro de solapamientos con segmentos existentes**
+> (sin implementar; ver aviso en esa sección).
+
 > Objetivo: portar al proyecto móvil la misma funcionalidad de **detección y
 > extracción de segmentos entre dos líneas de corte** que se ejecuta en la webapp
 > (`lib/views/desherbajemain/widgets/layers/lines_cut_layer.dart` +
@@ -536,6 +545,13 @@ de UX replicado del web (`lines_cut_layer_controller.dart:264`).
 
 ## 8. Filtro de solapamientos con segmentos existentes
 
+> 🔴 **ÚNICA PARTE VIVA DE ESTE DOCUMENTO.** Confirmado (2026-08-19): cero
+> coincidencias de "overlap"/"solapa" en `lib/presentation/mapa/lines_cut/` ni en
+> `mapa_global_controller.dart` — el filtro no existe. `applyLinesCut()` persiste
+> directamente los `PolylineSegment` extraídos sin comprobar solapamiento contra
+> segmentos ya existentes. Este es el único trabajo pendiente real de la
+> funcionalidad; el resto del documento es histórico (ver cabecera de estado).
+
 En la web, antes de abrir el diálogo, se filtra la lista contra los
 segmentos ya guardados:
 
@@ -601,23 +617,47 @@ del `PolylinePolygonIntersector` para el flujo de polígonos).
 
 ## 11. Checklist de implementación
 
-- [ ] Portar `lines_cut_math.dart` (§5.1).
-- [ ] Crear `PolylineSegment` mínimo o reutilizar el existente si el móvil
-      ya tiene flujo de polígono (§5.2).
-- [ ] Portar `extractSegmentsBetweenCutLines` (§5.3).
-- [ ] Crear controlador/estado con los campos del contrato (§4) y el
+> Verificado leyendo el código real el 2026-08-19. Solo queda sin marcar lo que
+> se comprobó que no está hecho.
+
+- [x] Portar `lines_cut_math.dart` (§5.1). (`lines_cut_math.dart`)
+- [x] Crear `PolylineSegment` mínimo o reutilizar el existente si el móvil
+      ya tiene flujo de polígono (§5.2). (`polyline_segment.dart`; usa
+      `ctname` además de `ctId`, ver nota en Anexo A)
+- [x] Portar `extractSegmentsBetweenCutLines` (§5.3). (`lines_cut_engine.dart`;
+      añade además `segmentCrossesAnyPolyline` para exigir que cada línea de
+      corte cruce alguna traza antes de habilitar el corte)
+- [x] Crear controlador/estado con los campos del contrato (§4) y el
       esqueleto de `addPoint`/`updatePoint`/`clearAll` (§5.4).
-- [ ] Conectar al mapa: `onTap`, `onMapEvent` para zoom, y exponer
-      `getVisibleGasoductoPolylines()` (§6).
-- [ ] Implementar el widget de capa con polylines, drag markers y warning
-      (§5.5).
-- [ ] Implementar botón de modo y panel de control (§5.5).
-- [ ] Reutilizar o implementar el filtro de solapamientos (§8).
-- [ ] Abrir diálogo (descripción / tipo / estado) y mapear a
-      `SegmentoEntity`, corrigiendo latFin/lngFin (§9).
-- [ ] Llamar al servicio que persiste los segmentos (backend u offline).
+      (`lines_cut_controller.dart`; `GetxController` con `.obs`, no el
+      esqueleto agnóstico del §5.4 — funcionalmente equivalente)
+- [x] Conectar al mapa: `onTap`, `onMapEvent` para zoom, y exponer
+      `getVisibleGasoductoPolylines()` (§6). (`lib/presentation/mapa/mapa_global_controller.dart`,
+      fuera de los 7 ficheros de la feature: `updateZoom`/`addPoint` cableados
+      al mapa y `visiblePolylinesProvider` inyectado al controller)
+- [x] Implementar el widget de capa con polylines, drag markers y warning
+      (§5.5). (`lines_cut_ui.dart`; drag markers implementados a mano con
+      `GestureDetector` + `MapCamera`, sin el paquete `flutter_map_dragmarker`
+      del Anexo C, ver nota en Anexo C)
+- [x] Implementar botón de modo y panel de control (§5.5). (`lines_cut_ui.dart`,
+      `LinesCutModeButton` + `LinesCutControlPanel`)
+- [ ] Reutilizar o implementar el filtro de solapamientos (§8). **Pendiente**,
+      ver aviso en §8.
+- [x] Abrir diálogo (descripción / tipo / estado) y mapear a
+      `SegmentoEntity`, corrigiendo latFin/lngFin (§9). (`lines_cut_dialog.dart`
+      + `mapa_global_controller.dart`; `latFin`/`lngFin` ya usan `.last`
+      correctamente, el bug de la web no se replicó)
+- [x] Llamar al servicio que persiste los segmentos (backend u offline).
+      (`mapa_global_controller.dart:applyLinesCut`, vía
+      `_segmentoRepo.insertLocalOnly` — offline-first, como el resto del motor)
 - [ ] Probar con zoom < 12 (layer oculto), con líneas que se crucen
       (warning), con polylines que solo cruzan una línea (regla mitad-hacia-otra).
+      **Parcial**: `test/presentation/mapa/lines_cut/` cubre `doSegmentsIntersect`,
+      `getSegmentIntersection`, `sideOfLine` y la validación
+      `segmentCrossesAnyPolyline`/intersección de líneas en el controller, pero
+      no hay test de `extractSegmentsBetweenCutLines` para la regla
+      "cruza solo una línea → mitad hacia la otra", ni test de que el layer se
+      oculte con `zoom < kLinesCutMinZoom`.
 
 ---
 
@@ -643,6 +683,15 @@ funcionalidad **solo con este fichero**.
 ---
 
 ## Anexo A — `PolylineHitData` y extractores de metadatos
+
+> ⚠️ **Divergencia con el código real (2026-08-19):** este anexo (y el §5.2
+> del cuerpo) documentan `PolylineSegment` resolviendo solo `ctId`. La
+> convención real del proyecto móvil (`SegmentoEntity`, ver
+> `docs/ARCHITECTURE_REFERENCE.md`) identifica el CT por **`ctname`
+> (`String`)**, no por `ctId`. El código real (`polyline_segment.dart`) extrae
+> **ambos**: `ctId` se conserva como campo auxiliar, pero lo que persiste
+> `mapa_global_controller.dart` en `SegmentoEntity.ctname` es el nombre. Manda
+> el código: si hay que elegir uno solo, es `ctname`.
 
 Las polylines de gasoductos en el proyecto web llevan en su campo
 `hitValue` una instancia de `PolylineHitData`. Los extractores de
@@ -816,60 +865,30 @@ final seg = PolylineSegment(
 
 ---
 
-## Anexo B — Enums `TipoActividad` y `EstadoActividad`
+## Anexo B — Enums `TipoActividad` y `EstadoActividad` (OBSOLETO, ver nota)
 
-Copia directa de
-`lib/domain/entities/segmento_entity.dart:32-74`. Los valores `descripcion`
-son los que la DB (`inventario_segmentos`) espera en serialización; las
-`etiqueta` son las que se muestran al usuario.
-
-```dart
-enum TipoActividad {
-  desbroceManual      ('desbroce_manual',      'Desbroce Manual'),
-  desbroceMecanico    ('desbroce_mecanico',    'Desbroce Mecánico'),
-  deshierbePosiciones ('deshierbe_posiciones', 'Deshierbe Posiciones'),
-  desherbajeSelectivo ('deshierbe_selectivo',  'Deshierbe Selectivo'),
-  desratizacion       ('desratizacion',        'Desratización'),
-  resiembre           ('resiembre',            'Resiembre'),
-  talaArboles         ('tala_arboles',         'Tala de Árboles');
-
-  final String descripcion;
-  final String etiqueta;
-  const TipoActividad(this.descripcion, this.etiqueta);
-
-  static TipoActividad fromString(String value) =>
-      TipoActividad.values.firstWhere(
-        (e) => e.descripcion == value,
-        orElse: () => TipoActividad.desherbajeSelectivo,
-      );
-}
-
-enum EstadoActividad {
-  propuesta    ('propuesta',   'Propuesta'),
-  validada     ('validada',    'Validada'),
-  contratista  ('contratita',  'Contratista'),   // typo histórico: 'contratita'
-  ejecucion    ('ejecución',   'En Ejecución'),
-  finalizada   ('finalizada',  'Finalizada'),
-  cerrada      ('cerrada',     'Cerrada');
-
-  final String descripcion;
-  final String etiqueta;
-  const EstadoActividad(this.descripcion, this.etiqueta);
-
-  static EstadoActividad fromString(String value) =>
-      EstadoActividad.values.firstWhere(
-        (e) => e.descripcion.toLowerCase() == value.toLowerCase(),
-        orElse: () => EstadoActividad.propuesta,
-      );
-}
-```
-
-⚠️ Mantener el typo `'contratita'` (sin la segunda "s") si el backend móvil
-comparte la misma tabla `inventario_segmentos` que el web.
+> Este anexo documentaba una copia congelada de abril 2026 de
+> `lib/domain/entities/segmento_entity.dart`, desincronizada del código real:
+> 7 valores de `TipoActividad` frente a los 11 reales, y pedía "mantener" el
+> typo `'contratita'` que el código ya corrigió (`contratista`). Se elimina
+> para no inducir a implementar contra datos falsos.
+>
+> Los enums `TipoActividad` y `EstadoActividad` son los de
+> `lib/domain/entities/segmento_entity.dart:30-53` y están catalogados en
+> `docs/ARCHITECTURE_REFERENCE.md`. Cualquier trabajo sobre líneas de corte
+> debe leer los valores desde ahí, no desde este documento.
 
 ---
 
 ## Anexo C — Widget `LinesCutLayer` completo (sin GetX / sin ActionManager)
+
+> ⚠️ **Divergencia con el código real (2026-08-19):** este anexo (y §5.5 del
+> cuerpo, §C.5) asumen el paquete externo `flutter_map_dragmarker`. La
+> implementación real (`lines_cut_ui.dart`) NO lo usa: los marcadores
+> arrastrables son un `GestureDetector` propio sobre `MapCamera` (pan
+> acumulado + `latLngToScreenOffset`/`offsetToCrs`), sin dependencia añadida
+> al `pubspec.yaml`. Manda el código: no añadir `flutter_map_dragmarker` si
+> se toca este módulo.
 
 Adaptación literal de `lib/views/desherbajemain/widgets/layers/lines_cut_layer.dart`
 eliminando dependencias de `AutoGetBuilder`, `TypedActionManagerWidget`,
@@ -1365,6 +1384,16 @@ es la misma que expone ese paquete, así que no hacen falta adaptaciones.
 ---
 
 ## Anexo D — Diálogo de captura (contrato de retorno)
+
+> ⚠️ **Divergencia con el código real (2026-08-19):** este anexo describe un
+> diálogo con `estado` editable por el usuario, con default `propuesta`. El
+> diálogo real (`lines_cut_dialog.dart:20-22,188`) NO expone selector de
+> estado: fija siempre `EstadoActividad.contratista` para los segmentos
+> creados desde la app móvil — decisión de producto, no un olvido de
+> portado. Manda el código: si se necesita estado editable, es un cambio de
+> funcionalidad que requiere validación del responsable antes de tocar
+> `lines_cut_dialog.dart` (ver CLAUDE.md, regla de no-decisiones de
+> funcionalidad sin sign-off).
 
 El flujo `extractAndApplyCut()` de la web llama a
 `DesherbajeDialogs.segmentoDialog(...)` (firma real:

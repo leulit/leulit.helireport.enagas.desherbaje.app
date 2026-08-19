@@ -1,3 +1,13 @@
+> **ARCHIVADO 2026-08-19.** Superado por `docs/BACKEND_SEGMENTO_SYNC_ENDPOINTS.md` §6 (fuente
+> única y vigente). Incorrecto en al menos: el chunk se sube por **`POST`**, no `PATCH`
+> (`network_service.dart:194`, `api_endpoints.dart:139` — el "`PATCH` ... no `PATCH` → 404" de
+> este documento describe lo contrario de lo real); el endpoint de descarga
+> `GET /videos/download/{uploadId}.mp4` está **retirado** (`api_endpoints.dart:149`), el único
+> endpoint de media es `thumbdb`; y el "esquema HMAC exclusivo de vídeo" (sin nonce, sin
+> Bearer, distinto del resto) no existe — desde 2026-06-30 hay un único esquema HMAC para toda
+> `/api/enagas/v1`, y el legacy `x-flutter-*` con el que aquí se compara nunca lo validó el
+> backend.
+
 # Contrato backend — Subida de vídeos (TUS-like resumable)
 
 > Versión: 3.0 — 2026-06-27

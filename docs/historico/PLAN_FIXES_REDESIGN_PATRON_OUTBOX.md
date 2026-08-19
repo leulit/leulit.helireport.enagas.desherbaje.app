@@ -1,5 +1,7 @@
 <!-- Generado por revisión multi-agente (13 agentes). Anclado a file:line del working tree de REDESIGN-PATRON-OUTBOX el 2026-06-16. Acompaña a CODE_REVIEW_REDESIGN_PATRON_OUTBOX.md. v2: D-2/D-4 anuladas y §0 (validaciones pendientes) añadida tras feedback. -->
 
+> **Archivado el 2026-08-19.** Este plan ya está ejecutado (~12 commits). El único hilo que seguía abierto (A3: `GasoductosService`/`PksService` con shim, no `LocalStore<T>` real) está recogido en `CLAUDE.md` §"Pendiente / TODO". Las lecciones estables de este plan viven en `CLAUDE.md` §"Lecciones Aprendidas".
+
 # Plan de implementación — Corrección de hallazgos de revisión (motor offline-first Enagas Desherbaje)
 
 > Documento de implementación definitivo. Cada workstream está anclado a `file:line` verificado contra el código real (commit en `REDESIGN-PATRON-OUTBOX`). Las correcciones del review adversarial están integradas, no apéndice. Este es el documento desde el que el equipo implementa.
