@@ -1,0 +1,4 @@
+Novedades de la versión 1.2.0
+
+• (sin commits feat/fix en el rango — describe aquí los cambios a mano)
+• Mejoras de estabilidad y rendimiento.

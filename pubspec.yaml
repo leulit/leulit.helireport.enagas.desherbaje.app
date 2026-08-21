@@ -1,7 +1,7 @@
 name: helireport_desherbaje
 description: App móvil para operadores de campo - Módulo Desherbaje Enagas
 publish_to: 'none'
-version: 1.1.9+119
+version: 1.2.0+120
 
 environment:
   sdk: '^3.12.1'
