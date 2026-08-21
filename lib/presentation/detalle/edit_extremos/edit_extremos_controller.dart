@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_di.dart';
-import '../../../core/app_theme.dart';
+import '../../../core/widgets/endpoint_pin.dart';
 import '../../../core/services/gasoductos_service.dart';
 import '../../../data/repository/segmento_repository_impl.dart';
 import '../../../domain/entities/segmento_entity.dart';
@@ -223,7 +223,7 @@ class EditExtremosController extends GetxController {
 
   /// Color semántico del marker de inicio (verde) y fin (rojo).
   Color colorFor(EndpointKind kind) =>
-      kind == EndpointKind.inicio ? AppColors.moduleGreen : Colors.red.shade700;
+      kind == EndpointKind.inicio ? kColorInicio : kColorFin;
 
   /// Centro y zoom inicial sugeridos (fallback cuando no hay traza).
   ({LatLng center, double zoom}) get initialCamera {

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:leulit_flutter_dependency_injection/leulit_flutter_dependency_injection.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -618,5 +619,106 @@ void main() {
         expect(items.firstWhere((m) => m.clientId == 'locup').onDelete, isNull);
       },
     );
+  });
+
+  group('puntos de acceso (inicio/fin)', () {
+    SegmentoDetalleController buildCtrl(SegmentoEntity s) => _buildController(
+          segmento: s,
+          segmentoRepo: segmentoRepo,
+          imagenRepo: imagenRepo,
+          videoRepo: videoRepo,
+          mensajeRepo: mensajeRepo,
+        );
+
+    testWidgets('(1) prefiere latInicio/lngInicio sobre ubicacionGis',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final s = _makeSegmento(id: 1)
+        ..latInicio = 41.1
+        ..lngInicio = 2.1
+        ..ubicacionGis = [const LatLng(40.0, 1.0), const LatLng(40.5, 1.5)];
+
+      expect(buildCtrl(s).puntoInicio, const LatLng(41.1, 2.1));
+    });
+
+    testWidgets('(2) cae al primer vértice de la traza si no hay lat/lng',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final s = _makeSegmento(id: 1)
+        ..ubicacionGis = [const LatLng(40.0, 1.0), const LatLng(40.5, 1.5)];
+
+      expect(buildCtrl(s).puntoInicio, const LatLng(40.0, 1.0));
+    });
+
+    testWidgets('(3) null sin coordenadas — la vista no pinta el botón',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      expect(buildCtrl(_makeSegmento(id: 1)).puntoInicio, isNull);
+    });
+
+    testWidgets('(4) lat sin lng no cuenta como extremo declarado',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final s = _makeSegmento(id: 1)
+        ..latInicio = 41.1
+        ..ubicacionGis = [const LatLng(40.0, 1.0)];
+
+      expect(buildCtrl(s).puntoInicio, const LatLng(40.0, 1.0));
+    });
+
+    testWidgets('(5) puntoFin: latFin/lngFin manda sobre ubicacionGis.last',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final s = _makeSegmento(id: 1)
+        ..latFin = 42.2
+        ..lngFin = 3.2
+        ..ubicacionGis = [const LatLng(40.0, 1.0), const LatLng(40.5, 1.5)];
+
+      expect(buildCtrl(s).puntoFin, const LatLng(42.2, 3.2));
+    });
+
+    testWidgets('(6) puntoFin cae al último vértice de la traza',
+        (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      final s = _makeSegmento(id: 1)
+        ..ubicacionGis = [const LatLng(40.0, 1.0), const LatLng(40.5, 1.5)];
+
+      final ctrl = buildCtrl(s);
+      expect(ctrl.puntoFin, const LatLng(40.5, 1.5));
+      expect(ctrl.puntoInicio, isNot(ctrl.puntoFin));
+    });
+
+    testWidgets(
+      '(7) traza de un solo vértice: inicio == fin (la vista omite el botón Fin)',
+      (tester) async {
+        await tester.pumpWidget(_appWidget());
+        await tester.pump();
+
+        final s = _makeSegmento(id: 1)
+          ..ubicacionGis = [const LatLng(40.0, 1.0)];
+
+        final ctrl = buildCtrl(s);
+        expect(ctrl.puntoInicio, ctrl.puntoFin);
+      },
+    );
+
+    testWidgets('(8) puntoFin null sin coordenadas', (tester) async {
+      await tester.pumpWidget(_appWidget());
+      await tester.pump();
+
+      expect(buildCtrl(_makeSegmento(id: 1)).puntoFin, isNull);
+    });
   });
 }

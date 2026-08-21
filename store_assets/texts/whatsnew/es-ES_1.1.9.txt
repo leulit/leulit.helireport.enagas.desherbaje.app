@@ -1,0 +1,12 @@
+Novedades de la versión 1.1.9
+
+• Nuevo: mostrar el id del segmento y permitir buscarlo por id
+• Nuevo: resolver de conflictos de segmento y purga que preserva el snapshot
+• Nuevo: update segmento local store schema and implement sync confirmation logic
+• Nuevo: update artifact metadata with new commit and indexed timestamp
+• Nuevo: optimize GeoJSON parsing for HitoEntity and PkEntity with flat structures
+• Nuevo: update artifact metadata, improve manual generation script, and add new capture images
+• Corregido: exigir que cada línea de corte cruce una traza
+• Corregido: initialCameraFit como late final, no getter
+• Corregido: putScreenController para que offAllNamed no mate el controller nuevo
+• Mejoras de estabilidad y rendimiento.

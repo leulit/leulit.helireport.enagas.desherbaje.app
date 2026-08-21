@@ -1,5 +1,5 @@
 # Decision P12: iOS 13 minimum.
-platform :ios, '13.0'
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -33,6 +33,22 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths
+  end
+end
+
+# HACK temporal — flutter_rotation_sensor 0.3.0/0.3.1.
+# El paquete movió sus fuentes iOS al layout de Swift Package Manager
+# (ios/flutter_rotation_sensor/Sources/…) pero dejó el podspec apuntando a
+# 'Classes/**/*', que ya no existe: el pod compila cero ficheros, CocoaPods ni
+# siquiera crea el target y el @import del GeneratedPluginRegistrant falla con
+# "Module 'flutter_rotation_sensor' not found". Aquí se reescribe la ruta.
+# Quitar cuando upstream arregle el podspec (comprobar en el CHANGELOG del
+# paquete; a 0.3.1 sigue roto).
+pre_install do |installer|
+  installer.analysis_result.specifications.each do |spec|
+    next unless spec.name == 'flutter_rotation_sensor'
+    spec.attributes_hash['source_files'] =
+      'flutter_rotation_sensor/Sources/flutter_rotation_sensor/**/*.swift'
   end
 end
 

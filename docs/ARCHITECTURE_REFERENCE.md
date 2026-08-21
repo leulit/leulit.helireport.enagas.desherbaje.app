@@ -39,7 +39,8 @@ lib/
 │   ├── widgets/                                    # Widgets/capas compartidos entre pantallas de mapa
 │   │   ├── orto_tile_layers.dart                  # buildOrtoTileLayers(): par de TileLayer (respaldo ArcGIS + PNOA) usado por los 3 mapas; configureMapTileCache()/resetMapTileCache()
 │   │   ├── filtros_segmentos_bar.dart             # Barra de filtros de segmentos (mapa/listado)
-│   │   └── my_current_location_layer.dart         # Capa de ubicación actual del dispositivo
+│   │   ├── my_current_location_layer.dart         # Capa de ubicación actual del dispositivo
+│   │   └── endpoint_pin.dart                      # Pin lágrima de los extremos del segmento (verde I = inicio, rojo F = fin) + insignia de letra para los botones de ruta; compartido por el mapa del detalle y el diálogo de editar extremos
 │   └── sync/                                      # Motor offline-first (extraíble a paquete)
 │       ├── sync.dart                              # Barrel export público
 │       ├── sync_actions.dart                      # TypedActions del motor
@@ -383,6 +384,7 @@ NO es `Syncable` — se obtiene en login y vive como info de sesión.
 | `shared_preferences` | `^2.5.5` | Preferencias ligeras |
 | `crypto` | `^3.0.7` | HMAC |
 | `uuid` | `^4.6.0` | IDs únicos locales |
+| `url_launcher` | `^6.3.2` | Abrir apps externas (ruta a Google Maps desde el detalle de segmento) |
 | `logger` | `^2.7.0` | Logging con niveles |
 | `path` | `^1.9.1` | Manejo de rutas de fichero (p.ej. `local_database.dart`) |
 | `permission_handler` | `^13.0.1` | Permisos runtime |

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/app_di.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/widgets/endpoint_pin.dart';
 import '../../../core/widgets/my_current_location_layer.dart';
 import '../../../core/widgets/orto_tile_layers.dart';
 import '../../../domain/entities/segmento_entity.dart';
@@ -413,7 +412,12 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
             size: const Size(48, 64),
             painter: _dragging
                 ? _CrosshairPainter(color: widget.color)
-                : _PinPainter(color: widget.color),
+                : EndpointPinPainter(
+                    color: widget.color,
+                    letra: widget.kind == EndpointKind.inicio
+                        ? kLetraInicio
+                        : kLetraFin,
+                  ),
           ),
         ),
       ),
@@ -426,60 +430,7 @@ class _DragEndpointMarkerState extends State<_DragEndpointMarker> {
 // en reposo la punta del pin; en drag el centro de la mirilla.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const Offset _kAnchor = Offset(24, 64); // punto real dentro de la caja 48×64
-
-/// Pin lágrima con punta abajo. La punta cae en [_kAnchor]; el bulbo (zona de
-/// agarre) queda arriba, así el dedo no tapa la coordenada.
-class _PinPainter extends CustomPainter {
-  const _PinPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const bulb = Offset(24, 18);
-    const r = 16.0;
-    final tip = _kAnchor;
-
-    // Silueta lágrima: dos tangentes desde la punta al círculo del bulbo +
-    // arco mayor por encima.
-    final d = (tip - bulb).distance;
-    final baseAngle = math.atan2(tip.dy - bulb.dy, tip.dx - bulb.dx);
-    final alpha = math.acos(r / d);
-    final a1 = baseAngle - alpha;
-    final a2 = baseAngle + alpha;
-    final p1 = Offset(bulb.dx + r * math.cos(a1), bulb.dy + r * math.sin(a1));
-
-    final path = ui.Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(p1.dx, p1.dy)
-      ..arcTo(
-        Rect.fromCircle(center: bulb, radius: r),
-        a1,
-        -(2 * math.pi - (a2 - a1)), // arco mayor: por encima del bulbo
-        false,
-      )
-      ..lineTo(tip.dx, tip.dy)
-      ..close();
-
-    canvas.drawShadow(path, Colors.black54, 3, false);
-    canvas.drawPath(path, Paint()..color = color);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..color = Colors.white,
-    );
-    // Punto blanco de realce en el bulbo.
-    canvas.drawCircle(bulb, 4.5, Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(_PinPainter old) => old.color != color;
-}
-
-/// Mirilla tipo visor centrada en [_kAnchor]. Pinta fuera de la caja: como el
+/// Mirilla tipo visor centrada en [kEndpointPinAnchor]. Pinta fuera de la caja: como el
 /// dedo agarra el bulbo (parte alta), el centro queda ~30px por debajo del dedo
 /// y siempre visible.
 class _CrosshairPainter extends CustomPainter {
@@ -507,7 +458,7 @@ class _CrosshairPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const c = _kAnchor;
+    const c = kEndpointPinAnchor;
 
     // Halo blanco (trazo grueso) debajo para contraste sobre la línea roja.
     _reticle(

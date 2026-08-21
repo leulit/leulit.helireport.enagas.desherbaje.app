@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
@@ -24,6 +25,13 @@ class _GasoductoSchemaShim extends _NopLocalStore {
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
     if (from == 0) {
+      // Los builds anteriores al motor offline crearon `gasoductos` con
+      // `ct TEXT`. En esos dispositivos la tabla YA existe, así que el
+      // `CREATE TABLE IF NOT EXISTS` de abajo no hace nada y la versión sube
+      // igualmente a 1: el insert del sync muere con "no column named ct_id"
+      // para siempre. Es caché de master data (se vuelve a descargar), así que
+      // la vía barata es tirarla y recrearla.
+      await dropIfLacksColumn(db, 'gasoductos', 'ct_id');
       // CREATE verbatim — includes ct_id INTEGER as established by the 2026
       // schema migration that converted the legacy ct TEXT column.
       await db.execute('''
@@ -101,6 +109,20 @@ class _HitoSchemaShim extends _NopLocalStore {
       );
     }
     // Future schema bumps go here.
+  }
+}
+
+/// Tira [table] si existe con un esquema viejo que no tiene [column].
+/// Solo para tablas de caché re-descargable (master data).
+@visibleForTesting
+Future<void> dropIfLacksColumn(
+  DatabaseExecutor db,
+  String table,
+  String column,
+) async {
+  final cols = await db.rawQuery('PRAGMA table_info($table)');
+  if (cols.isNotEmpty && !cols.any((c) => c['name'] == column)) {
+    await db.execute('DROP TABLE $table');
   }
 }
 

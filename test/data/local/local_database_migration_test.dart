@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:helireport_desherbaje/core/sync/sync.dart';
+import 'package:helireport_desherbaje/data/local/local_database.dart';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ class _GasoductoShim extends _NopLocalStore {
   @override
   Future<void> migrate(DatabaseExecutor db, int from, int to) async {
     if (from == 0) {
+      await dropIfLacksColumn(db, 'gasoductos', 'ct_id');
       await db.execute('''
         CREATE TABLE IF NOT EXISTS gasoductos (
           id           TEXT NOT NULL,
@@ -193,6 +195,39 @@ void main() {
         expect(
           (ctIdCol.first['type'] as String).toUpperCase(),
           contains('INTEGER'),
+        );
+
+        await db.close();
+      },
+    );
+
+    test(
+      '(5) legacy `ct TEXT` table is dropped so ct_id inserts work',
+      () async {
+        final db = await _openTestDb();
+
+        // Esquema de los builds antiguos: ct TEXT, sin ct_id.
+        await db.execute('''
+          CREATE TABLE gasoductos (
+            id          TEXT NOT NULL,
+            nombre      TEXT NOT NULL DEFAULT '',
+            ct          TEXT NOT NULL,
+            points_json TEXT NOT NULL,
+            PRIMARY KEY (id, ct)
+          )
+        ''');
+
+        await OfflineDatabase.migrateEntity(db, _GasoductoShim());
+
+        await db.insert('gasoductos', {
+          'id': 'g1',
+          'nombre': 'X',
+          'ct_id': 7,
+          'points_json': '[]',
+        });
+        expect(
+          await db.query('gasoductos', where: 'ct_id = ?', whereArgs: [7]),
+          hasLength(1),
         );
 
         await db.close();

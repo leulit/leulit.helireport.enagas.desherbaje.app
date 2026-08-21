@@ -13,6 +13,8 @@
 #   --apk              (android/both) Genera además APK universal
 #   --upload           (ios/both) Sube el IPA a App Store Connect (TestFlight) al terminar.
 #                      Necesita ASC_KEY_ID + ASC_ISSUER_ID (ver .asc.env / docs/PUBLICAR.md)
+#   --upload-only      (ios) NO compila: sube el IPA ya existente en dist/ios para la
+#                      versión actual de pubspec.yaml. Para cuando olvidaste --upload.
 #
 # Artefactos:
 #   dist/android/helireport_desherbaje-<version>+<build>.aab [y .apk]
@@ -33,7 +35,7 @@ warn()  { echo -e "${C_YELLOW}⚠${C_RESET} $*"; }
 error() { echo -e "${C_RED}✗${C_RESET} $*" >&2; exit 1; }
 
 usage() {
-  sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,21p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -52,6 +54,7 @@ SKIP_CLEAN=false
 BUILD_APK=false
 BUMP=false
 UPLOAD=false
+UPLOAD_ONLY=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -59,12 +62,14 @@ for arg in "$@"; do
     --no-clean)  SKIP_CLEAN=true ;;
     --apk)       BUILD_APK=true ;;
     --upload)    UPLOAD=true ;;
+    --upload-only) UPLOAD_ONLY=true; UPLOAD=true ;;
     -h|--help)   usage 0 ;;
     *)           error "Flag desconocida: $arg" ;;
   esac
 done
 
 [[ "$UPLOAD" == true && "$TARGET" == "android" ]] && error "--upload solo aplica a iOS (Google Play no acepta subida sin API key de servicio)"
+[[ "$UPLOAD_ONLY" == true && "$BUMP" == true ]] && error "--upload-only no admite --bump: subiría una versión que nadie ha construido"
 
 # Credenciales de App Store Connect: fichero .asc.env (gitignored) o variables ya exportadas.
 if $UPLOAD; then
@@ -98,6 +103,22 @@ BUILD_NUMBER="${VERSION_LINE##*+}"
 ARTIFACT_BASE="helireport_desherbaje-${VERSION_NAME}+${BUILD_NUMBER}"
 
 log "Target: $TARGET — versión: $VERSION_NAME (build $BUILD_NUMBER)"
+
+upload_ipa() {
+  local ipa="$1"
+  [[ -f "$ipa" ]] || error "No existe $ipa (constrúyelo con: ./scripts/build.sh ios)"
+  log "[iOS] subiendo a App Store Connect (altool)…"
+  xcrun altool --upload-app --type ios \
+    --file "$ipa" \
+    --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
+    || error "Falló la subida. El IPA sigue en $ipa: súbelo con Transporter."
+  log "[iOS] subido. Aparece en TestFlight en ~5-15 min."
+}
+
+if $UPLOAD_ONLY; then
+  upload_ipa "dist/ios/${ARTIFACT_BASE}.ipa"
+  exit 0
+fi
 
 # Borrador de "Novedades" para la ficha de tienda. Idempotente: si el fichero de
 # esta versión ya existe, no lo pisa (puede estar ya redactado a mano).
@@ -170,14 +191,7 @@ build_ios() {
   cp "$ipa_src" "$ipa_out"
   log "[iOS] IPA: $ipa_out ($(du -h "$ipa_out" | cut -f1))"
 
-  if $UPLOAD; then
-    log "[iOS] subiendo a App Store Connect (altool)…"
-    xcrun altool --upload-app --type ios \
-      --file "$ipa_out" \
-      --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
-      || error "Falló la subida. El IPA sigue en $ipa_out: súbelo con Transporter."
-    log "[iOS] subido. Aparece en TestFlight en ~5-15 min."
-  fi
+  $UPLOAD && upload_ipa "$ipa_out"
 }
 
 # --- Ejecución -----------------------------------------------------------------

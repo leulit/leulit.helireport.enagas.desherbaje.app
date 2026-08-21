@@ -3,13 +3,16 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_endpoints.dart';
 import '../../core/app_router.dart';
 import '../../core/app_theme.dart';
+import '../../core/widgets/endpoint_pin.dart';
 import '../../core/app_typed_actions.dart';
 import '../../core/extensions.dart';
 import '../../core/services/api_security_service.dart';
@@ -199,6 +202,61 @@ class _DatosTab extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Fila propia para la navegación: el verbo se dice una vez
+                // en el prefijo y los botones solo nombran el extremo. Cada
+                // botón repite el color Y la letra de su pin en el mapa, para
+                // que el operador los case sin depender del color (verde/rojo
+                // es el par que peor distingue una deficiencia rojo-verde).
+                //
+                // Obx: highlightedSegment se reasigna al guardar extremos; sin
+                // esto los botones seguirían apuntando al punto viejo hasta
+                // salir y volver a entrar en la pantalla.
+                Obx(() {
+                  controller.highlightedSegment.value; // dependencia explícita
+                  final inicio = controller.puntoInicio;
+                  final fin = controller.puntoFin;
+                  if (inicio == null && fin == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Divider(height: 16, color: Color(0xFFA5D6A7)),
+                      Row(
+                        children: [
+                          const Text('Cómo llegar: ',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 4),
+                          if (inicio != null)
+                            _BotonRuta(
+                              label: 'Inicio',
+                              letra: kLetraInicio,
+                              color: kColorInicio,
+                              tooltip:
+                                  'Ruta en Google Maps al inicio del segmento',
+                              destino: inicio,
+                              controller: controller,
+                            ),
+                          // Con un solo vértice inicio y fin coinciden: un
+                          // segundo botón al mismo sitio sería ruido.
+                          if (fin != null && fin != inicio) ...[
+                            const SizedBox(width: 8),
+                            _BotonRuta(
+                              label: 'Fin',
+                              letra: kLetraFin,
+                              color: kColorFin,
+                              tooltip:
+                                  'Ruta en Google Maps al fin del segmento',
+                              destino: fin,
+                              controller: controller,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),
@@ -469,6 +527,57 @@ class _DropdownInlineField<T> extends StatelessWidget {
               )),
         ),
       ],
+    );
+  }
+}
+
+/// Botón de navegación hasta [destino]. Va bajo el prefijo "Cómo llegar:",
+/// que ya aporta el verbo, así que la etiqueta solo nombra el extremo. Lleva
+/// el color Y la letra del pin correspondiente del mapa: el color los casa de
+/// un vistazo, la letra lo hace independiente del color.
+class _BotonRuta extends StatelessWidget {
+  final String label;
+  final String letra;
+  final Color color;
+  final String tooltip;
+  final LatLng destino;
+  final SegmentoDetalleController controller;
+
+  const _BotonRuta({
+    required this.label,
+    required this.letra,
+    required this.color,
+    required this.tooltip,
+    required this.destino,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: FilledButton.icon(
+        // El háptico es el feedback que de verdad se acusa en campo, con
+        // guantes y a pleno sol, donde el ripple apenas se ve.
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          controller.abrirRutaEnGoogleMaps(destino);
+        },
+        icon: EndpointLetterBadge(letra: letra),
+        label: Text(label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          // Ripple explícito: sobre el relleno saturado el overlay por defecto
+          // es casi invisible.
+          overlayColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+          minimumSize: const Size(0, 36),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
     );
   }
 }
@@ -1173,6 +1282,44 @@ class _MapaSegmento extends StatelessWidget {
             Obx(() => PolylineLayer(
                   polylines: [controller.highlightedSegment.value],
                 )),
+            // Extremos del segmento. Depende del MISMO observable que la
+            // polilínea: highlightedSegment se reasigna al guardar extremos, y
+            // es lo que hace que los pines sigan al cambio (puntoInicio y
+            // puntoFin son getters sobre `segmento`, que no es reactivo).
+            Obx(() {
+              controller.highlightedSegment.value; // dependencia explícita
+              final inicio = controller.puntoInicio;
+              final fin = controller.puntoFin;
+              return MarkerLayer(
+                markers: [
+                  if (inicio != null)
+                    Marker(
+                      point: inicio,
+                      width: kEndpointPinSize.width,
+                      height: kEndpointPinSize.height,
+                      // topCenter: la punta del pin cae en la coordenada.
+                      alignment: Alignment.topCenter,
+                      child: const EndpointPin(
+                        color: kColorInicio,
+                        letra: kLetraInicio,
+                      ),
+                    ),
+                  // Mismo criterio que los botones: con un solo vértice inicio
+                  // y fin coinciden y sobra un pin encima de otro.
+                  if (fin != null && fin != inicio)
+                    Marker(
+                      point: fin,
+                      width: kEndpointPinSize.width,
+                      height: kEndpointPinSize.height,
+                      alignment: Alignment.topCenter,
+                      child: EndpointPin(
+                        color: kColorFin,
+                        letra: kLetraFin,
+                      ),
+                    ),
+                ],
+              );
+            }),
             // Georreferencia de la media activa en el carrusel (foto/vídeo).
             const MediaGisLayer(),
             MyCurrentLocationLayer(

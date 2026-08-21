@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:gal/gal.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:logger/logger.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_di.dart';
 import '../../core/app_router.dart';
@@ -825,6 +826,83 @@ class SegmentoDetalleController extends MyGetxController {
         content: Text(
           'No se puede pasar de "${origen.etiqueta}" a "${destino.etiqueta}".'
           '\n\nDesde "${origen.etiqueta}" solo se permite: $permitidos.',
+        ),
+        actions: [
+          TextButton(onPressed: Get.back, child: const Text('Entendido')),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  /// Extremo inicial del segmento para navegación externa. Mismo orden de
+  /// preferencia que [_initMap]: el extremo declarado manda, y la traza cubre
+  /// los segmentos que el backend bajó sin `lat_inicio`. `null` = no hay
+  /// destino y la vista no pinta el botón.
+  LatLng? get puntoInicio {
+    final lat = segmento.latInicio;
+    final lng = segmento.lngInicio;
+    if (lat != null && lng != null) return LatLng(lat, lng);
+    final pts = segmento.ubicacionGis;
+    return pts.isNotEmpty ? pts.first : null;
+  }
+
+  /// Extremo final, simétrico a [puntoInicio]. Existe porque el mejor acceso
+  /// por carretera a un segmento no siempre es su inicio: el operador elige.
+  LatLng? get puntoFin {
+    final lat = segmento.latFin;
+    final lng = segmento.lngFin;
+    if (lat != null && lng != null) return LatLng(lat, lng);
+    final pts = segmento.ubicacionGis;
+    return pts.isNotEmpty ? pts.last : null;
+  }
+
+  /// Abre Google Maps con la ruta en coche hasta [destino] ([puntoInicio] o
+  /// [puntoFin]).
+  ///
+  /// Un enlace de Google Maps admite UN solo `destination`: no hay forma de
+  /// ofrecerle dos rutas alternativas y que elija allí, así que la elección de
+  /// extremo se hace en esta pantalla y aquí ya llega decidida.
+  ///
+  /// Universal link, no esquema propietario: en Android abre la app de Google
+  /// Maps y en iOS la abre si está instalada, cayendo al navegador si no —
+  /// sin necesidad de `LSApplicationQueriesSchemes`. Sin `&origin`: que Google
+  /// Maps use la ubicación actual y la recalcule mientras se conduce, en vez
+  /// de congelar aquí un fix GPS que puede llegar rancio.
+  ///
+  /// ponytail: no se comprueba conectividad — Google Maps puede tener la zona
+  /// descargada offline, y un guard por red le negaría la ruta justo al
+  /// operador bien preparado.
+  Future<void> abrirRutaEnGoogleMaps(LatLng destino) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${destino.latitude},${destino.longitude}'
+      '&travelmode=driving',
+    );
+
+    try {
+      final abierto =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!abierto) _dialogRutaNoDisponible();
+    } catch (e, st) {
+      _log.e('No se pudo abrir Google Maps para $uri', error: e, stackTrace: st);
+      _dialogRutaNoDisponible();
+    }
+  }
+
+  void _dialogRutaNoDisponible() {
+    Get.dialog<void>(
+      AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+            SizedBox(width: 8),
+            Expanded(child: Text('No se pudo abrir Google Maps')),
+          ],
+        ),
+        content: const Text(
+          'Este dispositivo no ha podido abrir Google Maps ni el navegador '
+          'para calcular la ruta.',
         ),
         actions: [
           TextButton(onPressed: Get.back, child: const Text('Entendido')),
