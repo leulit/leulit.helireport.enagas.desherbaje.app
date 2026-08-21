@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Genera el manual de operario en PDF desde docs/manual_v3.html.
+# Genera el manual de operario en PDF desde docs/manual_v4.html.
 # Las capturas se leen de docs/capturas/ (ver LEEME.md).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-OUT="$DIR/MANUAL_OPERARIO_HELIREPORT_DESHERBAJE_v3.pdf"
+OUT="$DIR/MANUAL_OPERARIO_HELIREPORT_DESHERBAJE_v4.pdf"
 RAW="$DIR/.manual_raw.pdf"
 
 [ -x "$CHROME" ] || { echo "No encuentro Chrome en: $CHROME"; exit 1; }
@@ -17,7 +17,7 @@ RAW="$DIR/.manual_raw.pdf"
   --no-pdf-header-footer \
   --virtual-time-budget=3000 \
   --print-to-pdf="$RAW" \
-  "file://$DIR/manual_v3.html"
+  "file://$DIR/manual_v4.html"
 
 # Chrome/Skia embebe las capturas casi sin comprimir (un PDF de 20 páginas con
 # capturas de iPhone puede pesar 20-25 MB). ghostscript las recomprime a
@@ -42,6 +42,6 @@ echo "→ $OUT"
 faltan=0
 while IFS= read -r f; do
   [ -f "$DIR/capturas/$f" ] || { echo "   falta captura: capturas/$f"; faltan=$((faltan+1)); }
-done < <(grep -o 'capturas/[0-9_a-z]*\.png' "$DIR/manual_v3.html" | sed 's|capturas/||' | sort -u)
+done < <(grep -o 'capturas/[0-9_a-z]*\.png' "$DIR/manual_v4.html" | sed 's|capturas/||' | sort -u)
 
 [ "$faltan" -eq 0 ] && echo "   todas las capturas presentes" || echo "   $faltan captura(s) pendiente(s)"

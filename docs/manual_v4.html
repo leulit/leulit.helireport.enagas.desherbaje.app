@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Manual de operario — Helireport Desherbaje v3</title>
+<title>Manual de operario — Helireport Desherbaje v4</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -172,7 +172,7 @@
   <div class="cover-foot">
     Módulo Desherbaje — Enagas<br>
     Segmentos, fotos, vídeos, trazas GPS y sincronización offline<br><br>
-    Versión de app 1.1.5 · Julio 2026
+    Versión de app 1.2.0 · Agosto 2026
   </div>
   <div class="cover-band"></div>
 </div>
@@ -584,11 +584,24 @@
         <h2>5. Detalle del segmento — Datos</h2>
         <p class="intro">Aquí consultas y editas un segmento. Tiene cuatro pestañas: <b>Datos</b>, <b>Mensajes</b>, <b>Antes</b> y <b>Después</b>.</p>
         <ul>
-          <li><b>Datos</b>: traza, longitud, superficie, tipo, estado, descripción y mapa.</li>
+          <li><b>Datos</b>: traza, longitud, superficie, tipo, estado, descripción, <b>“Cómo llegar”</b> y mapa.</li>
           <li>Cambia el <b>Estado</b> y el <b>Tipo de actividad</b> con los desplegables. El desplegable de estado solo ofrece los destinos permitidos (ver página C).</li>
           <li>Edita la <b>descripción</b> del trabajo.</li>
           <li><b>Guardar</b>: los cambios se guardan en el móvil aunque no haya red.</li>
         </ul>
+
+        <h3>Cómo llegar a la zona</h3>
+        <p>Bajo los datos hay dos botones que abren <b>Google Maps</b> con la ruta en coche hasta el segmento:</p>
+        <ul>
+          <li><span class="chip" style="background:#2E7D32;color:#fff">Ⓘ Inicio</span> lleva al <b>principio</b> del segmento.</li>
+          <li><span class="chip" style="background:#C62828;color:#fff">Ⓕ Fin</span> lleva al <b>final</b> del segmento.</li>
+        </ul>
+        <p>En el mapa de abajo verás <b>los dos extremos marcados</b> con un pin del mismo color y la misma letra: el pin <b>verde con la I</b> es el inicio y el <b>rojo con la F</b> es el fin. Así ves de un vistazo por dónde te conviene entrar antes de pulsar.</p>
+        <p class="note">Muchas veces el acceso por carretera es mejor por el final que por el principio: mira el mapa y elige. Si el segmento es un punto único, solo aparece un botón.</p>
+
+        <div class="warn">
+          ⚠ Google Maps necesita <b>cobertura</b> para calcular la ruta, salvo que lleves <b>la zona descargada</b> en Google Maps. Si vas a trabajar sin cobertura, descárgatela antes de salir.
+        </div>
 
         <h3>Los botones de abajo</h3>
         <table>
@@ -608,7 +621,7 @@
           <div class="ph">
             <div>Captura pendiente</div>
             <div class="fn">06_detalle_datos.png</div>
-            <div class="what">Pestaña Datos: cabecera con nº de segmento y CT, las 4 pestañas, desplegables Tipo/Estado, descripción y el mapa con el botón “Editar extremos”.</div>
+            <div class="what">Pestaña Datos: cabecera con nº de segmento y CT, las 4 pestañas, desplegables Tipo/Estado, descripción, la fila “Cómo llegar” con los botones Ⓘ Inicio (verde) y Ⓕ Fin (rojo), y el mapa mostrando los dos pines de extremo.</div>
           </div>
           <img src="capturas/06_detalle_datos.png" alt="" onerror="this.style.display='none'">
         </div>
@@ -894,7 +907,7 @@
         <h3>Paso a paso</h3>
         <ul>
           <li>En el detalle del segmento, pestaña <b>Datos</b>, pulsa <b>Editar extremos</b>.</li>
-          <li>Se abre el mapa con los <b>dos extremos</b> del segmento marcados.</li>
+          <li>Se abre el mapa con los <b>dos extremos</b> del segmento marcados: el <b>verde con la I</b> es el inicio y el <b>rojo con la F</b> es el fin, los mismos que ves en la pestaña Datos.</li>
           <li><b>Arrastra</b> cada extremo a donde toque. El segmento se recorta o se alarga siguiendo la traza del gasoducto.</li>
           <li>Según arrastras, se actualizan la <b>longitud</b> y la <b>superficie</b>.</li>
           <li>Pulsa <b>Guardar</b> para aceptar, o <b>Cancelar</b> para dejarlo como estaba.</li>
@@ -911,7 +924,7 @@
           <div class="ph">
             <div>Captura pendiente</div>
             <div class="fn">13_editar_extremos.png</div>
-            <div class="what">Pantalla de edición de extremos: mapa con los dos marcadores de extremo, la longitud/superficie actualizándose y los botones Cancelar / Guardar.</div>
+            <div class="what">Pantalla de edición de extremos: mapa con los dos marcadores de extremo (verde Ⓘ y rojo Ⓕ), la longitud/superficie actualizándose y los botones Cancelar / Guardar.</div>
           </div>
           <img src="capturas/13_editar_extremos.png" alt="" onerror="this.style.display='none'">
         </div>

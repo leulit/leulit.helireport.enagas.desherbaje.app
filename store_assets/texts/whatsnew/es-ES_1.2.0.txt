@@ -1,4 +1,5 @@
 Novedades de la versión 1.2.0
 
-• (sin commits feat/fix en el rango — describe aquí los cambios a mano)
+• Nuevo: "Cómo llegar" en el detalle del segmento. Dos botones abren Google Maps con la ruta en coche hasta el inicio (Ⓘ, verde) o hasta el fin (Ⓕ, rojo) de la zona, para que elijas el acceso que mejor te venga.
+• Nuevo: el mapa del detalle marca los dos extremos del segmento con un pin del mismo color y letra que su botón.
 • Mejoras de estabilidad y rendimiento.

@@ -8,7 +8,7 @@ Dispositivo acordado: **iPhone**, orientación vertical.
 
 > El punto 1 (diálogos de permiso de ubicación) **no necesita captura**: el manual los
 > dibuja en HTML/CSS con el texto real del `Info.plist`. Si algún día cambian esos textos
-> en `ios/Runner/Info.plist`, hay que reflejarlo en el bloque `.shot.mock` de `manual_v3.html`.
+> en `ios/Runner/Info.plist`, hay que reflejarlo en el bloque `.shot.mock` de `manual_v4.html`.
 
 | Fichero | Qué tiene que verse |
 |---|---|
